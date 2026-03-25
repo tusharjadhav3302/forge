@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__atlassian__jira_transition_issue",
+      "mcp__atlassian__jira_create_issue",
+      "mcp__atlassian__jira_update_issue",
+      "mcp__atlassian__jira_get_issue",
+      "WebSearch",
+      "Bash(git add:*)",
+      "Bash(wc -l *.md)"
+    ]
+  }
+}

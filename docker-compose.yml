@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Redis (state, broker, locks, dedup)
+  redis:
+    image: redis:7-alpine
+    container_name: forge-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # FastAPI webhook gateway
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forge-api
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_BROKER_URI=redis://redis:6379/0
+      - REDIS_LOCK_URI=redis://redis:6379/1
+      - REDIS_DEDUP_URI=redis://redis:6379/2
+      - REDIS_STATE_URI=redis://redis:6379/3
+      - JIRA_INSTANCE_URL=${JIRA_INSTANCE_URL}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - JIRA_PROJECT_KEY=${JIRA_PROJECT_KEY}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: uvicorn forge.api.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./skills:/app/skills
+
+  # Celery worker
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forge-worker
+    environment:
+      - REDIS_BROKER_URI=redis://redis:6379/0
+      - REDIS_LOCK_URI=redis://redis:6379/1
+      - REDIS_DEDUP_URI=redis://redis:6379/2
+      - REDIS_STATE_URI=redis://redis:6379/3
+      - JIRA_INSTANCE_URL=${JIRA_INSTANCE_URL}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+      - JIRA_PROJECT_KEY=${JIRA_PROJECT_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - LOG_LEVEL=INFO
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A forge.workers.main worker --loglevel=info --concurrency=4
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+      - ./skills:/app/skills
+
+  # Celery Flower (monitoring)
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: forge-flower
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_BROKER_URI=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A forge.workers.main flower --port=5555
+
+volumes:
+  redis-data:
+    driver: local
