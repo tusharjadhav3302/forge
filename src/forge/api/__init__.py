@@ -1,1 +1,0 @@
-"""FastAPI webhook gateway."""
