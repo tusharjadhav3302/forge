@@ -4,6 +4,7 @@ from forge.models.artifacts import Epic, Feature, Task
 from forge.models.events import EventSource, EventStatus, WebhookEvent
 from forge.models.workflow import (
     ForgeLabel,
+    JiraStatus,
     TicketType,
     WorkspaceStatus,
     get_workflow_phase,
@@ -13,6 +14,7 @@ from forge.models.workflow import (
 __all__ = [
     # Workflow labels and helpers
     "ForgeLabel",
+    "JiraStatus",
     "TicketType",
     "WorkspaceStatus",
     "get_workflow_phase",

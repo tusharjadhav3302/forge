@@ -68,6 +68,19 @@ Forge is agnostic to Jira statuses, but recommends:
 from enum import Enum
 
 
+class JiraStatus(str, Enum):
+    """Standard Jira statuses used for issue transitions.
+
+    These are actual Jira workflow statuses (not Forge labels).
+    Available statuses depend on the Jira project configuration.
+    """
+
+    NEW = "New"
+    REFINEMENT = "Refinement"
+    IN_PROGRESS = "In Progress"
+    CLOSED = "Closed"
+
+
 class ForgeLabel(str, Enum):
     """Labels used to track Forge workflow state.
 
