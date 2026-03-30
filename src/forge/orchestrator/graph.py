@@ -38,9 +38,12 @@ from forge.orchestrator.nodes.task_router import (
     route_tasks_parallel,
     should_use_parallel_execution,
 )
-from forge.orchestrator.nodes.workspace_setup import setup_workspace, teardown_workspace
+from forge.orchestrator.nodes.workspace_setup import setup_workspace
 from forge.orchestrator.nodes.implementation import implement_task
-from forge.orchestrator.nodes.pr_creation import create_pull_request, teardown_and_route
+from forge.orchestrator.nodes.pr_creation import (
+    create_pull_request,
+    teardown_and_route,
+)
 from forge.orchestrator.nodes.ci_evaluator import (
     attempt_ci_fix,
     escalate_to_blocked,
@@ -66,7 +69,9 @@ from forge.orchestrator.state import WorkflowState
 logger = logging.getLogger(__name__)
 
 
-def route_by_ticket_type(state: WorkflowState) -> Literal["generate_prd", "analyze_bug", "task_workflow"]:
+def route_by_ticket_type(
+    state: WorkflowState,
+) -> Literal["generate_prd", "analyze_bug", "task_workflow"]:
     """Route workflow based on ticket type.
 
     Args:
@@ -311,7 +316,6 @@ def _route_implementation(
     state: WorkflowState,
 ) -> Literal["implement_task", "create_pr"]:
     """Route based on task implementation status."""
-    current_task = state.get("current_task_key")
     current_repo = state.get("current_repo", "")
     repo_tasks = state.get("tasks_by_repo", {}).get(current_repo, [])
     implemented = state.get("implemented_tasks", [])

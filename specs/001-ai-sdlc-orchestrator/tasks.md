@@ -283,12 +283,12 @@
 
 **Purpose**: Improvements that affect multiple user stories
 
-- [ ] T098 [P] Create README.md with project overview and setup instructions
+- [x] T098 [P] Create README.md with project overview and setup instructions
 - [ ] T099 [P] Add API documentation with OpenAPI schema export
-- [ ] T100 Implement rate limiting for external API calls (Jira, GitHub, Claude)
-- [ ] T101 [P] Add structured logging throughout application
-- [ ] T102 Implement graceful shutdown handling for workers
-- [ ] T103 Add retry logic with exponential backoff for transient failures
+- [x] T100 Implement rate limiting for external API calls (Jira, GitHub, Claude)
+- [x] T101 [P] Add structured logging throughout application
+- [x] T102 Implement graceful shutdown handling for workers
+- [x] T103 Add retry logic with exponential backoff for transient failures
 - [ ] T104 Run quickstart.md validation end-to-end
 - [ ] T105 Performance optimization for webhook response time (<500ms)
 
