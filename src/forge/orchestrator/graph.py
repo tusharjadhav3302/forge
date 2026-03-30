@@ -226,16 +226,9 @@ def create_workflow_graph() -> StateGraph:
     # Task generation flow (US4)
     graph.add_edge("generate_tasks", "task_router")
 
-    # Execution flow (US6) with parallel support (US10)
-    # Route to either sequential setup_workspace or parallel fan-out
-    graph.add_conditional_edges(
-        "task_router",
-        _route_execution_mode,
-        {
-            "setup_workspace": "setup_workspace",
-            "parallel_fanout": route_tasks_parallel,
-        },
-    )
+    # Execution flow (US6)
+    # Note: Parallel execution (US10) uses Send API called from task_router node
+    graph.add_edge("task_router", "setup_workspace")
     graph.add_edge("setup_workspace", "implement_task")
     graph.add_conditional_edges(
         "implement_task",

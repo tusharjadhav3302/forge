@@ -8,7 +8,6 @@ from forge.integrations.jira.client import JiraClient
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
-from forge.workspace.manager import get_workspace_manager
 
 logger = logging.getLogger(__name__)
 
