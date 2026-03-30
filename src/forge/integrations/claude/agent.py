@@ -189,31 +189,15 @@ class DeepAgentClient:
         # Create filesystem backend
         backend = FilesystemBackend(root_dir=str(root_dir))
 
-        # Build tools list
-        tools = []
-        if include_tools and self.settings.agent_enable_tools:
-            # Deep Agents has built-in file tools via FilesystemBackend
-            # Add custom tools here if needed
-            pass
-
-        # Configure interrupt points for file operations
-        interrupt_config = {
-            "write_file": True,  # Require confirmation for writes
-            "read_file": False,  # Allow reads without confirmation
-            "edit_file": True,   # Require confirmation for edits
-        }
-
         # Create the model (supports both direct API and Vertex AI)
         model = self._create_model()
 
-        # Create the agent
+        # Create the agent - no interrupts for automated workflows
         agent = create_deep_agent(
             model=model,
             backend=backend,
             skills=skill_paths,
-            tools=tools if tools else None,
             system_prompt=system_prompt,
-            interrupt_on=interrupt_config,
             checkpointer=self._checkpointer,
         )
 
@@ -272,38 +256,6 @@ class DeepAgentClient:
 
         return "\n".join(response_text)
 
-    def _load_skill_content(self, skill_name: str) -> str:
-        """Load the SKILL.md content for a given skill.
-
-        Args:
-            skill_name: Name of the skill directory.
-
-        Returns:
-            Skill content or empty string if not found.
-        """
-        skill_paths = self._get_skill_paths()
-        root_dir = self._get_root_dir()
-
-        for skill_path in skill_paths:
-            # Try both relative and absolute paths
-            if skill_path.startswith("/"):
-                skill_file = Path(skill_path) / skill_name / "SKILL.md"
-            else:
-                skill_file = root_dir / skill_path / skill_name / "SKILL.md"
-
-            if skill_file.exists():
-                logger.debug(f"Loading skill from {skill_file}")
-                content = skill_file.read_text()
-                # Remove frontmatter if present
-                if content.startswith("---"):
-                    parts = content.split("---", 2)
-                    if len(parts) >= 3:
-                        content = parts[2].strip()
-                return content
-
-        logger.warning(f"Skill '{skill_name}' not found in {skill_paths}")
-        return ""
-
     async def run_skill(
         self,
         skill_name: str,
@@ -312,7 +264,8 @@ class DeepAgentClient:
     ) -> str:
         """Run a skill with the given prompt.
 
-        Loads the skill content and includes it as instructions in the system prompt.
+        Deep Agents discovers skills automatically from the configured paths.
+        The skill_name helps the agent find the right skill to apply.
 
         Args:
             skill_name: Name of the skill to use (e.g., 'generate-tasks').
@@ -324,23 +277,19 @@ class DeepAgentClient:
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Load the skill content
-        skill_content = self._load_skill_content(skill_name)
-
-        # Build system prompt with skill instructions
-        system_prompt = f"Today's date is {current_date}.\n\n"
-
-        if skill_content:
-            system_prompt += f"# Instructions\n\n{skill_content}\n\n"
-
+        # Build system prompt with context
+        system_prompt = f"Today's date is {current_date}."
         if context:
-            system_prompt += "# Context\n\n"
+            system_prompt += "\n\nContext:\n"
             for key, value in context.items():
                 system_prompt += f"- {key}: {value}\n"
 
+        # Include skill name to help agent match the right skill
+        full_prompt = f"[Skill: {skill_name}]\n\n{prompt}"
+
         logger.info(f"Running skill '{skill_name}' using Deep Agents")
         result = await self._run_agent(
-            prompt=prompt,
+            prompt=full_prompt,
             system_prompt=system_prompt,
             include_tools=True,
         )
