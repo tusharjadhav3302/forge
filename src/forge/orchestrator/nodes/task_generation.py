@@ -4,38 +4,13 @@ import logging
 import re
 from typing import Any
 
-from forge.config import Settings, get_settings
-from forge.integrations.claude.client import get_anthropic_client
+from forge.config import get_settings
+from forge.integrations.claude.agent import DeepAgentClient
 from forge.integrations.jira.client import JiraClient
-from forge.integrations.langfuse import trace_llm_call
-from forge.models.workflow import FeatureStatus
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
-
-# System prompt for Task generation
-TASK_SYSTEM_PROMPT = """You are an expert Software Engineer skilled at breaking down
-Epic implementation plans into concrete, actionable Tasks.
-
-When given an Epic with its implementation plan, you will:
-1. Identify discrete, testable units of work (2-8 hours each)
-2. Define clear acceptance criteria for each Task
-3. Identify which repository each Task belongs to (from context)
-4. Order Tasks by dependency (foundation first)
-
-Output format for each Task:
----
-TASK: [Task Title]
-REPO: [repository-name or "unknown"]
-DESCRIPTION:
-[Detailed implementation steps]
-
-ACCEPTANCE_CRITERIA:
-- [Criterion 1]
-- [Criterion 2]
----
-(repeat for each Task)
-"""
 
 
 async def generate_tasks(state: WorkflowState) -> WorkflowState:
@@ -68,7 +43,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    anthropic = get_anthropic_client(settings)
+    agent = DeepAgentClient(settings)
 
     all_task_keys: list[str] = []
     tasks_by_repo: dict[str, list[str]] = {}
@@ -98,9 +73,9 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 "project_key": project_key,
             }
 
-            # Generate Tasks using Claude
+            # Generate Tasks using Deep Agents
             tasks_data = await _generate_tasks_for_epic(
-                anthropic, epic_plan, epic_summary, context
+                agent, epic_plan, epic_summary, context
             )
 
             # Create Tasks in Jira
@@ -129,8 +104,8 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
                 logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
 
-        # Transition Feature to Executing
-        await jira.transition_issue(ticket_key, FeatureStatus.EXECUTING.value)
+        # Set workflow label to indicate tasks are generated
+        await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_GENERATED)
 
         logger.info(f"Created {len(all_task_keys)} Tasks for {ticket_key}")
 
@@ -155,7 +130,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
 
 async def _generate_tasks_for_epic(
-    client: AsyncAnthropic,
+    agent: DeepAgentClient,
     epic_plan: str,
     epic_summary: str,
     context: dict[str, Any],
@@ -163,7 +138,7 @@ async def _generate_tasks_for_epic(
     """Generate Tasks for a single Epic.
 
     Args:
-        client: Anthropic client.
+        agent: Deep Agent client.
         epic_plan: Epic implementation plan.
         epic_summary: Epic title/summary.
         context: Additional context.
@@ -171,32 +146,22 @@ async def _generate_tasks_for_epic(
     Returns:
         List of Task dicts with summary, description, repo.
     """
-    user_prompt = f"""Please break down the following Epic into implementation Tasks:
+    prompt = f"""Please break down the following Epic into implementation Tasks:
 
 EPIC: {epic_summary}
 
 IMPLEMENTATION PLAN:
 {epic_plan}
 
-CONTEXT:
-{context}
-
 Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
 Include repository assignment when possible (look for mentions of specific repos,
 services, or components in the plan)."""
 
-    with trace_llm_call(
-        "generate_tasks",
-        {"epic_summary": epic_summary, "context": context},
-    ) as trace:
-        response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            system=TASK_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_prompt}],
-        )
-        result = response.content[0].text
-        trace["output"] = result[:500]
+    result = await agent.run_skill(
+        skill_name="generate-tasks",
+        prompt=prompt,
+        context=context,
+    )
 
     return _parse_tasks_response(result)
 

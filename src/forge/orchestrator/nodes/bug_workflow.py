@@ -4,56 +4,14 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.client import get_anthropic_client
+from forge.integrations.claude.agent import DeepAgentClient
 from forge.integrations.jira.client import JiraClient
-from forge.integrations.langfuse import trace_llm_call
-from forge.models.workflow import TaskStatus
+from langgraph.graph import END
+
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, set_paused, update_state_timestamp
 
 logger = logging.getLogger(__name__)
-
-# System prompt for RCA generation
-RCA_SYSTEM_PROMPT = """You are an expert Software Engineer analyzing bugs and
-generating Root Cause Analysis (RCA) documents.
-
-Given a bug report, you will:
-1. Analyze the symptoms and affected components
-2. Identify the most likely root cause
-3. Explain the chain of events that led to the bug
-4. Propose a fix approach using TDD methodology
-
-Output format:
-
-## Summary
-[One paragraph bug summary]
-
-## Root Cause Analysis
-
-### Symptoms
-- [Observable symptoms]
-
-### Affected Components
-- [Components involved]
-
-### Root Cause
-[Detailed explanation of what went wrong and why]
-
-### Chain of Events
-1. [Step 1]
-2. [Step 2]
-...
-
-## Proposed Fix (TDD Approach)
-
-### Test First
-[Describe the failing test that would catch this bug]
-
-### Implementation
-[High-level fix approach]
-
-### Verification
-[How to verify the fix works]
-"""
 
 
 async def analyze_bug(state: WorkflowState) -> WorkflowState:
@@ -76,7 +34,7 @@ async def analyze_bug(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    anthropic = get_anthropic_client(settings)
+    agent = DeepAgentClient(settings)
 
     try:
         # Get bug details
@@ -98,7 +56,7 @@ async def analyze_bug(state: WorkflowState) -> WorkflowState:
             "summary": bug_summary,
         }
 
-        # Generate RCA
+        # Generate RCA using Deep Agents
         user_prompt = f"""Please analyze this bug report and generate an RCA:
 
 ## Bug: {bug_summary}
@@ -109,18 +67,11 @@ async def analyze_bug(state: WorkflowState) -> WorkflowState:
 Generate a comprehensive Root Cause Analysis with TDD fix approach.
 """
 
-        with trace_llm_call(
-            "generate_rca",
-            {"ticket_key": ticket_key, "summary": bug_summary},
-        ) as trace:
-            response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                system=RCA_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            rca_content = response.content[0].text
-            trace["output"] = rca_content[:500]
+        rca_content = await agent.run_skill(
+            skill_name="analyze-bug",
+            prompt=user_prompt,
+            context=context,
+        )
 
         # Add RCA as comment to Jira
         await jira.add_comment(
@@ -128,8 +79,8 @@ Generate a comprehensive Root Cause Analysis with TDD fix approach.
             f"## Root Cause Analysis\n\n{rca_content}"
         )
 
-        # Transition to pending RCA approval
-        await jira.transition_issue(ticket_key, "Pending RCA Approval")
+        # Set workflow label for RCA pending approval
+        await jira.set_workflow_label(ticket_key, ForgeLabel.RCA_PENDING)
 
         logger.info(f"RCA generated for {ticket_key}")
 
@@ -175,13 +126,14 @@ def route_rca_approval(state: WorkflowState) -> str:
         state: Current workflow state.
 
     Returns:
-        Next node name.
+        Next node name or END.
     """
     if state.get("revision_requested") and state.get("feedback_comment"):
         return "regenerate_rca"
 
     if state.get("is_paused"):
-        return "rca_approval_gate"
+        logger.info(f"RCA approval: workflow paused for {state['ticket_key']}, waiting for approval webhook")
+        return END
 
     return "implement_bug_fix"
 
@@ -215,10 +167,10 @@ async def implement_bug_fix(state: WorkflowState) -> WorkflowState:
         })
 
     settings = get_settings()
-    anthropic = get_anthropic_client(settings)
+    agent = DeepAgentClient(settings)
 
     try:
-        # Generate test-first implementation
+        # Generate test-first implementation using Deep Agents
         fix_prompt = f"""Based on this RCA, implement the bug fix using TDD:
 
 {rca_content}
@@ -231,18 +183,15 @@ Provide complete file contents for:
 2. The implementation files that need to change
 """
 
-        with trace_llm_call(
-            "implement_bug_fix",
-            {"ticket_key": ticket_key},
-        ) as trace:
-            response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8192,
-                system="You are an expert writing bug fixes using TDD.",
-                messages=[{"role": "user", "content": fix_prompt}],
-            )
-            result = response.content[0].text
-            trace["output"] = result[:500]
+        result = await agent.run_skill(
+            skill_name="implement-task",
+            prompt=fix_prompt,
+            context={
+                "ticket_key": ticket_key,
+                "workspace_path": workspace_path,
+                "tdd_approach": True,
+            },
+        )
 
         # Apply changes
         from pathlib import Path
@@ -300,7 +249,7 @@ async def regenerate_rca(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    anthropic = get_anthropic_client(settings)
+    agent = DeepAgentClient(settings)
 
     try:
         prompt = f"""Please revise this RCA based on the feedback:
@@ -314,18 +263,14 @@ FEEDBACK:
 Generate an updated RCA addressing the feedback.
 """
 
-        with trace_llm_call(
-            "regenerate_rca",
-            {"ticket_key": ticket_key, "feedback": feedback[:200]},
-        ) as trace:
-            response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=4096,
-                system=RCA_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            new_rca = response.content[0].text
-            trace["output"] = new_rca[:500]
+        new_rca = await agent.run_skill(
+            skill_name="analyze-bug",
+            prompt=prompt,
+            context={
+                "ticket_key": ticket_key,
+                "is_revision": True,
+            },
+        )
 
         # Update Jira
         await jira.add_comment(

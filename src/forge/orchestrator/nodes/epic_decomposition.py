@@ -3,9 +3,9 @@
 import logging
 from typing import Any
 
-from forge.integrations.claude.client import ClaudeClient
+from forge.integrations.claude.agent import ClaudeAgentClient
 from forge.integrations.jira.client import JiraClient
-from forge.models.workflow import FeatureStatus
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
     logger.info(f"Decomposing spec into Epics for {ticket_key}")
 
     jira = JiraClient()
-    claude = ClaudeClient()
+    claude = ClaudeAgentClient()
 
     try:
         # If spec not in state, this is an error
@@ -81,9 +81,8 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             epic_keys.append(epic_key)
             logger.info(f"Created Epic {epic_key}: {summary}")
 
-        # Transition Feature to pending plan approval
-        status = FeatureStatus.PENDING_PLAN_APPROVAL.value
-        await jira.transition_issue(ticket_key, status)
+        # Set workflow label to indicate plan is pending approval
+        await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
 
         logger.info(f"Created {len(epic_keys)} Epics for {ticket_key}")
 
@@ -182,7 +181,7 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
     logger.info(f"Updating Epic {epic_key} with feedback")
 
     jira = JiraClient()
-    claude = ClaudeClient()
+    claude = ClaudeAgentClient()
 
     try:
         # Get current Epic description

@@ -79,6 +79,31 @@ async def receive_jira_webhook(
     try:
         # Parse webhook data
         webhook_data = parse_jira_webhook(payload, event_id)
+
+        # Filter: only process issues with forge:managed label
+        issue_labels = payload.get("issue", {}).get("fields", {}).get("labels", [])
+        has_forge_managed = "forge:managed" in issue_labels
+
+        # Also check if forge:managed is being added in this event
+        changelog_items = payload.get("changelog", {}).get("items", [])
+        for item in changelog_items:
+            if item.get("field") == "labels":
+                to_labels = item.get("toString", "")
+                if "forge:managed" in to_labels:
+                    has_forge_managed = True
+                    break
+
+        if not has_forge_managed:
+            logger.debug(
+                f"Skipping {webhook_data.ticket_key}: missing forge:managed label"
+            )
+            return {
+                "status": "skipped",
+                "event_id": event_id,
+                "ticket_key": webhook_data.ticket_key,
+                "reason": "missing forge:managed label",
+            }
+
         webhook_event = create_webhook_event(webhook_data)
 
         # Queue for async processing

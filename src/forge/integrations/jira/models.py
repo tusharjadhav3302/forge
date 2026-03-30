@@ -21,6 +21,11 @@ class JiraIssue:
     created: Optional[datetime] = None
     updated: Optional[datetime] = None
 
+    @property
+    def project_key(self) -> str:
+        """Extract project key from issue key (e.g., 'AISOS' from 'AISOS-104')."""
+        return self.key.rsplit("-", 1)[0] if "-" in self.key else self.key
+
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> "JiraIssue":
         """Create a JiraIssue from an API response.

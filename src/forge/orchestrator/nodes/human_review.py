@@ -3,9 +3,10 @@
 import logging
 from typing import Literal
 
-from forge.integrations.github.client import GitHubClient
+from langgraph.graph import END
+
 from forge.integrations.jira.client import JiraClient
-from forge.models.workflow import EpicStatus, FeatureStatus, TaskStatus
+from forge.models.workflow import ForgeLabel, JiraStatus
 from forge.orchestrator.state import WorkflowState, set_paused, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -31,16 +32,14 @@ def human_review_gate(state: WorkflowState) -> WorkflowState:
     return set_paused(state, "human_review_gate")
 
 
-def route_human_review(
-    state: WorkflowState,
-) -> Literal["implement_task", "complete_tasks", "human_review_gate"]:
+def route_human_review(state: WorkflowState) -> str:
     """Route based on human review status.
 
     Args:
         state: Current workflow state.
 
     Returns:
-        Next node name.
+        Next node name or END.
     """
     # Check if changes were requested
     if state.get("revision_requested") and state.get("feedback_comment"):
@@ -52,9 +51,10 @@ def route_human_review(
         logger.info(f"PR merged for {state['ticket_key']}")
         return "complete_tasks"
 
-    # Still waiting for review
+    # Still waiting for review - END and wait for webhook
     if state.get("is_paused"):
-        return "human_review_gate"
+        logger.info(f"Human review: workflow paused for {state['ticket_key']}, waiting for review webhook")
+        return END
 
     return "complete_tasks"
 
@@ -120,7 +120,9 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
     try:
         for task_key in implemented_tasks:
             try:
-                await jira.transition_issue(task_key, TaskStatus.DONE.value)
+                # Transition to Closed status and remove forge workflow labels
+                await jira.transition_issue(task_key, JiraStatus.CLOSED.value)
+                await jira.set_workflow_label(task_key, ForgeLabel.TASK_REVIEW_APPROVED)
                 logger.info(f"Task {task_key} marked as Done")
             except Exception as e:
                 logger.warning(f"Failed to complete Task {task_key}: {e}")
@@ -166,7 +168,8 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
             epic_done = await _check_epic_completion(jira, epic_key)
 
             if epic_done:
-                await jira.transition_issue(epic_key, EpicStatus.DONE.value)
+                # Transition Epic to Closed status
+                await jira.transition_issue(epic_key, JiraStatus.CLOSED.value)
                 logger.info(f"Epic {epic_key} marked as Done")
             else:
                 all_epics_done = False
@@ -209,8 +212,8 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
     jira = JiraClient()
 
     try:
-        # Transition Feature to Done
-        await jira.transition_issue(ticket_key, FeatureStatus.DONE.value)
+        # Transition Feature to Closed status
+        await jira.transition_issue(ticket_key, JiraStatus.CLOSED.value)
         logger.info(f"Feature {ticket_key} marked as Done")
 
         # Add completion comment

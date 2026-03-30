@@ -3,9 +3,10 @@
 import logging
 from typing import Any
 
-from forge.integrations.claude.client import ClaudeClient
+from forge.config import get_settings
+from forge.integrations.claude.agent import ClaudeAgentClient
 from forge.integrations.jira.client import JiraClient
-from forge.models.workflow import FeatureStatus
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
     logger.info(f"Generating specification for {ticket_key}")
 
     jira = JiraClient()
-    claude = ClaudeClient()
+    claude = ClaudeAgentClient()
 
     try:
         # If PRD not in state, fetch from Jira
@@ -56,15 +57,32 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         # Generate specification using Claude
         spec_content = await claude.generate_spec(prd_content, context)
 
-        # Store spec in Jira custom field
-        await jira.update_custom_field(
-            ticket_key,
-            jira.settings.jira_spec_custom_field,
-            spec_content,
-        )
+        # Store spec in Jira (attachment by default, or custom field/comment if configured)
+        settings = get_settings()
+        if settings.jira_store_in_comments:
+            await jira.add_structured_comment(
+                ticket_key,
+                "Technical Specification",
+                spec_content,
+                comment_type="spec",
+            )
+        elif settings.jira_spec_custom_field:
+            await jira.update_custom_field(
+                ticket_key,
+                settings.jira_spec_custom_field,
+                spec_content,
+            )
+        else:
+            # Default: store as markdown attachment
+            await jira.add_attachment(
+                ticket_key,
+                filename=f"{ticket_key}-spec.md",
+                content=spec_content,
+                content_type="text/markdown",
+            )
 
-        # Transition to pending spec approval
-        await jira.transition_issue(ticket_key, FeatureStatus.PENDING_SPEC_APPROVAL.value)
+        # Set workflow label (instead of custom status transition)
+        await jira.set_workflow_label(ticket_key, ForgeLabel.SPEC_PENDING)
 
         logger.info(f"Spec generated for {ticket_key} ({len(spec_content)} chars)")
 
@@ -108,7 +126,7 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating spec for {ticket_key} with feedback")
 
     jira = JiraClient()
-    claude = ClaudeClient()
+    claude = ClaudeAgentClient()
 
     try:
         # Regenerate spec with feedback
@@ -118,12 +136,21 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
             content_type="spec",
         )
 
-        # Update Jira custom field
-        await jira.update_custom_field(
-            ticket_key,
-            jira.settings.jira_spec_custom_field,
-            new_spec,
-        )
+        # Store updated spec in Jira (comment or custom field based on config)
+        settings = get_settings()
+        if settings.jira_store_in_comments:
+            await jira.add_structured_comment(
+                ticket_key,
+                "Technical Specification (Revised)",
+                new_spec,
+                comment_type="spec",
+            )
+        elif settings.jira_spec_custom_field:
+            await jira.update_custom_field(
+                ticket_key,
+                settings.jira_spec_custom_field,
+                new_spec,
+            )
 
         # Add comment acknowledging revision
         await jira.add_comment(

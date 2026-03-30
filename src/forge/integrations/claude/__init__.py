@@ -1,5 +1,8 @@
 """Claude/Anthropic integration for AI code generation."""
 
-from forge.integrations.claude.client import ClaudeClient
+from forge.integrations.claude.agent import DeepAgentClient
 
-__all__ = ["ClaudeClient"]
+# Backwards compatibility alias
+ClaudeAgentClient = DeepAgentClient
+
+__all__ = ["DeepAgentClient", "ClaudeAgentClient"]

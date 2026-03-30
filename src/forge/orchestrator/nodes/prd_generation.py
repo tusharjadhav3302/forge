@@ -3,9 +3,10 @@
 import logging
 from typing import Any
 
-from forge.integrations.claude.client import ClaudeClient
+from forge.config import get_settings
+from forge.integrations.claude.agent import ClaudeAgentClient
 from forge.integrations.jira.client import JiraClient
-from forge.models.workflow import FeatureStatus
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
     logger.info(f"Generating PRD for {ticket_key}")
 
     jira = JiraClient()
-    claude = ClaudeClient()
+    claude = ClaudeAgentClient()
 
     try:
         # Fetch current issue to get raw requirements
@@ -56,11 +57,21 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         prd_content = await claude.generate_prd(raw_requirements, context)
 
         # Update Jira with generated PRD
-        await jira.update_description(ticket_key, prd_content)
+        settings = get_settings()
+        if settings.jira_store_in_comments:
+            # Store PRD in a structured comment
+            await jira.add_structured_comment(
+                ticket_key,
+                "Product Requirements Document (PRD)",
+                prd_content,
+                comment_type="prd",
+            )
+        else:
+            # Update description directly
+            await jira.update_description(ticket_key, prd_content)
 
-        # Transition to pending approval
-        status = FeatureStatus.PENDING_PRD_APPROVAL.value
-        await jira.transition_issue(ticket_key, status)
+        # Set workflow label (instead of custom status transition)
+        await jira.set_workflow_label(ticket_key, ForgeLabel.PRD_PENDING)
 
         logger.info(
             f"PRD generated for {ticket_key} ({len(prd_content)} chars)"
@@ -112,7 +123,7 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating PRD for {ticket_key} with feedback")
 
     jira = JiraClient()
-    claude = ClaudeClient()
+    claude = ClaudeAgentClient()
 
     try:
         # Regenerate PRD with feedback

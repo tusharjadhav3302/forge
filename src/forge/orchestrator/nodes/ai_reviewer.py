@@ -1,43 +1,14 @@
 """AI code reviewer node for quality, security, and spec alignment."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.client import get_anthropic_client
+from forge.integrations.claude.agent import DeepAgentClient
 from forge.integrations.github.client import GitHubClient
-from forge.integrations.langfuse import trace_llm_call
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
-
-# System prompt for AI code review
-REVIEW_SYSTEM_PROMPT = """You are an expert Code Reviewer analyzing pull requests
-for quality, security, and specification alignment.
-
-Review the code changes for:
-1. Code Quality: Clean code, proper error handling, no obvious bugs
-2. Security: No vulnerabilities, secrets, or unsafe operations
-3. Spec Alignment: Code matches the original requirements
-4. Best Practices: Following project conventions and standards
-
-Provide your review in this format:
-
-## Summary
-[One paragraph overall assessment]
-
-## Issues Found
-- [SEVERITY: critical/major/minor] [Issue description]
-  - File: path/to/file
-  - Line: X
-  - Suggestion: [How to fix]
-
-## Approval Decision
-[APPROVE if no critical/major issues, REQUEST_CHANGES otherwise]
-
-## Comments
-[Optional additional feedback]
-"""
 
 
 async def review_code(state: WorkflowState) -> WorkflowState:
@@ -72,7 +43,7 @@ async def review_code(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     github = GitHubClient()
-    anthropic = get_anthropic_client(settings)
+    agent = DeepAgentClient(settings)
 
     all_approved = True
     review_results = []
@@ -97,19 +68,17 @@ async def review_code(state: WorkflowState) -> WorkflowState:
                 guardrails=guardrails,
             )
 
-            # Invoke AI review
-            with trace_llm_call(
-                "ai_code_review",
-                {"ticket_key": ticket_key, "pr_number": pr_number},
-            ) as trace:
-                response = await anthropic.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=4096,
-                    system=REVIEW_SYSTEM_PROMPT,
-                    messages=[{"role": "user", "content": review_prompt}],
-                )
-                review_text = response.content[0].text
-                trace["output"] = review_text[:500]
+            # Invoke AI review using Deep Agents
+            review_text = await agent.run_skill(
+                skill_name="review-code",
+                prompt=review_prompt,
+                context={
+                    "ticket_key": ticket_key,
+                    "pr_number": pr_number,
+                    "owner": owner,
+                    "repo": repo,
+                },
+            )
 
             # Parse review result
             is_approved = _parse_review_decision(review_text)

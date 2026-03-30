@@ -1,37 +1,16 @@
 """CI/CD evaluator node for monitoring and responding to CI results."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.client import get_anthropic_client
+from forge.integrations.claude.agent import DeepAgentClient
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
-from forge.integrations.langfuse import trace_llm_call
-from forge.models.workflow import TaskStatus
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
-
-# System prompt for generating CI fixes
-FIX_SYSTEM_PROMPT = """You are an expert Software Engineer analyzing CI failures
-and generating fixes.
-
-Given the CI error logs and the relevant code, you will:
-1. Identify the root cause of the failure
-2. Generate a minimal fix that resolves the issue
-3. Explain what went wrong and how the fix addresses it
-
-When responding, provide:
-1. A brief analysis of the failure
-2. The specific code changes needed (as file diffs)
-3. The commit message for the fix
-
-Format file changes as:
-```path/to/file.py
-<complete file contents>
-```
-"""
 
 
 async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
@@ -181,7 +160,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     github = GitHubClient()
-    anthropic = get_anthropic_client(settings)
+    agent = DeepAgentClient(settings)
 
     try:
         # Collect error information
@@ -195,21 +174,18 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 "current_node": "setup_workspace",
             })
 
-        # Generate fix using Claude
+        # Generate fix using Deep Agents
         fix_prompt = _build_fix_prompt(error_info)
 
-        with trace_llm_call(
-            "attempt_ci_fix",
-            {"ticket_key": ticket_key, "errors": len(failed_checks)},
-        ) as trace:
-            response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8192,
-                system=FIX_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": fix_prompt}],
-            )
-            result = response.content[0].text
-            trace["output"] = result[:500]
+        result = await agent.run_skill(
+            skill_name="fix-ci",
+            prompt=fix_prompt,
+            context={
+                "ticket_key": ticket_key,
+                "errors": len(failed_checks),
+                "workspace_path": workspace_path,
+            },
+        )
 
         # Apply fix and commit
         from pathlib import Path
@@ -279,7 +255,8 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
         )
 
         await jira.add_comment(ticket_key, comment)
-        await jira.transition_issue(ticket_key, "Blocked")
+        # Set blocked label instead of transitioning to custom status
+        await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
 
         logger.info(f"Ticket {ticket_key} escalated to Blocked")
 

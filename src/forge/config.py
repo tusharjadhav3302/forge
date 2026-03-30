@@ -33,8 +33,18 @@ class Settings(BaseSettings):
         default=SecretStr(""), description="Shared secret for Jira webhook validation"
     )
     jira_spec_custom_field: str = Field(
-        default="customfield_10050",
-        description="Custom field ID for Specification storage",
+        default="",
+        description="Custom field ID for Specification storage (optional)",
+    )
+
+    # Jira workflow configuration
+    jira_use_labels: bool = Field(
+        default=True,
+        description="Use labels instead of custom statuses for workflow state",
+    )
+    jira_store_in_comments: bool = Field(
+        default=True,
+        description="Store PRD/Spec in comments instead of custom fields",
     )
 
     # GitHub Configuration
@@ -58,6 +68,10 @@ class Settings(BaseSettings):
         default="us-east5",
         description="Google Cloud region for Vertex AI (e.g., us-east5)",
     )
+    claude_model: str = Field(
+        default="claude-3-5-sonnet-v2@20241022",
+        description="Claude model to use (e.g., claude-3-5-sonnet-v2@20241022 for Vertex AI)",
+    )
 
     # Langfuse Configuration
     langfuse_public_key: str = Field(default="", description="Langfuse public key")
@@ -66,6 +80,40 @@ class Settings(BaseSettings):
     )
     langfuse_host: str = Field(
         default="https://cloud.langfuse.com", description="Langfuse host URL"
+    )
+
+    # Claude Agent SDK Configuration
+    agent_enable_tools: bool = Field(
+        default=True,
+        description="Enable agent tools (Read, Glob, Grep, WebSearch)",
+    )
+    agent_allowed_tools: str = Field(
+        default="Read,Glob,Grep,WebSearch",
+        description="Comma-separated list of allowed agent tools",
+    )
+    agent_enable_mcp: bool = Field(
+        default=False,
+        description="Enable MCP server integrations",
+    )
+    agent_mcp_servers: str = Field(
+        default="github",
+        description="Comma-separated list of MCP servers to enable (as defined in mcp-servers.json)",
+    )
+    agent_mcp_config_path: str = Field(
+        default="",
+        description="Path to MCP servers config file (default: mcp-servers.json in project root)",
+    )
+    agent_working_directory: str = Field(
+        default="",
+        description="Working directory for agent file operations (empty = current dir)",
+    )
+    agent_skill_paths: str = Field(
+        default="plugins/forge-sdlc/skills/",
+        description="Comma-separated list of skill directories (relative to working dir)",
+    )
+    agent_backend: str = Field(
+        default="filesystem",
+        description="Deep Agents backend type: filesystem, state, or store",
     )
 
     # Application Configuration

@@ -1,41 +1,17 @@
-"""Implementation node for executing Tasks using Claude Code."""
+"""Implementation node for executing Tasks using Deep Agents."""
 
 import logging
 from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.client import get_anthropic_client
+from forge.integrations.claude.agent import DeepAgentClient
 from forge.integrations.jira.client import JiraClient
-from forge.integrations.langfuse import trace_llm_call
-from forge.models.workflow import TaskStatus
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
 logger = logging.getLogger(__name__)
-
-# System prompt for implementation
-IMPLEMENTATION_SYSTEM_PROMPT = """You are an expert Software Engineer implementing
-code changes according to specifications.
-
-You have been given a Task to implement. Follow these guidelines:
-1. Read and understand the Task description and acceptance criteria
-2. Make minimal, focused changes to accomplish the Task
-3. Write clean, well-documented code
-4. Follow the project's coding standards and patterns
-5. Do not make unrelated changes
-
-When responding, provide:
-1. A summary of changes you will make
-2. The actual code changes (full file contents for modified files)
-3. Any important notes about the implementation
-
-Format file changes as:
-```path/to/file.py
-<file contents>
-```
-"""
 
 
 async def implement_task(state: WorkflowState) -> WorkflowState:
@@ -90,7 +66,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    anthropic = get_anthropic_client(settings)
+    agent = DeepAgentClient(settings)
 
     try:
         # Get Task details from Jira
@@ -109,19 +85,16 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             workspace_path=workspace_path,
         )
 
-        # Invoke Claude for implementation
-        with trace_llm_call(
-            "implement_task",
-            {"task_key": current_task, "task_summary": task_summary},
-        ) as trace:
-            response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
-                max_tokens=8192,
-                system=IMPLEMENTATION_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            result = response.content[0].text
-            trace["output"] = result[:500]
+        # Invoke Deep Agents for implementation
+        result = await agent.run_skill(
+            skill_name="implement-task",
+            prompt=user_prompt,
+            context={
+                "task_key": current_task,
+                "task_summary": task_summary,
+                "workspace_path": workspace_path,
+            },
+        )
 
         # Parse and apply code changes
         changes_applied = _apply_code_changes(
