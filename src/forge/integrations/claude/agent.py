@@ -234,7 +234,7 @@ class DeepAgentClient:
         # Add Langfuse callbacks for observability
         langfuse_config = get_langfuse_config(
             trace_name="deep_agent_invocation",
-            metadata={"system_prompt_length": len(system_prompt)},
+            metadata={"system_prompt_length": str(len(system_prompt))},
         )
         if langfuse_config:
             config.update(langfuse_config)
