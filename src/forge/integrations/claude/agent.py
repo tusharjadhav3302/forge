@@ -272,6 +272,38 @@ class DeepAgentClient:
 
         return "\n".join(response_text)
 
+    def _load_skill_content(self, skill_name: str) -> str:
+        """Load the SKILL.md content for a given skill.
+
+        Args:
+            skill_name: Name of the skill directory.
+
+        Returns:
+            Skill content or empty string if not found.
+        """
+        skill_paths = self._get_skill_paths()
+        root_dir = self._get_root_dir()
+
+        for skill_path in skill_paths:
+            # Try both relative and absolute paths
+            if skill_path.startswith("/"):
+                skill_file = Path(skill_path) / skill_name / "SKILL.md"
+            else:
+                skill_file = root_dir / skill_path / skill_name / "SKILL.md"
+
+            if skill_file.exists():
+                logger.debug(f"Loading skill from {skill_file}")
+                content = skill_file.read_text()
+                # Remove frontmatter if present
+                if content.startswith("---"):
+                    parts = content.split("---", 2)
+                    if len(parts) >= 3:
+                        content = parts[2].strip()
+                return content
+
+        logger.warning(f"Skill '{skill_name}' not found in {skill_paths}")
+        return ""
+
     async def run_skill(
         self,
         skill_name: str,
@@ -280,7 +312,7 @@ class DeepAgentClient:
     ) -> str:
         """Run a skill with the given prompt.
 
-        Generic method to invoke any skill from the configured skill paths.
+        Loads the skill content and includes it as instructions in the system prompt.
 
         Args:
             skill_name: Name of the skill to use (e.g., 'generate-tasks').
@@ -292,21 +324,23 @@ class DeepAgentClient:
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build system prompt with context
-        system_prompt = f"Today's date is {current_date}."
+        # Load the skill content
+        skill_content = self._load_skill_content(skill_name)
+
+        # Build system prompt with skill instructions
+        system_prompt = f"Today's date is {current_date}.\n\n"
+
+        if skill_content:
+            system_prompt += f"# Instructions\n\n{skill_content}\n\n"
+
         if context:
-            system_prompt += f"\n\nContext:\n"
+            system_prompt += "# Context\n\n"
             for key, value in context.items():
                 system_prompt += f"- {key}: {value}\n"
 
-        # Format prompt to invoke the skill
-        full_prompt = f"""Use the '{skill_name}' skill to process the following:
-
-{prompt}"""
-
         logger.info(f"Running skill '{skill_name}' using Deep Agents")
         result = await self._run_agent(
-            prompt=full_prompt,
+            prompt=prompt,
             system_prompt=system_prompt,
             include_tools=True,
         )
@@ -423,33 +457,23 @@ class DeepAgentClient:
         Returns:
             Generated PRD content.
         """
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        prompt_context = {
-            "current_date": current_date,
-            "ticket_key": context.get("ticket_key", "") if context else "",
-            "project_key": context.get("project_key", "") if context else "",
-        }
-
-        system_prompt = load_prompt("prd", prompt_context)
-        if not system_prompt:
-            system_prompt = FALLBACK_PROMPTS["prd"].format(current_date=current_date)
-
-        prompt = f"""Please create a Product Requirements Document from the following
-raw requirements:
+        prompt = f"""Please create a Product Requirements Document from the following raw requirements:
 
 {raw_requirements}
 
 Additional context:
 {context or 'None provided'}
 
-Use the 'generate-prd' skill to generate a comprehensive, well-structured PRD."""
+Generate a comprehensive, well-structured PRD following the instructions provided."""
 
         logger.info("Generating PRD using Deep Agents with skill")
-        result = await self._run_agent(
+        result = await self.run_skill(
+            skill_name="generate-prd",
             prompt=prompt,
-            system_prompt=system_prompt,
-            include_tools=True,
+            context={
+                "ticket_key": context.get("ticket_key", "") if context else "",
+                "project_key": context.get("project_key", "") if context else "",
+            },
         )
 
         logger.info(f"Generated PRD ({len(result)} chars)")
@@ -471,33 +495,23 @@ Use the 'generate-prd' skill to generate a comprehensive, well-structured PRD.""
         Returns:
             Generated specification content.
         """
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        prompt_context = {
-            "current_date": current_date,
-            "ticket_key": context.get("ticket_key", "") if context else "",
-            "project_key": context.get("project_key", "") if context else "",
-        }
-
-        system_prompt = load_prompt("spec", prompt_context)
-        if not system_prompt:
-            system_prompt = FALLBACK_PROMPTS["spec"].format(current_date=current_date)
-
-        prompt = f"""Please create a detailed behavioral specification from the
-following Product Requirements Document:
+        prompt = f"""Please create a detailed behavioral specification from the following Product Requirements Document:
 
 {prd_content}
 
 Additional context:
 {context or 'None provided'}
 
-Use the 'generate-spec' skill to generate a comprehensive specification."""
+Generate a comprehensive specification following the instructions provided."""
 
         logger.info("Generating Spec using Deep Agents with skill")
-        result = await self._run_agent(
+        result = await self.run_skill(
+            skill_name="generate-spec",
             prompt=prompt,
-            system_prompt=system_prompt,
-            include_tools=True,
+            context={
+                "ticket_key": context.get("ticket_key", "") if context else "",
+                "project_key": context.get("project_key", "") if context else "",
+            },
         )
 
         logger.info(f"Generated specification ({len(result)} chars)")
@@ -519,34 +533,24 @@ Use the 'generate-spec' skill to generate a comprehensive specification."""
         Returns:
             List of dicts with 'summary' and 'plan' for each Epic.
         """
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        prompt_context = {
-            "current_date": current_date,
-            "ticket_key": context.get("ticket_key", "") if context else "",
-            "project_key": context.get("project_key", "") if context else "",
-            "feature_summary": context.get("feature_summary", "") if context else "",
-        }
-
-        system_prompt = load_prompt("epic", prompt_context)
-        if not system_prompt:
-            system_prompt = FALLBACK_PROMPTS["epic"].format(current_date=current_date)
-
-        prompt = f"""Please decompose the following specification into 2-5
-logical Epics with implementation plans:
+        prompt = f"""Please decompose the following specification into 2-5 logical Epics with implementation plans:
 
 {spec_content}
 
 Additional context:
 {context or 'None provided'}
 
-Use the 'decompose-epics' skill to generate the Epic breakdown."""
+Generate the Epic breakdown following the instructions provided."""
 
         logger.info("Generating Epics using Deep Agents with skill")
-        result = await self._run_agent(
+        result = await self.run_skill(
+            skill_name="decompose-epics",
             prompt=prompt,
-            system_prompt=system_prompt,
-            include_tools=True,
+            context={
+                "ticket_key": context.get("ticket_key", "") if context else "",
+                "project_key": context.get("project_key", "") if context else "",
+                "feature_summary": context.get("feature_summary", "") if context else "",
+            },
         )
 
         epics = self._parse_epics_response(result)
@@ -569,15 +573,6 @@ Use the 'decompose-epics' skill to generate the Epic breakdown."""
         Returns:
             Regenerated content.
         """
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        prompt_context = {"current_date": current_date}
-
-        system_prompt = load_prompt(content_type, prompt_context)
-        if not system_prompt:
-            fallback = FALLBACK_PROMPTS.get(content_type, FALLBACK_PROMPTS["prd"])
-            system_prompt = fallback.format(current_date=current_date)
-
         skill_map = {
             "prd": "generate-prd",
             "spec": "generate-spec",
@@ -585,8 +580,7 @@ Use the 'decompose-epics' skill to generate the Epic breakdown."""
         }
         skill_name = skill_map.get(content_type, "generate-prd")
 
-        prompt = f"""Please revise the following {content_type.upper()} based on
-the feedback provided:
+        prompt = f"""Please revise the following {content_type.upper()} based on the feedback provided:
 
 ORIGINAL CONTENT:
 {original_content}
@@ -594,14 +588,13 @@ ORIGINAL CONTENT:
 FEEDBACK:
 {feedback}
 
-Use the '{skill_name}' skill to regenerate the content addressing all feedback
-points while maintaining the overall structure and quality."""
+Regenerate the content addressing all feedback points while maintaining the overall structure and quality."""
 
         logger.info(f"Regenerating {content_type} with feedback using Deep Agents")
-        result = await self._run_agent(
+        result = await self.run_skill(
+            skill_name=skill_name,
             prompt=prompt,
-            system_prompt=system_prompt,
-            include_tools=True,
+            context={"is_revision": True},
         )
 
         logger.info(f"Regenerated {content_type} ({len(result)} chars)")
