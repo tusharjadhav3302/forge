@@ -84,3 +84,34 @@ async def close_redis_pool() -> None:
     if _redis_pool is not None:
         await _redis_pool.disconnect()
         _redis_pool = None
+
+
+async def clear_checkpoint(thread_id: str) -> bool:
+    """Clear checkpoint state for a specific thread/ticket.
+
+    Args:
+        thread_id: The thread ID (typically the ticket key like AISOS-104).
+
+    Returns:
+        True if checkpoint was cleared, False if not found.
+    """
+    import aiosqlite
+
+    if not CHECKPOINT_DB_PATH.exists():
+        return False
+
+    async with aiosqlite.connect(str(CHECKPOINT_DB_PATH)) as db:
+        # LangGraph checkpoint tables: checkpoints, writes
+        cursor = await db.execute(
+            "DELETE FROM checkpoints WHERE thread_id = ?",
+            (thread_id,)
+        )
+        deleted = cursor.rowcount > 0
+
+        await db.execute(
+            "DELETE FROM writes WHERE thread_id = ?",
+            (thread_id,)
+        )
+
+        await db.commit()
+        return deleted

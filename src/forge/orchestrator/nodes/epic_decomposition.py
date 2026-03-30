@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+from forge.config import get_settings
 from forge.integrations.claude.agent import ClaudeAgentClient
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
@@ -48,11 +49,31 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
         parent_issue = await jira.get_issue(ticket_key)
         project_key = parent_issue.project_key
 
+        # Build list of available repos from:
+        # 1. Feature ticket labels (repo:owner/repo-name)
+        # 2. Configured known repos (GITHUB_KNOWN_REPOS)
+        settings = get_settings()
+        feature_labels = await jira.get_labels(ticket_key)
+
+        available_repos = set()
+
+        # Add repos from Feature labels
+        for label in feature_labels:
+            if label.startswith("repo:"):
+                available_repos.add(label[5:])
+
+        # Add known repos from config
+        for repo in settings.known_repos:
+            available_repos.add(repo)
+
+        available_repos = list(available_repos)
+
         # Build context for Epic generation
         context: dict[str, Any] = {
             "ticket_key": ticket_key,
             "project_key": project_key,
             "feature_summary": parent_issue.summary,
+            "available_repos": available_repos,
         }
 
         # Generate Epic breakdown using Claude
@@ -68,18 +89,37 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
 
         # Create Epics in Jira
         epic_keys: list[str] = []
+        epics_by_repo: dict[str, list[str]] = {}
+
         for epic in epics_data:
             summary = epic.get("summary", "Untitled Epic")
             plan = epic.get("plan", "")
+            repo = epic.get("repo", "")
+
+            # Build labels for the Epic
+            labels = []
+            if repo and "/" in repo:
+                labels.append(f"repo:{repo}")
+                # Track which epics go to which repo
+                if repo not in epics_by_repo:
+                    epics_by_repo[repo] = []
 
             epic_key = await jira.create_epic(
                 project_key=project_key,
                 summary=summary,
                 description=plan,
                 parent_key=ticket_key,
+                labels=labels,
             )
             epic_keys.append(epic_key)
-            logger.info(f"Created Epic {epic_key}: {summary}")
+
+            if repo:
+                epics_by_repo[repo].append(epic_key)
+
+            logger.info(
+                f"Created Epic {epic_key}: {summary}"
+                + (f" (repo: {repo})" if repo else "")
+            )
 
         # Set workflow label to indicate plan is pending approval
         await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)

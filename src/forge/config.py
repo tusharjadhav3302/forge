@@ -52,6 +52,21 @@ class Settings(BaseSettings):
     github_webhook_secret: SecretStr = Field(
         default=SecretStr(""), description="Shared secret for GitHub webhook validation"
     )
+    github_default_repo: str = Field(
+        default="",
+        description="Default repository (owner/repo format) for tasks without explicit repo assignment",
+    )
+    github_known_repos: str = Field(
+        default="",
+        description="Comma-separated list of known repositories (owner/repo format) for repo assignment",
+    )
+
+    @property
+    def known_repos(self) -> list[str]:
+        """Get list of known repositories."""
+        if not self.github_known_repos:
+            return []
+        return [r.strip() for r in self.github_known_repos.split(",") if r.strip()]
 
     # Anthropic Configuration
     # Option 1: Direct Anthropic API

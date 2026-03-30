@@ -65,12 +65,21 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 logger.warning(f"Epic {epic_key} has no implementation plan")
                 continue
 
+            # Get repo from Epic labels (set during decomposition)
+            epic_labels = await jira.get_labels(epic_key)
+            epic_repo = ""
+            for label in epic_labels:
+                if label.startswith("repo:"):
+                    epic_repo = label[5:]
+                    break
+
             # Build context
             context: dict[str, Any] = {
                 "epic_key": epic_key,
                 "epic_summary": epic_summary,
                 "feature_key": ticket_key,
                 "project_key": project_key,
+                "epic_repo": epic_repo,
             }
 
             # Generate Tasks using Deep Agents
@@ -82,10 +91,24 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
             for task in tasks_data:
                 summary = task.get("summary", "Untitled Task")
                 description = task.get("description", "")
-                repo = task.get("repo", "unknown")
+                repo = task.get("repo", "")
+
+                # Repo priority: task-level > epic-level > default config
+                if not repo or repo == "unknown" or "/" not in repo:
+                    repo = epic_repo  # Inherit from Epic
+
+                if not repo or repo == "unknown" or "/" not in repo:
+                    repo = settings.github_default_repo  # Fallback to config
+
+                if not repo or "/" not in repo:
+                    logger.warning(
+                        f"Task '{summary}' has no valid repo. "
+                        "Set repo labels on Feature/Epic or GITHUB_DEFAULT_REPO."
+                    )
+                    repo = "unknown"
 
                 # Add repository as label
-                labels = [f"repo:{repo}"] if repo != "unknown" else []
+                labels = [f"repo:{repo}"] if repo and repo != "unknown" else []
 
                 task_key = await jira.create_task(
                     project_key=project_key,

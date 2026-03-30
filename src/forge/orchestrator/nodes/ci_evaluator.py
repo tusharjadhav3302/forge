@@ -229,7 +229,12 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
 
 async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
-    """Escalate ticket to Blocked status after CI fix exhaustion.
+    """Escalate ticket to Blocked status after workflow failure.
+
+    This handles various failure scenarios:
+    - CI fix exhaustion
+    - Workspace setup failures (invalid repo, clone failures)
+    - Other workflow errors
 
     Args:
         state: Current workflow state.
@@ -240,19 +245,41 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
     ticket_key = state["ticket_key"]
     ci_fix_attempts = state.get("ci_fix_attempts", 0)
     failed_checks = state.get("ci_failed_checks", [])
+    last_error = state.get("last_error", "")
+    current_node = state.get("current_node", "")
 
     logger.info(f"Escalating {ticket_key} to Blocked status")
 
     jira = JiraClient()
 
     try:
-        # Build escalation comment
-        check_names = [c.get("name", "Unknown") for c in failed_checks]
-        comment = (
-            f"CI fixes exhausted after {ci_fix_attempts} attempts.\n\n"
-            f"Failed checks: {', '.join(check_names)}\n\n"
-            "Manual intervention required."
-        )
+        # Build escalation comment based on failure type
+        if failed_checks:
+            # CI failure scenario
+            check_names = [c.get("name", "Unknown") for c in failed_checks]
+            comment = (
+                f"CI fixes exhausted after {ci_fix_attempts} attempts.\n\n"
+                f"Failed checks: {', '.join(check_names)}\n\n"
+                "Manual intervention required."
+            )
+        elif "repository" in last_error.lower() or "workspace" in last_error.lower():
+            # Workspace/repository setup failure
+            comment = (
+                f"Workflow blocked due to repository configuration error.\n\n"
+                f"Error: {last_error}\n\n"
+                "Please ensure:\n"
+                "- Tasks have valid repository assignments (owner/repo format)\n"
+                "- GITHUB_DEFAULT_REPO is set in environment if repos aren't specified\n"
+                "- The repository exists and is accessible"
+            )
+        else:
+            # Generic failure
+            comment = (
+                f"Workflow blocked due to unrecoverable error.\n\n"
+                f"Error: {last_error}\n"
+                f"Failed at: {current_node}\n\n"
+                "Manual intervention required."
+            )
 
         await jira.add_comment(ticket_key, comment)
         # Set blocked label instead of transitioning to custom status

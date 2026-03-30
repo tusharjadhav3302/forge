@@ -56,6 +56,18 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
             }
         current_repo = repos[0]
 
+    # Validate repository name
+    if current_repo == "unknown" or "/" not in current_repo:
+        logger.error(
+            f"Invalid repository name '{current_repo}' for {ticket_key}. "
+            "Repository must be in 'owner/repo' format."
+        )
+        return {
+            **state,
+            "last_error": f"Invalid repository '{current_repo}'. Tasks must specify a valid 'owner/repo' format.",
+            "current_node": "setup_workspace",
+        }
+
     logger.info(f"Setting up workspace for {current_repo} ({ticket_key})")
 
     manager = get_workspace_manager()

@@ -506,12 +506,28 @@ Generate a comprehensive specification following the instructions provided."""
         Returns:
             List of dicts with 'summary' and 'plan' for each Epic.
         """
+        available_repos = context.get("available_repos", []) if context else []
+        repo_instruction = ""
+        if available_repos:
+            repo_list = "\n".join(f"  - {r}" for r in available_repos)
+            repo_instruction = f"""
+AVAILABLE REPOSITORIES:
+{repo_list}
+
+IMPORTANT: Each Epic MUST be assigned to one of the repositories listed above.
+Use REPO: <owner/repo> format in your output. Do NOT invent new repositories."""
+        else:
+            repo_instruction = """
+NOTE: No repositories configured. Use REPO: unknown for now."""
+
         prompt = f"""Please decompose the following specification into 2-5 logical Epics with implementation plans:
 
 {spec_content}
 
 Additional context:
-{context or 'None provided'}
+- Feature: {context.get('feature_summary', 'Not provided') if context else 'Not provided'}
+- Project: {context.get('project_key', 'Not provided') if context else 'Not provided'}
+{repo_instruction}
 
 Generate the Epic breakdown following the instructions provided."""
 
@@ -523,6 +539,7 @@ Generate the Epic breakdown following the instructions provided."""
                 "ticket_key": context.get("ticket_key", "") if context else "",
                 "project_key": context.get("project_key", "") if context else "",
                 "feature_summary": context.get("feature_summary", "") if context else "",
+                "available_repos": available_repos,
             },
         )
 
@@ -581,17 +598,19 @@ Regenerate the content addressing all feedback points while maintaining the over
             response: Raw response from agent.
 
         Returns:
-            List of Epic dicts with 'summary' and 'plan'.
+            List of Epic dicts with 'summary', 'plan', and 'repo'.
         """
+        import re
+
         epics = []
         current_epic: dict[str, str] = {}
         current_section = None
         plan_lines: list[str] = []
 
         for line in response.split("\n"):
-            line = line.strip()
+            stripped = line.strip()
 
-            if line.startswith("---"):
+            if stripped.startswith("---"):
                 if current_epic.get("summary"):
                     current_epic["plan"] = "\n".join(plan_lines).strip()
                     epics.append(current_epic)
@@ -599,10 +618,17 @@ Regenerate the content addressing all feedback points while maintaining the over
                     plan_lines = []
                 continue
 
-            if line.startswith("EPIC:"):
-                current_epic["summary"] = line[5:].strip()
+            if stripped.startswith("EPIC:"):
+                current_epic["summary"] = stripped[5:].strip()
                 current_section = "summary"
-            elif line.startswith("PLAN:"):
+            elif stripped.startswith("REPO:"):
+                # Extract repo (owner/name format)
+                repo = stripped[5:].strip()
+                # Clean up any extra text
+                repo = re.sub(r'[^a-zA-Z0-9/_-]', '', repo)
+                if "/" in repo:
+                    current_epic["repo"] = repo
+            elif stripped.startswith("PLAN:"):
                 current_section = "plan"
             elif current_section == "plan":
                 plan_lines.append(line)

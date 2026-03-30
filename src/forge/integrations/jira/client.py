@@ -145,6 +145,7 @@ class JiraClient:
         summary: str,
         description: str,
         parent_key: str,
+        labels: Optional[list[str]] = None,
     ) -> str:
         """Create a new Epic linked to a parent Feature.
 
@@ -153,6 +154,7 @@ class JiraClient:
             summary: Epic title/summary.
             description: Epic description (implementation plan).
             parent_key: Parent Feature key for linking.
+            labels: Optional list of labels to add.
 
         Returns:
             The key of the created Epic.
@@ -160,17 +162,20 @@ class JiraClient:
         client = await self._get_client()
         adf_content = self._text_to_adf(description)
 
+        fields = {
+            "project": {"key": project_key},
+            "summary": summary,
+            "description": adf_content,
+            "issuetype": {"name": "Epic"},
+            "parent": {"key": parent_key},
+        }
+
+        if labels:
+            fields["labels"] = labels
+
         response = await client.post(
             "/issue",
-            json={
-                "fields": {
-                    "project": {"key": project_key},
-                    "summary": summary,
-                    "description": adf_content,
-                    "issuetype": {"name": "Epic"},
-                    "parent": {"key": parent_key},
-                }
-            },
+            json={"fields": fields},
         )
         response.raise_for_status()
         epic_key = response.json()["key"]

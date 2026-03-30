@@ -232,7 +232,14 @@ def create_workflow_graph() -> StateGraph:
         "task_router",
         route_tasks_parallel,  # Returns Send objects for fan-out
     )
-    graph.add_edge("setup_workspace", "implement_task")
+    graph.add_conditional_edges(
+        "setup_workspace",
+        _route_after_workspace_setup,
+        {
+            "implement_task": "implement_task",
+            "escalate_blocked": "escalate_blocked",
+        },
+    )
     graph.add_conditional_edges(
         "implement_task",
         _route_implementation,
@@ -306,6 +313,20 @@ def create_workflow_graph() -> StateGraph:
     graph.add_edge("task_workflow", END)
 
     return graph
+
+
+def _route_after_workspace_setup(
+    state: WorkflowState,
+) -> Literal["implement_task", "escalate_blocked"]:
+    """Route based on workspace setup success."""
+    workspace_path = state.get("workspace_path")
+    last_error = state.get("last_error")
+
+    if workspace_path and not last_error:
+        return "implement_task"
+
+    logger.error(f"Workspace setup failed: {last_error}")
+    return "escalate_blocked"
 
 
 def _route_implementation(

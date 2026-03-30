@@ -294,6 +294,22 @@ async def cmd_reject(args: argparse.Namespace) -> int:
         await jira.close()
 
 
+async def cmd_clear_checkpoint(args: argparse.Namespace) -> int:
+    """Clear checkpoint state for a ticket."""
+    from forge.orchestrator.checkpointer import clear_checkpoint
+
+    try:
+        cleared = await clear_checkpoint(args.ticket)
+        if cleared:
+            print(f"Checkpoint cleared for {args.ticket}")
+        else:
+            print(f"No checkpoint found for {args.ticket}")
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 async def cmd_health(args: argparse.Namespace) -> int:
     """Check system health."""
     from forge.orchestrator.checkpointer import get_redis_client
@@ -418,6 +434,13 @@ def main() -> int:
         help="Feedback explaining why rejected and what to change",
     )
 
+    # clear-checkpoint command
+    clear_parser = subparsers.add_parser(
+        "clear-checkpoint",
+        help="Clear checkpoint state for a ticket (allows workflow restart)",
+    )
+    clear_parser.add_argument("ticket", help="Jira ticket key")
+
     # health command
     subparsers.add_parser(
         "health",
@@ -440,6 +463,7 @@ def main() -> int:
         "set-label": cmd_set_label,
         "approve": cmd_approve,
         "reject": cmd_reject,
+        "clear-checkpoint": cmd_clear_checkpoint,
         "health": cmd_health,
     }
 
