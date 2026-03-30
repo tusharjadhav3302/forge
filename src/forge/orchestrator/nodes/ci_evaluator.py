@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import DeepAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
@@ -160,7 +160,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     github = GitHubClient()
-    agent = DeepAgentClient(settings)
+    agent = ForgeAgent(settings)
 
     try:
         # Collect error information

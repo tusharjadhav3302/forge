@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import ClaudeAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
@@ -33,7 +33,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
     logger.info(f"Generating specification for {ticket_key}")
 
     jira = JiraClient()
-    claude = ClaudeAgentClient()
+    agent = ForgeAgent()
 
     try:
         # If PRD not in state, fetch from Jira
@@ -55,7 +55,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         }
 
         # Generate specification using Claude
-        spec_content = await claude.generate_spec(prd_content, context)
+        spec_content = await agent.generate_spec(prd_content, context)
 
         # Store spec in Jira (attachment by default, or custom field/comment if configured)
         settings = get_settings()
@@ -103,7 +103,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await claude.close()
+        await agent.close()
 
 
 async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
@@ -126,11 +126,11 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating spec for {ticket_key} with feedback")
 
     jira = JiraClient()
-    claude = ClaudeAgentClient()
+    agent = ForgeAgent()
 
     try:
         # Regenerate spec with feedback
-        new_spec = await claude.regenerate_with_feedback(
+        new_spec = await agent.regenerate_with_feedback(
             original_content=original_spec,
             feedback=feedback,
             content_type="spec",
@@ -179,4 +179,4 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await claude.close()
+        await agent.close()

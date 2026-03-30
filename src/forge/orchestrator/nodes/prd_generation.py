@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import ClaudeAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
@@ -31,7 +31,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
     logger.info(f"Generating PRD for {ticket_key}")
 
     jira = JiraClient()
-    claude = ClaudeAgentClient()
+    agent = ForgeAgent()
 
     try:
         # Fetch current issue to get raw requirements
@@ -54,7 +54,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         }
 
         # Generate PRD using Claude
-        prd_content = await claude.generate_prd(raw_requirements, context)
+        prd_content = await agent.generate_prd(raw_requirements, context)
 
         # Update Jira with generated PRD
         settings = get_settings()
@@ -94,7 +94,7 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await claude.close()
+        await agent.close()
 
 
 async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
@@ -123,11 +123,11 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
     logger.info(f"Regenerating PRD for {ticket_key} with feedback")
 
     jira = JiraClient()
-    claude = ClaudeAgentClient()
+    agent = ForgeAgent()
 
     try:
         # Regenerate PRD with feedback
-        new_prd = await claude.regenerate_with_feedback(
+        new_prd = await agent.regenerate_with_feedback(
             original_content=original_prd,
             feedback=feedback,
             content_type="prd",
@@ -163,4 +163,4 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await claude.close()
+        await agent.close()

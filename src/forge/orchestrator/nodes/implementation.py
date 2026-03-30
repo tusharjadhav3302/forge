@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import DeepAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 from forge.workspace.git_ops import GitOperations
@@ -66,7 +66,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = DeepAgentClient(settings)
+    agent = ForgeAgent(settings)
 
     try:
         # Get Task details from Jira

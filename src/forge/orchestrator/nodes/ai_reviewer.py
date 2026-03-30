@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import DeepAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
@@ -43,7 +43,7 @@ async def review_code(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     github = GitHubClient()
-    agent = DeepAgentClient(settings)
+    agent = ForgeAgent(settings)
 
     all_approved = True
     review_results = []

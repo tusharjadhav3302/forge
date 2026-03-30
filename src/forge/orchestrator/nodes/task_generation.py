@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import DeepAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
@@ -43,7 +43,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = DeepAgentClient(settings)
+    agent = ForgeAgent(settings)
 
     all_task_keys: list[str] = []
     tasks_by_repo: dict[str, list[str]] = {}
@@ -153,7 +153,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
 
 async def _generate_tasks_for_epic(
-    agent: DeepAgentClient,
+    agent: ForgeAgent,
     epic_plan: str,
     epic_summary: str,
     context: dict[str, Any],

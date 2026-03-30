@@ -1,6 +1,7 @@
 """Langfuse tracing integration for LLM observability."""
 
 import logging
+import os
 from contextlib import contextmanager
 from typing import Any, Generator, Optional
 
@@ -8,48 +9,65 @@ from forge.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Lazy-loaded handler instance
-_langfuse_handler = None
+# Flag to track if env vars are set
+_env_configured = False
 
 
-def get_langfuse_handler() -> Optional[Any]:
-    """Get the Langfuse callback handler for LangChain/LangGraph.
-
-    Returns a configured CallbackHandler if Langfuse is enabled,
-    otherwise returns None.
-
-    In Langfuse v4+, the CallbackHandler reads configuration from
-    environment variables: LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY,
-    LANGFUSE_HOST.
+def _ensure_langfuse_env() -> bool:
+    """Ensure Langfuse environment variables are set.
 
     Returns:
-        CallbackHandler instance or None.
+        True if Langfuse is enabled and configured.
     """
-    global _langfuse_handler
+    global _env_configured
 
     settings = get_settings()
     if not settings.langfuse_enabled:
-        return None
+        return False
 
-    # Return cached handler
-    if _langfuse_handler is not None:
-        return _langfuse_handler
-
-    try:
-        import os
-
-        from langfuse.langchain import CallbackHandler
-
-        # Langfuse v4+ reads config from environment variables
+    if not _env_configured:
         os.environ.setdefault("LANGFUSE_PUBLIC_KEY", settings.langfuse_public_key)
         os.environ.setdefault(
             "LANGFUSE_SECRET_KEY", settings.langfuse_secret_key.get_secret_value()
         )
         os.environ.setdefault("LANGFUSE_HOST", settings.langfuse_host)
+        _env_configured = True
 
-        _langfuse_handler = CallbackHandler()
-        logger.info("Langfuse callback handler initialized")
-        return _langfuse_handler
+    return True
+
+
+def get_langfuse_handler(
+    session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+) -> Optional[Any]:
+    """Get a Langfuse callback handler for LangChain/LangGraph.
+
+    Creates a new handler instance with optional session tracking.
+    Use session_id to group all traces for a ticket together.
+
+    Args:
+        session_id: Session ID to group traces (e.g., ticket key).
+        user_id: Optional user ID for attribution.
+        tags: Optional tags for filtering.
+
+    Returns:
+        CallbackHandler instance or None if disabled.
+    """
+    if not _ensure_langfuse_env():
+        return None
+
+    try:
+        from langfuse.callback import CallbackHandler
+
+        handler = CallbackHandler(
+            session_id=session_id,
+            user_id=user_id,
+            tags=tags,
+        )
+        if session_id:
+            logger.debug(f"Langfuse handler created for session: {session_id}")
+        return handler
 
     except ImportError:
         logger.warning(
@@ -71,33 +89,34 @@ def get_langfuse_config(
     """Get a LangChain config dict with Langfuse callback.
 
     This can be passed directly to agent.invoke() or chain.invoke().
+    Each call creates a new handler with the specified session_id,
+    allowing traces to be grouped by ticket/session.
 
     Args:
         trace_name: Optional name for the trace.
         user_id: Optional user ID for the trace.
-        session_id: Optional session ID for the trace.
+        session_id: Optional session ID to group traces (e.g., ticket key).
         tags: Optional list of tags.
         metadata: Optional additional metadata.
 
     Returns:
         Config dict with callbacks and metadata, or empty dict if disabled.
     """
-    handler = get_langfuse_handler()
+    # Create a handler with session tracking
+    handler = get_langfuse_handler(
+        session_id=session_id,
+        user_id=user_id,
+        tags=tags,
+    )
     if handler is None:
         return {}
 
     config: dict[str, Any] = {"callbacks": [handler]}
 
-    # Build metadata for Langfuse
+    # Build metadata for trace name and additional data
     langfuse_metadata: dict[str, Any] = {}
     if trace_name:
         langfuse_metadata["langfuse_trace_name"] = trace_name
-    if user_id:
-        langfuse_metadata["langfuse_user_id"] = user_id
-    if session_id:
-        langfuse_metadata["langfuse_session_id"] = session_id
-    if tags:
-        langfuse_metadata["langfuse_tags"] = tags
     if metadata:
         langfuse_metadata.update(metadata)
 

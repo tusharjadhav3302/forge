@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import ClaudeAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
@@ -33,7 +33,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
     logger.info(f"Decomposing spec into Epics for {ticket_key}")
 
     jira = JiraClient()
-    claude = ClaudeAgentClient()
+    agent = ForgeAgent()
 
     try:
         # If spec not in state, this is an error
@@ -77,7 +77,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
         }
 
         # Generate Epic breakdown using Claude
-        epics_data = await claude.generate_epics(spec_content, context)
+        epics_data = await agent.generate_epics(spec_content, context)
 
         if not epics_data:
             logger.warning(f"No Epics generated for {ticket_key}")
@@ -143,7 +143,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await claude.close()
+        await agent.close()
 
 
 async def regenerate_all_epics(state: WorkflowState) -> WorkflowState:
@@ -221,7 +221,7 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
     logger.info(f"Updating Epic {epic_key} with feedback")
 
     jira = JiraClient()
-    claude = ClaudeAgentClient()
+    agent = ForgeAgent()
 
     try:
         # Get current Epic description
@@ -229,7 +229,7 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
         original_plan = epic_issue.description or ""
 
         # Regenerate plan with feedback
-        new_plan = await claude.regenerate_with_feedback(
+        new_plan = await agent.regenerate_with_feedback(
             original_content=original_plan,
             feedback=feedback,
             content_type="epic",
@@ -265,7 +265,7 @@ async def update_single_epic(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
-        await claude.close()
+        await agent.close()
 
 
 def check_all_epics_approved(

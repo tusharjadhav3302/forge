@@ -4,7 +4,7 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.claude.agent import DeepAgentClient
+from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from langgraph.graph import END
 
@@ -34,7 +34,7 @@ async def analyze_bug(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = DeepAgentClient(settings)
+    agent = ForgeAgent(settings)
 
     try:
         # Get bug details
@@ -167,7 +167,7 @@ async def implement_bug_fix(state: WorkflowState) -> WorkflowState:
         })
 
     settings = get_settings()
-    agent = DeepAgentClient(settings)
+    agent = ForgeAgent(settings)
 
     try:
         # Generate test-first implementation using Deep Agents
@@ -249,7 +249,7 @@ async def regenerate_rca(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = DeepAgentClient(settings)
+    agent = ForgeAgent(settings)
 
     try:
         prompt = f"""Please revise this RCA based on the feedback:

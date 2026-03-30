@@ -84,11 +84,12 @@ def get_weather(city: str) -> str:
     return f"Weather data for {city} not available."
 
 
-class DeepAgentClient:
-    """Agentic client using LangChain Deep Agents.
+class ForgeAgent:
+    """AI agent for SDLC orchestration using Deep Agents.
 
-    Provides high-level methods for PRD, Spec, and Epic generation
-    with configurable skill paths and tool capabilities.
+    Provides autonomous task execution with configurable skill paths
+    and tool capabilities. The agent selects the best approach for
+    each task based on available skills.
     """
 
     def __init__(self, settings: Settings | None = None):
@@ -209,6 +210,8 @@ class DeepAgentClient:
         prompt: str,
         system_prompt: str,
         include_tools: bool = True,
+        session_id: str | None = None,
+        trace_name: str | None = None,
     ) -> str:
         """Run the agent with the given prompt.
 
@@ -216,6 +219,8 @@ class DeepAgentClient:
             prompt: User prompt to send.
             system_prompt: System prompt for the agent.
             include_tools: Whether to include tools.
+            session_id: Optional session ID for Langfuse (e.g., ticket key).
+            trace_name: Optional trace name for Langfuse.
 
         Returns:
             Agent response text.
@@ -233,7 +238,8 @@ class DeepAgentClient:
 
         # Add Langfuse callbacks for observability
         langfuse_config = get_langfuse_config(
-            trace_name="deep_agent_invocation",
+            trace_name=trace_name or "deep_agent_invocation",
+            session_id=session_id,
             metadata={"system_prompt_length": str(len(system_prompt))},
         )
         if langfuse_config:
@@ -268,20 +274,20 @@ class DeepAgentClient:
 
         return "\n".join(response_text)
 
-    async def run_skill(
+    async def run_task(
         self,
-        skill_name: str,
+        task: str,
         prompt: str,
         context: dict[str, Any] | None = None,
     ) -> str:
-        """Run a skill with the given prompt.
+        """Run a task, letting the agent choose the best approach.
 
-        Deep Agents discovers skills automatically from the configured paths.
-        The skill_name helps the agent find the right skill to apply.
+        Deep Agents discovers skills automatically from the configured paths
+        and selects the most appropriate one based on the task description.
 
         Args:
-            skill_name: Name of the skill to use (e.g., 'generate-tasks').
-            prompt: The user prompt/content to process.
+            task: Short task name for logging (e.g., 'generate-prd').
+            prompt: The task description and content to process.
             context: Optional context variables for the prompt.
 
         Returns:
@@ -289,34 +295,49 @@ class DeepAgentClient:
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build system prompt with strict output instructions
+        # Build system prompt - let agent choose the best approach
         system_prompt = f"""Today's date is {current_date}.
 
-You are an automated agent. Your task is to execute the requested skill and return ONLY the final generated content.
+You are an automated SDLC agent. Analyze the task and use the most appropriate skill or approach to complete it.
 
 CRITICAL OUTPUT RULES:
 1. DO NOT include any planning, reasoning, or meta-commentary in your response
 2. DO NOT say things like "Now I have the template" or "Let me generate..."
 3. DO NOT explain what you are doing - just do it
-4. Your response should contain ONLY the final deliverable (PRD, spec, code, etc.)
+4. Your response should contain ONLY the final deliverable (PRD, spec, plan, code, etc.)
 5. Start your response directly with the content - no preamble
 
-Execute the skill and return the result immediately."""
+Complete the task and return the result immediately."""
 
         if context:
             system_prompt += "\n\nContext:\n"
             for key, value in context.items():
                 system_prompt += f"- {key}: {value}\n"
 
-        # Include skill name to help agent match the right skill
-        full_prompt = f"Execute the '{skill_name}' skill now.\n\n{prompt}"
+        # Extract ticket key for session tracking
+        ticket_key = context.get("ticket_key") if context else None
 
-        logger.info(f"Running skill '{skill_name}' using Deep Agents")
+        logger.info(f"Running task '{task}' using Deep Agents")
         result = await self._run_agent(
-            prompt=full_prompt,
+            prompt=prompt,
             system_prompt=system_prompt,
             include_tools=True,
+            session_id=ticket_key,
+            trace_name=f"task:{task}",
         )
+
+        logger.info(f"Task '{task}' completed ({len(result)} chars)")
+        return result
+
+    # Backwards compatibility alias
+    async def run_skill(
+        self,
+        skill_name: str,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """Alias for run_task (backwards compatibility)."""
+        return await self.run_task(task=skill_name, prompt=prompt, context=context)
 
         logger.info(f"Skill '{skill_name}' completed ({len(result)} chars)")
         return result
@@ -640,9 +661,5 @@ Regenerate the content addressing all feedback points while maintaining the over
         return epics
 
     async def close(self) -> None:
-        """Close the client and cleanup resources."""
+        """Close the agent and cleanup resources."""
         pass
-
-
-# Backwards compatibility alias
-ClaudeAgentClient = DeepAgentClient

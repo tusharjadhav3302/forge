@@ -493,6 +493,12 @@ class JiraClient:
         """
         import re
 
+        # For long texts, use simple paragraph mode to avoid regex issues
+        # Threshold lowered after observing hangs with complex markdown
+        if len(text) > 3000:
+            logger.debug(f"Using simple ADF for long text ({len(text)} chars)")
+            return JiraClient._text_to_simple_adf(text)
+
         content: list[dict[str, Any]] = []
         lines = text.split("\n") if text else []
         i = 0
@@ -706,3 +712,32 @@ class JiraClient:
             result.append({"type": "text", "text": text[last_end:]})
 
         return result if result else [{"type": "text", "text": text}]
+
+    @staticmethod
+    def _text_to_simple_adf(text: str) -> dict[str, Any]:
+        """Convert text to simple ADF without markdown parsing.
+
+        Used for very long texts where regex parsing might be slow.
+
+        Args:
+            text: Plain text content.
+
+        Returns:
+            ADF document structure with simple paragraphs.
+        """
+        content: list[dict[str, Any]] = []
+        paragraphs = text.split("\n\n") if text else []
+
+        for para in paragraphs:
+            para = para.strip()
+            if para:
+                content.append({
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": para}],
+                })
+
+        return {
+            "type": "doc",
+            "version": 1,
+            "content": content or [{"type": "paragraph", "content": []}],
+        }
