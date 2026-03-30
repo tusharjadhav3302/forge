@@ -72,6 +72,12 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                 settings.jira_spec_custom_field,
                 spec_content,
             )
+        else:
+            # Fallback: store as a comment if no custom field configured
+            await jira.add_comment(
+                ticket_key,
+                f"## Technical Specification\n\n{spec_content}",
+            )
 
         # Set workflow label (instead of custom status transition)
         await jira.set_workflow_label(ticket_key, ForgeLabel.SPEC_PENDING)
