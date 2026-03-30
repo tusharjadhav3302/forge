@@ -117,7 +117,9 @@ def get_repo_execution_plan(state: WorkflowState) -> list[dict]:
     return plan
 
 
-def route_tasks_parallel(state: WorkflowState) -> Sequence[Send]:
+def route_tasks_parallel(
+    state: WorkflowState,
+) -> str | list[Send]:
     """Route tasks to parallel workspace execution using LangGraph Send API.
 
     This function implements fan-out pattern for concurrent repository
@@ -127,7 +129,7 @@ def route_tasks_parallel(state: WorkflowState) -> Sequence[Send]:
         state: Current workflow state with tasks_by_repo.
 
     Returns:
-        Sequence of Send objects for parallel execution.
+        Either "setup_workspace" for sequential, or list[Send] for parallel.
     """
     ticket_key = state["ticket_key"]
     tasks_by_repo = state.get("tasks_by_repo", {})
@@ -135,7 +137,7 @@ def route_tasks_parallel(state: WorkflowState) -> Sequence[Send]:
 
     if not tasks_by_repo:
         logger.warning(f"No tasks to route for {ticket_key}")
-        return []
+        return "setup_workspace"
 
     repos = list(tasks_by_repo.keys())
     repo_count = len(repos)
@@ -143,7 +145,7 @@ def route_tasks_parallel(state: WorkflowState) -> Sequence[Send]:
     if not parallel_enabled or repo_count == 1:
         # Fall back to sequential for single repo or disabled parallel
         logger.info(f"Using sequential execution for {ticket_key}")
-        return [Send("setup_workspace", state)]
+        return "setup_workspace"
 
     # Limit concurrent repos
     batch_size = min(repo_count, MAX_CONCURRENT_REPOS)
