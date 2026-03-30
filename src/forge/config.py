@@ -82,6 +82,32 @@ class Settings(BaseSettings):
         default="https://cloud.langfuse.com", description="Langfuse host URL"
     )
 
+    # Claude Agent SDK Configuration
+    agent_enable_tools: bool = Field(
+        default=True,
+        description="Enable agent tools (Read, Glob, Grep, WebSearch)",
+    )
+    agent_allowed_tools: str = Field(
+        default="Read,Glob,Grep,WebSearch",
+        description="Comma-separated list of allowed agent tools",
+    )
+    agent_enable_mcp: bool = Field(
+        default=False,
+        description="Enable MCP server integrations",
+    )
+    agent_mcp_servers: str = Field(
+        default="github",
+        description="Comma-separated list of MCP servers to enable (as defined in mcp-servers.json)",
+    )
+    agent_mcp_config_path: str = Field(
+        default="",
+        description="Path to MCP servers config file (default: mcp-servers.json in project root)",
+    )
+    agent_working_directory: str = Field(
+        default="",
+        description="Working directory for agent file operations (empty = current dir)",
+    )
+
     # Application Configuration
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", description="Logging level"

@@ -4,9 +4,12 @@ Uses the Claude Agent SDK to provide agentic capabilities including
 tool use, file operations, and MCP server access.
 """
 
+import json
 import logging
 import os
+import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from claude_agent_sdk import (
@@ -18,69 +21,56 @@ from claude_agent_sdk import (
 
 from forge.config import Settings, get_settings
 
+# Project root directory
+PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
+
+# Plugin directory containing skills, prompts, and templates
+PLUGIN_DIR = PROJECT_ROOT / "plugins" / "forge-sdlc"
+PROMPTS_DIR = PLUGIN_DIR / "prompts"
+SKILLS_DIR = PLUGIN_DIR / "skills"
+
+# Default MCP servers config file locations (checked in order)
+MCP_CONFIG_PATHS = [
+    PROJECT_ROOT / "mcp-servers.json",
+    PROJECT_ROOT / "forge-mcp.json",
+    Path.home() / ".forge" / "mcp-servers.json",
+]
+
 logger = logging.getLogger(__name__)
 
 
-# System prompts for different generation tasks
-PRD_SYSTEM_PROMPT = """You are an expert Product Manager skilled at creating clear,
-structured Product Requirements Documents (PRDs).
+def load_prompt(name: str, context: dict[str, Any] | None = None) -> str:
+    """Load a system prompt from the prompts directory.
 
-Today's date is {current_date}.
+    Args:
+        name: Prompt name (without .md extension).
+        context: Variables to substitute in the prompt.
 
-When given raw requirements or ideas, you will:
-1. Identify the core business goals and user value
-2. Define clear user personas and their needs
-3. Articulate strategic value and success metrics
-4. Structure the content into a professional PRD format
+    Returns:
+        Formatted prompt content.
+    """
+    prompt_file = PROMPTS_DIR / f"{name}.md"
 
-Output format:
-- Use clear headings and sections
-- Include: Overview, Goals, User Personas, Requirements, Success Metrics
-- Be specific and measurable where possible
-- Avoid technical implementation details
-"""
+    if not prompt_file.exists():
+        logger.warning(f"Prompt file not found: {prompt_file}")
+        return ""
 
-SPEC_SYSTEM_PROMPT = """You are an expert Business Analyst skilled at creating
-behavioral specifications with precise acceptance criteria.
+    content = prompt_file.read_text()
 
-Today's date is {current_date}.
+    # Substitute context variables
+    if context:
+        for key, value in context.items():
+            content = content.replace(f"{{{key}}}", str(value))
 
-When given a PRD, you will:
-1. Extract user scenarios and prioritize them (P1, P2, P3)
-2. Define Given/When/Then acceptance criteria for each scenario
-3. List functional requirements that are testable
-4. Define measurable success criteria
-5. Identify edge cases and error scenarios
+    return content
 
-Output format:
-- Prioritized user scenarios with acceptance criteria
-- Functional requirements (FR-001, FR-002, etc.)
-- Success criteria with specific metrics
-- Assumptions and constraints
-"""
 
-EPIC_SYSTEM_PROMPT = """You are an expert Technical Architect skilled at decomposing
-features into logical work units (Epics) with implementation plans.
-
-Today's date is {current_date}.
-
-When given a specification, you will:
-1. Identify 2-5 cohesive capability areas (Epics)
-2. For each Epic, create a detailed implementation plan including:
-   - Architecture overview
-   - Technical approach
-   - Key components and their responsibilities
-   - Dependencies and risks
-   - Estimated complexity
-
-Output format for each Epic:
-- Epic Title (capability name)
-- Overview paragraph
-- Technical approach
-- Key components list
-- Dependencies
-- Risks and mitigations
-"""
+# Fallback prompts if files not found
+FALLBACK_PROMPTS = {
+    "prd": "Today's date is {current_date}. Generate a PRD using the generate-prd skill.",
+    "spec": "Today's date is {current_date}. Generate a spec using the generate-spec skill.",
+    "epic": "Today's date is {current_date}. Decompose into epics using the decompose-epics skill.",
+}
 
 
 class ClaudeAgentClient:
@@ -114,44 +104,205 @@ class ClaudeAgentClient:
         system_prompt: str,
         include_tools: bool = True,
         include_mcp: bool = False,
+        include_skills: bool = True,
     ) -> ClaudeAgentOptions:
-        """Configure agent options with tools and MCP servers.
+        """Configure agent options with tools, MCP servers, and skills.
 
         Args:
             system_prompt: System prompt for the agent.
             include_tools: Whether to include file/bash tools.
             include_mcp: Whether to include MCP servers.
+            include_skills: Whether to enable skills from .claude/skills/.
 
         Returns:
             Configured ClaudeAgentOptions.
         """
-        current_date = datetime.now().strftime("%Y-%m-%d")
-        formatted_prompt = system_prompt.format(current_date=current_date)
+        allowed_tools: list[str] = []
+        mcp_servers: dict[str, dict[str, Any]] = {}
 
-        allowed_tools = []
-        mcp_servers = {}
+        # Always enable Skill tool to use skills from .claude/skills/
+        if include_skills:
+            allowed_tools.append("Skill")
 
-        if include_tools:
-            allowed_tools.extend(["Read", "Glob", "Grep", "WebSearch"])
+        # Configure tools based on settings
+        if include_tools and self.settings.agent_enable_tools:
+            configured_tools = [
+                t.strip() for t in self.settings.agent_allowed_tools.split(",")
+                if t.strip()
+            ]
+            allowed_tools.extend(configured_tools)
 
-        if include_mcp:
-            # Add GitHub MCP if configured
-            github_token = self.settings.github_token.get_secret_value()
-            if github_token and github_token != "your-github-personal-access-token":
-                mcp_servers["github"] = {
-                    "command": "npx",
-                    "args": ["-y", "@modelcontextprotocol/server-github"],
-                    "env": {"GITHUB_TOKEN": github_token},
-                }
-                allowed_tools.append("mcp__github__*")
+        # Configure MCP servers based on settings
+        if include_mcp and self.settings.agent_enable_mcp:
+            enabled_servers = [
+                s.strip().lower()
+                for s in self.settings.agent_mcp_servers.split(",")
+                if s.strip()
+            ]
+            mcp_servers = self._build_mcp_servers(enabled_servers)
+            # Add wildcard permissions for each MCP server
+            for server_name in mcp_servers:
+                allowed_tools.append(f"mcp__{server_name}__*")
 
-        return ClaudeAgentOptions(
-            system_prompt=formatted_prompt,
-            allowed_tools=allowed_tools if allowed_tools else None,
-            mcp_servers=mcp_servers if mcp_servers else None,
-            permission_mode="bypassPermissions",  # For automated workflows
-            model=self.settings.claude_model,
-        )
+        # Build options
+        options_kwargs: dict[str, Any] = {
+            "system_prompt": system_prompt,
+            "permission_mode": "bypassPermissions",
+            "model": self.settings.claude_model,
+            # Load skills from project directory (.claude/skills/)
+            "setting_sources": ["project"],
+            # Set working directory to project root for skill discovery
+            "cwd": str(PROJECT_ROOT),
+        }
+
+        if allowed_tools:
+            options_kwargs["allowed_tools"] = allowed_tools
+        if mcp_servers:
+            options_kwargs["mcp_servers"] = mcp_servers
+
+        # Override working directory if configured
+        if self.settings.agent_working_directory:
+            options_kwargs["cwd"] = self.settings.agent_working_directory
+
+        return ClaudeAgentOptions(**options_kwargs)
+
+    def _load_mcp_config(self) -> dict[str, Any]:
+        """Load MCP server configuration from JSON file.
+
+        Searches for config file in standard locations and returns
+        the parsed configuration.
+
+        Returns:
+            Dictionary with MCP server configurations.
+        """
+        # Check custom path from settings first
+        if self.settings.agent_mcp_config_path:
+            custom_path = Path(self.settings.agent_mcp_config_path)
+            if custom_path.exists():
+                return self._parse_mcp_config(custom_path)
+            logger.warning(f"MCP config not found at {custom_path}")
+
+        # Check standard locations
+        for config_path in MCP_CONFIG_PATHS:
+            if config_path.exists():
+                logger.debug(f"Loading MCP config from {config_path}")
+                return self._parse_mcp_config(config_path)
+
+        logger.debug("No MCP config file found, using empty config")
+        return {"mcpServers": {}}
+
+    def _parse_mcp_config(self, config_path: Path) -> dict[str, Any]:
+        """Parse MCP config file and expand environment variables.
+
+        Args:
+            config_path: Path to the JSON config file.
+
+        Returns:
+            Parsed configuration with env vars expanded.
+        """
+        with open(config_path) as f:
+            config = json.load(f)
+
+        # Expand environment variables in the config
+        return self._expand_env_vars(config)
+
+    def _expand_env_vars(self, obj: Any) -> Any:
+        """Recursively expand ${VAR} patterns in config values.
+
+        Also supports Pydantic SecretStr values from settings.
+
+        Args:
+            obj: Config object (dict, list, or string).
+
+        Returns:
+            Object with environment variables expanded.
+        """
+        if isinstance(obj, dict):
+            return {k: self._expand_env_vars(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._expand_env_vars(item) for item in obj]
+        elif isinstance(obj, str):
+            # Pattern matches ${VAR_NAME}
+            pattern = r"\$\{([^}]+)\}"
+
+            def replace_var(match: re.Match[str]) -> str:
+                var_name = match.group(1)
+                # Check environment first
+                if var_name in os.environ:
+                    return os.environ[var_name]
+                # Check settings (handles SecretStr values)
+                return self._get_setting_value(var_name)
+
+            return re.sub(pattern, replace_var, obj)
+        return obj
+
+    def _get_setting_value(self, var_name: str) -> str:
+        """Get a setting value by name, handling SecretStr.
+
+        Args:
+            var_name: Environment variable / setting name.
+
+        Returns:
+            The setting value as string, or empty string if not found.
+        """
+        # Map env var names to settings attributes
+        var_mapping = {
+            "GITHUB_TOKEN": lambda: self.settings.github_token.get_secret_value(),
+            "JIRA_API_TOKEN": lambda: self.settings.jira_api_token.get_secret_value(),
+            "JIRA_USER_EMAIL": lambda: self.settings.jira_user_email,
+            "JIRA_BASE_URL": lambda: self.settings.jira_base_url,
+            "AGENT_WORKING_DIRECTORY": lambda: (
+                self.settings.agent_working_directory or os.getcwd()
+            ),
+            "ANTHROPIC_API_KEY": lambda: (
+                self.settings.anthropic_api_key.get_secret_value()
+            ),
+        }
+
+        if var_name in var_mapping:
+            return var_mapping[var_name]()
+
+        # Fallback: try to get from settings by lowercase attribute name
+        attr_name = var_name.lower()
+        if hasattr(self.settings, attr_name):
+            value = getattr(self.settings, attr_name)
+            if hasattr(value, "get_secret_value"):
+                return value.get_secret_value()
+            return str(value)
+
+        logger.warning(f"Unknown variable: {var_name}")
+        return ""
+
+    def _build_mcp_servers(
+        self, enabled_servers: list[str]
+    ) -> dict[str, dict[str, Any]]:
+        """Build MCP server configurations based on enabled list.
+
+        Loads server definitions from config file and filters to
+        only include enabled servers.
+
+        Args:
+            enabled_servers: List of server names to enable.
+
+        Returns:
+            Dictionary of MCP server configurations.
+        """
+        config = self._load_mcp_config()
+        all_servers = config.get("mcpServers", {})
+
+        mcp_servers: dict[str, dict[str, Any]] = {}
+
+        for server_name in enabled_servers:
+            if server_name in all_servers:
+                mcp_servers[server_name] = all_servers[server_name]
+                logger.info(f"Enabled MCP server: {server_name}")
+            else:
+                logger.warning(
+                    f"MCP server '{server_name}' not found in config. "
+                    f"Available: {list(all_servers.keys())}"
+                )
+
+        return mcp_servers
 
     async def _run_agent(
         self,
@@ -159,6 +310,7 @@ class ClaudeAgentClient:
         system_prompt: str,
         include_tools: bool = True,
         include_mcp: bool = False,
+        include_skills: bool = True,
     ) -> str:
         """Run the agent with the given prompt.
 
@@ -167,6 +319,7 @@ class ClaudeAgentClient:
             system_prompt: System prompt template.
             include_tools: Whether to include tools.
             include_mcp: Whether to include MCP servers.
+            include_skills: Whether to enable skills.
 
         Returns:
             Agent response text.
@@ -175,6 +328,7 @@ class ClaudeAgentClient:
             system_prompt=system_prompt,
             include_tools=include_tools,
             include_mcp=include_mcp,
+            include_skills=include_skills,
         )
 
         results = []
@@ -196,6 +350,8 @@ class ClaudeAgentClient:
     ) -> str:
         """Generate a structured PRD from raw requirements.
 
+        Uses the 'generate-prd' skill which provides the template and guidelines.
+
         Args:
             raw_requirements: Raw requirements text from Jira description.
             context: Optional additional context (e.g., project info).
@@ -203,6 +359,20 @@ class ClaudeAgentClient:
         Returns:
             Generated PRD content.
         """
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Build context for prompt
+        prompt_context = {
+            "current_date": current_date,
+            "ticket_key": context.get("ticket_key", "") if context else "",
+            "project_key": context.get("project_key", "") if context else "",
+        }
+
+        # Load prompt from file
+        system_prompt = load_prompt("prd", prompt_context)
+        if not system_prompt:
+            system_prompt = FALLBACK_PROMPTS["prd"].format(current_date=current_date)
+
         prompt = f"""Please create a Product Requirements Document from the following
 raw requirements:
 
@@ -211,14 +381,15 @@ raw requirements:
 Additional context:
 {context or 'None provided'}
 
-Generate a comprehensive, well-structured PRD."""
+Use the 'generate-prd' skill to generate a comprehensive, well-structured PRD."""
 
-        logger.info("Generating PRD using Claude Agent SDK")
+        logger.info("Generating PRD using Claude Agent SDK with skill")
         result = await self._run_agent(
             prompt=prompt,
-            system_prompt=PRD_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             include_tools=True,
             include_mcp=False,
+            include_skills=True,
         )
 
         logger.info(f"Generated PRD ({len(result)} chars)")
@@ -231,6 +402,8 @@ Generate a comprehensive, well-structured PRD."""
     ) -> str:
         """Generate a behavioral specification from a PRD.
 
+        Uses the 'generate-spec' skill which provides the template and guidelines.
+
         Args:
             prd_content: Approved PRD content.
             context: Optional additional context.
@@ -238,6 +411,20 @@ Generate a comprehensive, well-structured PRD."""
         Returns:
             Generated specification content.
         """
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Build context for prompt
+        prompt_context = {
+            "current_date": current_date,
+            "ticket_key": context.get("ticket_key", "") if context else "",
+            "project_key": context.get("project_key", "") if context else "",
+        }
+
+        # Load prompt from file
+        system_prompt = load_prompt("spec", prompt_context)
+        if not system_prompt:
+            system_prompt = FALLBACK_PROMPTS["spec"].format(current_date=current_date)
+
         prompt = f"""Please create a detailed behavioral specification from the
 following Product Requirements Document:
 
@@ -246,15 +433,15 @@ following Product Requirements Document:
 Additional context:
 {context or 'None provided'}
 
-Generate a comprehensive specification with prioritized user scenarios,
-Given/When/Then acceptance criteria, and functional requirements."""
+Use the 'generate-spec' skill to generate a comprehensive specification."""
 
-        logger.info("Generating Spec using Claude Agent SDK")
+        logger.info("Generating Spec using Claude Agent SDK with skill")
         result = await self._run_agent(
             prompt=prompt,
-            system_prompt=SPEC_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             include_tools=True,
             include_mcp=False,
+            include_skills=True,
         )
 
         logger.info(f"Generated specification ({len(result)} chars)")
@@ -267,6 +454,8 @@ Given/When/Then acceptance criteria, and functional requirements."""
     ) -> list[dict[str, str]]:
         """Generate Epic breakdown from a specification.
 
+        Uses the 'decompose-epics' skill which provides the template and guidelines.
+
         Args:
             spec_content: Approved specification content.
             context: Optional additional context (e.g., repo structure).
@@ -274,6 +463,21 @@ Given/When/Then acceptance criteria, and functional requirements."""
         Returns:
             List of dicts with 'summary' and 'plan' for each Epic.
         """
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Build context for prompt
+        prompt_context = {
+            "current_date": current_date,
+            "ticket_key": context.get("ticket_key", "") if context else "",
+            "project_key": context.get("project_key", "") if context else "",
+            "feature_summary": context.get("feature_summary", "") if context else "",
+        }
+
+        # Load prompt from file
+        system_prompt = load_prompt("epic", prompt_context)
+        if not system_prompt:
+            system_prompt = FALLBACK_PROMPTS["epic"].format(current_date=current_date)
+
         prompt = f"""Please decompose the following specification into 2-5
 logical Epics with implementation plans:
 
@@ -282,24 +486,15 @@ logical Epics with implementation plans:
 Additional context:
 {context or 'None provided'}
 
-For each Epic, provide:
-1. A clear summary/title (one line)
-2. A detailed implementation plan
+Use the 'decompose-epics' skill to generate the Epic breakdown."""
 
-Format your response as:
----
-EPIC: [Epic Title]
-PLAN:
-[Detailed implementation plan]
----
-(repeat for each Epic)"""
-
-        logger.info("Generating Epics using Claude Agent SDK")
+        logger.info("Generating Epics using Claude Agent SDK with skill")
         result = await self._run_agent(
             prompt=prompt,
-            system_prompt=EPIC_SYSTEM_PROMPT,
+            system_prompt=system_prompt,
             include_tools=True,
-            include_mcp=True,  # Can access GitHub for repo context
+            include_mcp=True,
+            include_skills=True,
         )
 
         # Parse the response into Epic structures
@@ -323,12 +518,24 @@ PLAN:
         Returns:
             Regenerated content.
         """
-        system_prompts = {
-            "prd": PRD_SYSTEM_PROMPT,
-            "spec": SPEC_SYSTEM_PROMPT,
-            "epic": EPIC_SYSTEM_PROMPT,
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Build context for prompt
+        prompt_context = {"current_date": current_date}
+
+        # Load prompt from file
+        system_prompt = load_prompt(content_type, prompt_context)
+        if not system_prompt:
+            fallback = FALLBACK_PROMPTS.get(content_type, FALLBACK_PROMPTS["prd"])
+            system_prompt = fallback.format(current_date=current_date)
+
+        # Map content types to skill names
+        skill_map = {
+            "prd": "generate-prd",
+            "spec": "generate-spec",
+            "epic": "decompose-epics",
         }
-        system = system_prompts.get(content_type, PRD_SYSTEM_PROMPT)
+        skill_name = skill_map.get(content_type, "generate-prd")
 
         prompt = f"""Please revise the following {content_type.upper()} based on
 the feedback provided:
@@ -339,14 +546,15 @@ ORIGINAL CONTENT:
 FEEDBACK:
 {feedback}
 
-Please regenerate the content addressing all feedback points while maintaining
-the overall structure and quality."""
+Use the '{skill_name}' skill to regenerate the content addressing all feedback
+points while maintaining the overall structure and quality."""
 
         logger.info(f"Regenerating {content_type} with feedback using Claude Agent SDK")
         result = await self._run_agent(
             prompt=prompt,
-            system_prompt=system,
+            system_prompt=system_prompt,
             include_tools=True,
+            include_skills=True,
         )
 
         logger.info(f"Regenerated {content_type} ({len(result)} chars)")
