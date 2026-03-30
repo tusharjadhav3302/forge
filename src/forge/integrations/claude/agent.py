@@ -1,25 +1,31 @@
-"""Claude Agent SDK client for AI-powered SDLC orchestration.
+"""Deep Agents client for AI-powered SDLC orchestration.
 
-Uses the Claude Agent SDK to provide agentic capabilities including
-tool use, file operations, and MCP server access.
+Uses LangChain Deep Agents to provide agentic capabilities including
+tool use, file operations, and configurable skill paths.
 """
 
 import json
 import logging
 import os
 import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from claude_agent_sdk import (
-    AssistantMessage,
-    ClaudeAgentOptions,
-    ResultMessage,
-    query,
-)
+from deepagents import create_deep_agent
+from deepagents.backends.filesystem import FilesystemBackend
+from langchain_anthropic import ChatAnthropic
+from langgraph.checkpoint.memory import MemorySaver
 
 from forge.config import Settings, get_settings
+
+# Optional Vertex AI support
+try:
+    from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+    HAS_VERTEX = True
+except ImportError:
+    HAS_VERTEX = False
 
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
@@ -27,7 +33,6 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 # Plugin directory containing skills, prompts, and templates
 PLUGIN_DIR = PROJECT_ROOT / "plugins" / "forge-sdlc"
 PROMPTS_DIR = PLUGIN_DIR / "prompts"
-SKILLS_DIR = PLUGIN_DIR / "skills"
 
 # Default MCP servers config file locations (checked in order)
 MCP_CONFIG_PATHS = [
@@ -73,116 +78,212 @@ FALLBACK_PROMPTS = {
 }
 
 
-class ClaudeAgentClient:
-    """Agentic client for Claude using the Claude Agent SDK.
+def get_weather(city: str) -> str:
+    """Placeholder tool for agent testing."""
+    return f"Weather data for {city} not available."
+
+
+class DeepAgentClient:
+    """Agentic client using LangChain Deep Agents.
 
     Provides high-level methods for PRD, Spec, and Epic generation
-    with full tool use capabilities including file access and MCP servers.
+    with configurable skill paths and tool capabilities.
     """
 
     def __init__(self, settings: Settings | None = None):
-        """Initialize the Claude Agent client.
+        """Initialize the Deep Agent client.
 
         Args:
             settings: Application settings. Uses default if not provided.
         """
         self.settings = settings or get_settings()
         self._ensure_api_key()
+        self._checkpointer = MemorySaver()
 
     def _ensure_api_key(self) -> None:
         """Ensure Anthropic API key is available."""
         if self.settings.use_vertex_ai:
-            # For Vertex AI, we need GOOGLE_APPLICATION_CREDENTIALS
             logger.info("Using Vertex AI backend")
         elif not os.environ.get("ANTHROPIC_API_KEY"):
             api_key = self.settings.anthropic_api_key.get_secret_value()
             if api_key:
                 os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    def _get_agent_options(
+    def _create_model(self) -> Any:
+        """Create the appropriate chat model based on configuration.
+
+        Returns:
+            A LangChain ChatModel instance (ChatAnthropic or ChatAnthropicVertex).
+        """
+        if self.settings.use_vertex_ai:
+            if not HAS_VERTEX:
+                raise ImportError(
+                    "langchain-google-vertexai is required for Vertex AI. "
+                    "Install with: pip install langchain-google-vertexai"
+                )
+            logger.info(
+                f"Creating ChatAnthropicVertex model: {self.settings.claude_model} "
+                f"in {self.settings.anthropic_vertex_region}"
+            )
+            return ChatAnthropicVertex(
+                model_name=self.settings.claude_model,
+                project=self.settings.anthropic_vertex_project_id,
+                location=self.settings.anthropic_vertex_region,
+            )
+        else:
+            logger.info(f"Creating ChatAnthropic model: {self.settings.claude_model}")
+            return ChatAnthropic(
+                model=self.settings.claude_model,
+                api_key=self.settings.anthropic_api_key.get_secret_value(),
+            )
+
+    def _get_skill_paths(self) -> list[str]:
+        """Get configured skill paths.
+
+        Returns:
+            List of skill directory paths (with trailing slashes).
+        """
+        paths = []
+        for path in self.settings.agent_skill_paths.split(","):
+            path = path.strip()
+            if path:
+                # Ensure trailing slash for directory paths
+                if not path.endswith("/"):
+                    path = f"{path}/"
+                paths.append(path)
+
+        if not paths:
+            # Default to plugin skills directory
+            paths = ["plugins/forge-sdlc/skills/"]
+
+        logger.debug(f"Using skill paths: {paths}")
+        return paths
+
+    def _get_root_dir(self) -> Path:
+        """Get the root directory for the filesystem backend.
+
+        Returns:
+            Path to root directory.
+        """
+        if self.settings.agent_working_directory:
+            return Path(self.settings.agent_working_directory)
+        return PROJECT_ROOT
+
+    def _create_agent(
         self,
         system_prompt: str,
         include_tools: bool = True,
-        include_mcp: bool = False,
-        include_skills: bool = True,
-    ) -> ClaudeAgentOptions:
-        """Configure agent options with tools, MCP servers, and skills.
+    ) -> Any:
+        """Create a Deep Agent instance with configured skills.
 
         Args:
             system_prompt: System prompt for the agent.
-            include_tools: Whether to include file/bash tools.
-            include_mcp: Whether to include MCP servers.
-            include_skills: Whether to enable skills from .claude/skills/.
+            include_tools: Whether to include file/search tools.
 
         Returns:
-            Configured ClaudeAgentOptions.
+            Configured Deep Agent.
         """
-        allowed_tools: list[str] = []
-        mcp_servers: dict[str, dict[str, Any]] = {}
+        root_dir = self._get_root_dir()
+        skill_paths = self._get_skill_paths()
 
-        # Always enable Skill tool to use skills from .claude/skills/
-        if include_skills:
-            allowed_tools.append("Skill")
+        # Create filesystem backend
+        backend = FilesystemBackend(root_dir=str(root_dir))
 
-        # Configure tools based on settings
+        # Build tools list
+        tools = []
         if include_tools and self.settings.agent_enable_tools:
-            configured_tools = [
-                t.strip() for t in self.settings.agent_allowed_tools.split(",")
-                if t.strip()
-            ]
-            allowed_tools.extend(configured_tools)
+            # Deep Agents has built-in file tools via FilesystemBackend
+            # Add custom tools here if needed
+            pass
 
-        # Configure MCP servers based on settings
-        if include_mcp and self.settings.agent_enable_mcp:
-            enabled_servers = [
-                s.strip().lower()
-                for s in self.settings.agent_mcp_servers.split(",")
-                if s.strip()
-            ]
-            mcp_servers = self._build_mcp_servers(enabled_servers)
-            # Add wildcard permissions for each MCP server
-            for server_name in mcp_servers:
-                allowed_tools.append(f"mcp__{server_name}__*")
-
-        # Build options
-        options_kwargs: dict[str, Any] = {
-            "system_prompt": system_prompt,
-            "permission_mode": "bypassPermissions",
-            "model": self.settings.claude_model,
-            # Load skills from project directory (.claude/skills/)
-            "setting_sources": ["project"],
-            # Set working directory to project root for skill discovery
-            "cwd": str(PROJECT_ROOT),
+        # Configure interrupt points for file operations
+        interrupt_config = {
+            "write_file": True,  # Require confirmation for writes
+            "read_file": False,  # Allow reads without confirmation
+            "edit_file": True,   # Require confirmation for edits
         }
 
-        if allowed_tools:
-            options_kwargs["allowed_tools"] = allowed_tools
-        if mcp_servers:
-            options_kwargs["mcp_servers"] = mcp_servers
+        # Create the model (supports both direct API and Vertex AI)
+        model = self._create_model()
 
-        # Override working directory if configured
-        if self.settings.agent_working_directory:
-            options_kwargs["cwd"] = self.settings.agent_working_directory
+        # Create the agent
+        agent = create_deep_agent(
+            model=model,
+            backend=backend,
+            skills=skill_paths,
+            tools=tools if tools else None,
+            system_prompt=system_prompt,
+            interrupt_on=interrupt_config,
+            checkpointer=self._checkpointer,
+        )
 
-        return ClaudeAgentOptions(**options_kwargs)
+        return agent
+
+    async def _run_agent(
+        self,
+        prompt: str,
+        system_prompt: str,
+        include_tools: bool = True,
+    ) -> str:
+        """Run the agent with the given prompt.
+
+        Args:
+            prompt: User prompt to send.
+            system_prompt: System prompt for the agent.
+            include_tools: Whether to include tools.
+
+        Returns:
+            Agent response text.
+        """
+        agent = self._create_agent(
+            system_prompt=system_prompt,
+            include_tools=include_tools,
+        )
+
+        # Generate unique thread ID for this conversation
+        thread_id = str(uuid.uuid4())
+
+        # Invoke the agent
+        result = agent.invoke(
+            {
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            config={"configurable": {"thread_id": thread_id}},
+        )
+
+        # Extract response text from messages
+        # Deep Agents returns LangChain message objects, not dicts
+        response_text = []
+        messages = result.get("messages", []) if isinstance(result, dict) else []
+
+        for message in messages:
+            # Check if it's an AI/Assistant message (LangChain message object)
+            msg_type = type(message).__name__
+            if msg_type in ("AIMessage", "AIMessageChunk"):
+                content = message.content
+                if isinstance(content, str):
+                    response_text.append(content)
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            response_text.append(block.get("text", ""))
+                        elif hasattr(block, "text"):
+                            response_text.append(block.text)
+
+        return "\n".join(response_text)
 
     def _load_mcp_config(self) -> dict[str, Any]:
         """Load MCP server configuration from JSON file.
 
-        Searches for config file in standard locations and returns
-        the parsed configuration.
-
         Returns:
             Dictionary with MCP server configurations.
         """
-        # Check custom path from settings first
         if self.settings.agent_mcp_config_path:
             custom_path = Path(self.settings.agent_mcp_config_path)
             if custom_path.exists():
                 return self._parse_mcp_config(custom_path)
             logger.warning(f"MCP config not found at {custom_path}")
 
-        # Check standard locations
         for config_path in MCP_CONFIG_PATHS:
             if config_path.exists():
                 logger.debug(f"Loading MCP config from {config_path}")
@@ -202,14 +303,10 @@ class ClaudeAgentClient:
         """
         with open(config_path) as f:
             config = json.load(f)
-
-        # Expand environment variables in the config
         return self._expand_env_vars(config)
 
     def _expand_env_vars(self, obj: Any) -> Any:
         """Recursively expand ${VAR} patterns in config values.
-
-        Also supports Pydantic SecretStr values from settings.
 
         Args:
             obj: Config object (dict, list, or string).
@@ -222,15 +319,12 @@ class ClaudeAgentClient:
         elif isinstance(obj, list):
             return [self._expand_env_vars(item) for item in obj]
         elif isinstance(obj, str):
-            # Pattern matches ${VAR_NAME}
             pattern = r"\$\{([^}]+)\}"
 
             def replace_var(match: re.Match[str]) -> str:
                 var_name = match.group(1)
-                # Check environment first
                 if var_name in os.environ:
                     return os.environ[var_name]
-                # Check settings (handles SecretStr values)
                 return self._get_setting_value(var_name)
 
             return re.sub(pattern, replace_var, obj)
@@ -245,7 +339,6 @@ class ClaudeAgentClient:
         Returns:
             The setting value as string, or empty string if not found.
         """
-        # Map env var names to settings attributes
         var_mapping = {
             "GITHUB_TOKEN": lambda: self.settings.github_token.get_secret_value(),
             "JIRA_API_TOKEN": lambda: self.settings.jira_api_token.get_secret_value(),
@@ -262,7 +355,6 @@ class ClaudeAgentClient:
         if var_name in var_mapping:
             return var_mapping[var_name]()
 
-        # Fallback: try to get from settings by lowercase attribute name
         attr_name = var_name.lower()
         if hasattr(self.settings, attr_name):
             value = getattr(self.settings, attr_name)
@@ -273,76 +365,6 @@ class ClaudeAgentClient:
         logger.warning(f"Unknown variable: {var_name}")
         return ""
 
-    def _build_mcp_servers(
-        self, enabled_servers: list[str]
-    ) -> dict[str, dict[str, Any]]:
-        """Build MCP server configurations based on enabled list.
-
-        Loads server definitions from config file and filters to
-        only include enabled servers.
-
-        Args:
-            enabled_servers: List of server names to enable.
-
-        Returns:
-            Dictionary of MCP server configurations.
-        """
-        config = self._load_mcp_config()
-        all_servers = config.get("mcpServers", {})
-
-        mcp_servers: dict[str, dict[str, Any]] = {}
-
-        for server_name in enabled_servers:
-            if server_name in all_servers:
-                mcp_servers[server_name] = all_servers[server_name]
-                logger.info(f"Enabled MCP server: {server_name}")
-            else:
-                logger.warning(
-                    f"MCP server '{server_name}' not found in config. "
-                    f"Available: {list(all_servers.keys())}"
-                )
-
-        return mcp_servers
-
-    async def _run_agent(
-        self,
-        prompt: str,
-        system_prompt: str,
-        include_tools: bool = True,
-        include_mcp: bool = False,
-        include_skills: bool = True,
-    ) -> str:
-        """Run the agent with the given prompt.
-
-        Args:
-            prompt: User prompt to send.
-            system_prompt: System prompt template.
-            include_tools: Whether to include tools.
-            include_mcp: Whether to include MCP servers.
-            include_skills: Whether to enable skills.
-
-        Returns:
-            Agent response text.
-        """
-        options = self._get_agent_options(
-            system_prompt=system_prompt,
-            include_tools=include_tools,
-            include_mcp=include_mcp,
-            include_skills=include_skills,
-        )
-
-        results = []
-
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if hasattr(block, "text"):
-                        results.append(block.text)
-            elif isinstance(message, ResultMessage):
-                logger.info(f"Agent completed: {message.subtype}")
-
-        return "\n".join(results)
-
     async def generate_prd(
         self,
         raw_requirements: str,
@@ -350,25 +372,23 @@ class ClaudeAgentClient:
     ) -> str:
         """Generate a structured PRD from raw requirements.
 
-        Uses the 'generate-prd' skill which provides the template and guidelines.
+        Uses the 'generate-prd' skill from configured skill paths.
 
         Args:
-            raw_requirements: Raw requirements text from Jira description.
-            context: Optional additional context (e.g., project info).
+            raw_requirements: Raw requirements text.
+            context: Optional additional context.
 
         Returns:
             Generated PRD content.
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build context for prompt
         prompt_context = {
             "current_date": current_date,
             "ticket_key": context.get("ticket_key", "") if context else "",
             "project_key": context.get("project_key", "") if context else "",
         }
 
-        # Load prompt from file
         system_prompt = load_prompt("prd", prompt_context)
         if not system_prompt:
             system_prompt = FALLBACK_PROMPTS["prd"].format(current_date=current_date)
@@ -383,13 +403,11 @@ Additional context:
 
 Use the 'generate-prd' skill to generate a comprehensive, well-structured PRD."""
 
-        logger.info("Generating PRD using Claude Agent SDK with skill")
+        logger.info("Generating PRD using Deep Agents with skill")
         result = await self._run_agent(
             prompt=prompt,
             system_prompt=system_prompt,
             include_tools=True,
-            include_mcp=False,
-            include_skills=True,
         )
 
         logger.info(f"Generated PRD ({len(result)} chars)")
@@ -402,7 +420,7 @@ Use the 'generate-prd' skill to generate a comprehensive, well-structured PRD.""
     ) -> str:
         """Generate a behavioral specification from a PRD.
 
-        Uses the 'generate-spec' skill which provides the template and guidelines.
+        Uses the 'generate-spec' skill from configured skill paths.
 
         Args:
             prd_content: Approved PRD content.
@@ -413,14 +431,12 @@ Use the 'generate-prd' skill to generate a comprehensive, well-structured PRD.""
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build context for prompt
         prompt_context = {
             "current_date": current_date,
             "ticket_key": context.get("ticket_key", "") if context else "",
             "project_key": context.get("project_key", "") if context else "",
         }
 
-        # Load prompt from file
         system_prompt = load_prompt("spec", prompt_context)
         if not system_prompt:
             system_prompt = FALLBACK_PROMPTS["spec"].format(current_date=current_date)
@@ -435,13 +451,11 @@ Additional context:
 
 Use the 'generate-spec' skill to generate a comprehensive specification."""
 
-        logger.info("Generating Spec using Claude Agent SDK with skill")
+        logger.info("Generating Spec using Deep Agents with skill")
         result = await self._run_agent(
             prompt=prompt,
             system_prompt=system_prompt,
             include_tools=True,
-            include_mcp=False,
-            include_skills=True,
         )
 
         logger.info(f"Generated specification ({len(result)} chars)")
@@ -454,18 +468,17 @@ Use the 'generate-spec' skill to generate a comprehensive specification."""
     ) -> list[dict[str, str]]:
         """Generate Epic breakdown from a specification.
 
-        Uses the 'decompose-epics' skill which provides the template and guidelines.
+        Uses the 'decompose-epics' skill from configured skill paths.
 
         Args:
             spec_content: Approved specification content.
-            context: Optional additional context (e.g., repo structure).
+            context: Optional additional context.
 
         Returns:
             List of dicts with 'summary' and 'plan' for each Epic.
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build context for prompt
         prompt_context = {
             "current_date": current_date,
             "ticket_key": context.get("ticket_key", "") if context else "",
@@ -473,7 +486,6 @@ Use the 'generate-spec' skill to generate a comprehensive specification."""
             "feature_summary": context.get("feature_summary", "") if context else "",
         }
 
-        # Load prompt from file
         system_prompt = load_prompt("epic", prompt_context)
         if not system_prompt:
             system_prompt = FALLBACK_PROMPTS["epic"].format(current_date=current_date)
@@ -488,16 +500,13 @@ Additional context:
 
 Use the 'decompose-epics' skill to generate the Epic breakdown."""
 
-        logger.info("Generating Epics using Claude Agent SDK with skill")
+        logger.info("Generating Epics using Deep Agents with skill")
         result = await self._run_agent(
             prompt=prompt,
             system_prompt=system_prompt,
             include_tools=True,
-            include_mcp=True,
-            include_skills=True,
         )
 
-        # Parse the response into Epic structures
         epics = self._parse_epics_response(result)
         logger.info(f"Generated {len(epics)} Epics")
         return epics
@@ -520,16 +529,13 @@ Use the 'decompose-epics' skill to generate the Epic breakdown."""
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build context for prompt
         prompt_context = {"current_date": current_date}
 
-        # Load prompt from file
         system_prompt = load_prompt(content_type, prompt_context)
         if not system_prompt:
             fallback = FALLBACK_PROMPTS.get(content_type, FALLBACK_PROMPTS["prd"])
             system_prompt = fallback.format(current_date=current_date)
 
-        # Map content types to skill names
         skill_map = {
             "prd": "generate-prd",
             "spec": "generate-spec",
@@ -549,12 +555,11 @@ FEEDBACK:
 Use the '{skill_name}' skill to regenerate the content addressing all feedback
 points while maintaining the overall structure and quality."""
 
-        logger.info(f"Regenerating {content_type} with feedback using Claude Agent SDK")
+        logger.info(f"Regenerating {content_type} with feedback using Deep Agents")
         result = await self._run_agent(
             prompt=prompt,
             system_prompt=system_prompt,
             include_tools=True,
-            include_skills=True,
         )
 
         logger.info(f"Regenerated {content_type} ({len(result)} chars)")
@@ -565,7 +570,7 @@ points while maintaining the overall structure and quality."""
         """Parse the Epic generation response into structured data.
 
         Args:
-            response: Raw response from Claude.
+            response: Raw response from agent.
 
         Returns:
             List of Epic dicts with 'summary' and 'plan'.
@@ -579,7 +584,6 @@ points while maintaining the overall structure and quality."""
             line = line.strip()
 
             if line.startswith("---"):
-                # Save previous epic if exists
                 if current_epic.get("summary"):
                     current_epic["plan"] = "\n".join(plan_lines).strip()
                     epics.append(current_epic)
@@ -595,7 +599,6 @@ points while maintaining the overall structure and quality."""
             elif current_section == "plan":
                 plan_lines.append(line)
 
-        # Don't forget the last epic
         if current_epic.get("summary"):
             current_epic["plan"] = "\n".join(plan_lines).strip()
             epics.append(current_epic)
@@ -603,5 +606,9 @@ points while maintaining the overall structure and quality."""
         return epics
 
     async def close(self) -> None:
-        """Close the client (no-op for Agent SDK)."""
+        """Close the client and cleanup resources."""
         pass
+
+
+# Backwards compatibility alias
+ClaudeAgentClient = DeepAgentClient

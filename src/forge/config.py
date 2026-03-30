@@ -107,6 +107,14 @@ class Settings(BaseSettings):
         default="",
         description="Working directory for agent file operations (empty = current dir)",
     )
+    agent_skill_paths: str = Field(
+        default="plugins/forge-sdlc/skills/",
+        description="Comma-separated list of skill directories (relative to working dir)",
+    )
+    agent_backend: str = Field(
+        default="filesystem",
+        description="Deep Agents backend type: filesystem, state, or store",
+    )
 
     # Application Configuration
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
