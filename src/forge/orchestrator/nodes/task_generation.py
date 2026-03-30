@@ -180,8 +180,8 @@ Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
 Include repository assignment when possible (look for mentions of specific repos,
 services, or components in the plan)."""
 
-    result = await agent.run_skill(
-        skill_name="generate-tasks",
+    result = await agent.run_task(
+        task="generate-tasks",
         prompt=prompt,
         context=context,
     )

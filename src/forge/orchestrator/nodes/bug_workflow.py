@@ -67,8 +67,8 @@ async def analyze_bug(state: WorkflowState) -> WorkflowState:
 Generate a comprehensive Root Cause Analysis with TDD fix approach.
 """
 
-        rca_content = await agent.run_skill(
-            skill_name="analyze-bug",
+        rca_content = await agent.run_task(
+            task="analyze-bug",
             prompt=user_prompt,
             context=context,
         )
@@ -183,8 +183,8 @@ Provide complete file contents for:
 2. The implementation files that need to change
 """
 
-        result = await agent.run_skill(
-            skill_name="implement-task",
+        result = await agent.run_task(
+            task="implement-task",
             prompt=fix_prompt,
             context={
                 "ticket_key": ticket_key,
@@ -263,8 +263,8 @@ FEEDBACK:
 Generate an updated RCA addressing the feedback.
 """
 
-        new_rca = await agent.run_skill(
-            skill_name="analyze-bug",
+        new_rca = await agent.run_task(
+            task="analyze-bug",
             prompt=prompt,
             context={
                 "ticket_key": ticket_key,

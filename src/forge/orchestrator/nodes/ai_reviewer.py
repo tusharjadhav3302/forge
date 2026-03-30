@@ -69,8 +69,8 @@ async def review_code(state: WorkflowState) -> WorkflowState:
             )
 
             # Invoke AI review using Deep Agents
-            review_text = await agent.run_skill(
-                skill_name="review-code",
+            review_text = await agent.run_task(
+                task="review-code",
                 prompt=review_prompt,
                 context={
                     "ticket_key": ticket_key,

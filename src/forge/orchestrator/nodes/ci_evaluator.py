@@ -177,8 +177,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         # Generate fix using Deep Agents
         fix_prompt = _build_fix_prompt(error_info)
 
-        result = await agent.run_skill(
-            skill_name="fix-ci",
+        result = await agent.run_task(
+            task="fix-ci",
             prompt=fix_prompt,
             context={
                 "ticket_key": ticket_key,

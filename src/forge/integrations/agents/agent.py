@@ -329,19 +329,6 @@ Complete the task and return the result immediately."""
         logger.info(f"Task '{task}' completed ({len(result)} chars)")
         return result
 
-    # Backwards compatibility alias
-    async def run_skill(
-        self,
-        skill_name: str,
-        prompt: str,
-        context: dict[str, Any] | None = None,
-    ) -> str:
-        """Alias for run_task (backwards compatibility)."""
-        return await self.run_task(task=skill_name, prompt=prompt, context=context)
-
-        logger.info(f"Skill '{skill_name}' completed ({len(result)} chars)")
-        return result
-
     def _load_mcp_config(self) -> dict[str, Any]:
         """Load MCP server configuration from JSON file.
 
@@ -461,8 +448,8 @@ Additional context:
 Generate a comprehensive, well-structured PRD following the instructions provided."""
 
         logger.info("Generating PRD using Deep Agents with skill")
-        result = await self.run_skill(
-            skill_name="generate-prd",
+        result = await self.run_task(
+            task="generate-prd",
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -499,8 +486,8 @@ Additional context:
 Generate a comprehensive specification following the instructions provided."""
 
         logger.info("Generating Spec using Deep Agents with skill")
-        result = await self.run_skill(
-            skill_name="generate-spec",
+        result = await self.run_task(
+            task="generate-spec",
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -553,8 +540,8 @@ Additional context:
 Generate the Epic breakdown following the instructions provided."""
 
         logger.info("Generating Epics using Deep Agents with skill")
-        result = await self.run_skill(
-            skill_name="decompose-epics",
+        result = await self.run_task(
+            task="decompose-epics",
             prompt=prompt,
             context={
                 "ticket_key": context.get("ticket_key", "") if context else "",
@@ -602,8 +589,8 @@ FEEDBACK:
 Regenerate the content addressing all feedback points while maintaining the overall structure and quality."""
 
         logger.info(f"Regenerating {content_type} with feedback using Deep Agents")
-        result = await self.run_skill(
-            skill_name=skill_name,
+        result = await self.run_task(
+            task=skill_name,
             prompt=prompt,
             context={"is_revision": True},
         )

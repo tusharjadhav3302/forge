@@ -86,8 +86,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         )
 
         # Invoke Deep Agents for implementation
-        result = await agent.run_skill(
-            skill_name="implement-task",
+        result = await agent.run_task(
+            task="implement-task",
             prompt=user_prompt,
             context={
                 "task_key": current_task,
