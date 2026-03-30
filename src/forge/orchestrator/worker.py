@@ -65,6 +65,12 @@ class OrchestratorWorker:
             # Check if there's an existing workflow state (paused workflow)
             existing_state = await self.workflow.aget_state(config)
 
+            # Debug logging for checkpoint state
+            logger.debug(f"Existing state for {ticket_key}: {existing_state}")
+            if existing_state:
+                logger.debug(f"State values: {existing_state.values}")
+                logger.debug(f"is_paused: {existing_state.values.get('is_paused') if existing_state.values else None}")
+
             if existing_state and existing_state.values and existing_state.values.get("is_paused"):
                 # Resume paused workflow - check for approval/rejection signals
                 updated_values = await self._handle_resume_event(message, existing_state.values)

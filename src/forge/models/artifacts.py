@@ -1,10 +1,12 @@
-"""Artifact models representing Jira tickets and their content."""
+"""Artifact models representing Jira tickets and their content.
+
+These models represent the in-memory state of Jira tickets.
+Workflow status is tracked via labels (see forge.models.workflow).
+"""
 
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
-
-from forge.models.workflow import EpicStatus, FeatureStatus, TaskStatus
 
 
 @dataclass
@@ -12,7 +14,7 @@ class Feature:
     """Represents a Jira Feature ticket containing PRD and Spec."""
 
     jira_key: str
-    status: FeatureStatus
+    labels: list[str] = field(default_factory=list)
     prd_content: str = ""
     spec_content: str = ""
     epic_keys: list[str] = field(default_factory=list)
@@ -29,6 +31,11 @@ class Feature:
         """Check if specification has been generated."""
         return bool(self.spec_content.strip())
 
+    @property
+    def is_forge_managed(self) -> bool:
+        """Check if this feature is managed by Forge."""
+        return "forge:managed" in self.labels
+
 
 @dataclass
 class Epic:
@@ -36,7 +43,7 @@ class Epic:
 
     jira_key: str
     feature_key: str
-    status: EpicStatus
+    labels: list[str] = field(default_factory=list)
     summary: str = ""
     plan_content: str = ""
     task_keys: list[str] = field(default_factory=list)
@@ -55,7 +62,7 @@ class Task:
 
     jira_key: str
     epic_key: str
-    status: TaskStatus
+    labels: list[str] = field(default_factory=list)
     summary: str = ""
     description: str = ""
     target_repo: str = ""

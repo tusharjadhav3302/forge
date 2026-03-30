@@ -1,11 +1,17 @@
-"""Specification approval gate for human-in-the-loop review."""
+"""Specification approval gate for human-in-the-loop review.
+
+The spec approval workflow uses labels:
+- forge:spec-pending  - Spec awaiting approval
+- forge:spec-approved - Spec approved (triggers epic decomposition)
+
+To approve: Change label from forge:spec-pending to forge:spec-approved
+To request revision: Add a comment with feedback (keep forge:spec-pending)
+"""
 
 import logging
-from typing import Literal
 
 from langgraph.graph import END
 
-from forge.models.workflow import FeatureStatus
 from forge.orchestrator.state import WorkflowState, set_paused
 
 logger = logging.getLogger(__name__)
@@ -16,8 +22,8 @@ def spec_approval_gate(state: WorkflowState) -> WorkflowState:
 
     This gate pauses the workflow until a human approves or rejects
     the generated specification. The workflow resumes when:
-    - Ticket transitions to "Approved: Spec" -> continue to epic decomposition
-    - Ticket receives rejection comment -> regenerate spec with feedback
+    - Label changes to forge:spec-approved -> continue to epic decomposition
+    - Comment added with feedback -> regenerate spec with feedback
 
     Args:
         state: Current workflow state.
@@ -47,38 +53,14 @@ def route_spec_approval(state: WorkflowState) -> str:
 
     # Check if still paused - END and wait for approval webhook
     if state.get("is_paused"):
-        logger.info(f"Spec approval gate: workflow paused for {state['ticket_key']}, waiting for approval webhook")
+        logger.info(
+            f"Spec approval gate: workflow paused for {state['ticket_key']}, "
+            "waiting for approval webhook"
+        )
         return END
 
     # Spec approved, proceed to epic decomposition
-    logger.info(f"Spec approved for {state['ticket_key']}, proceeding to epic decomposition")
-    return "decompose_epics"
-
-
-def check_spec_approval_status(
-    state: WorkflowState,
-    current_status: str,
-) -> tuple[bool, bool, str | None]:
-    """Check if spec approval status indicates approval or rejection.
-
-    Args:
-        state: Current workflow state.
-        current_status: Current Jira ticket status.
-
-    Returns:
-        Tuple of (is_approved, is_rejected, feedback_comment).
-    """
-    approved_status = FeatureStatus.PLANNING.value.lower()
-    pending_status = FeatureStatus.PENDING_SPEC_APPROVAL.value.lower()
-    current_lower = current_status.lower()
-
-    is_approved = current_lower == approved_status
-
-    is_rejected = (
-        current_lower == pending_status
-        and state.get("revision_requested", False)
+    logger.info(
+        f"Spec approved for {state['ticket_key']}, proceeding to epic decomposition"
     )
-
-    feedback = state.get("feedback_comment") if is_rejected else None
-
-    return is_approved, is_rejected, feedback
+    return "decompose_epics"

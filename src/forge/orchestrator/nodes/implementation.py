@@ -7,7 +7,6 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.claude.agent import DeepAgentClient
 from forge.integrations.jira.client import JiraClient
-from forge.models.workflow import TaskStatus
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace

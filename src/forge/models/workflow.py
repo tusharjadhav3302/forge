@@ -1,15 +1,71 @@
-"""Workflow state models and status enums."""
+"""Workflow state models and label-based workflow tracking.
+
+Forge uses Jira labels (not custom statuses) to track workflow state.
+This allows Forge to work with any Jira project without requiring
+custom status configurations.
+
+Label Workflow
+==============
+
+All Forge-managed issues must have the `forge:managed` label. Issues
+without this label are ignored by the webhook handler.
+
+PRD Workflow (Features):
+    forge:managed      - Issue is managed by Forge
+    forge:prd-drafting - PRD generation in progress
+    forge:prd-pending  - PRD awaiting approval
+    forge:prd-approved - PRD approved, ready for spec generation
+
+Spec Workflow:
+    forge:spec-drafting - Spec generation in progress
+    forge:spec-pending  - Spec awaiting approval
+    forge:spec-approved - Spec approved, ready for epic decomposition
+
+Epic/Plan Workflow:
+    forge:plan-drafting - Epic decomposition in progress
+    forge:plan-pending  - Plan awaiting approval
+    forge:plan-approved - Plan approved, ready for task generation
+
+Task Workflow:
+    forge:task-generated  - Tasks have been generated
+    forge:implementing    - Code implementation in progress
+    forge:pr-created      - Pull request created
+    forge:ci-pending      - Waiting for CI/CD results
+    forge:ci-failed       - CI/CD failed, attempting fix
+    forge:review-pending  - Awaiting human review
+    forge:review-approved - Review approved, ready to merge
+
+Bug Workflow:
+    forge:rca-drafting - Root cause analysis in progress
+    forge:rca-pending  - RCA awaiting approval
+    forge:rca-approved - RCA approved, ready for fix implementation
+
+Error States:
+    forge:blocked - Workflow blocked, requires manual intervention
+
+Approval Flow
+=============
+
+To approve a generated artifact (PRD, Spec, Plan, RCA):
+1. Review the attached artifact file ({ticket}-prd.md, {ticket}-spec.md, etc.)
+2. Change the label from `forge:*-pending` to `forge:*-approved`
+3. Forge will automatically proceed to the next workflow stage
+
+To request revisions:
+1. Add a comment with your feedback
+2. Keep the `forge:*-pending` label
+3. Forge will regenerate the artifact incorporating your feedback
+
+Jira Status Mapping
+===================
+
+Forge is agnostic to Jira statuses, but recommends:
+- New/Refinement: PRD and Spec drafting/approval phases
+- In Progress: Implementation and CI/CD phases
+- Closed: Workflow complete
+"""
 
 from enum import Enum
-
-
-class JiraStatus(str, Enum):
-    """Standard Jira statuses available in the AISOS project."""
-
-    NEW = "New"
-    REFINEMENT = "Refinement"
-    IN_PROGRESS = "In Progress"
-    CLOSED = "Closed"
 
 
 class ForgeLabel(str, Enum):
@@ -56,52 +112,6 @@ class ForgeLabel(str, Enum):
     BLOCKED = "forge:blocked"
 
 
-# Legacy status enums - kept for backward compatibility
-class FeatureStatus(str, Enum):
-    """Status values for Feature tickets in the SDLC workflow.
-
-    DEPRECATED: Use JiraStatus + ForgeLabel instead.
-    """
-
-    DRAFTING_PRD = "Drafting PRD"
-    PENDING_PRD_APPROVAL = "Pending PRD Approval"
-    DRAFTING_SPEC = "Drafting Spec"
-    PENDING_SPEC_APPROVAL = "Pending Spec Approval"
-    PLANNING = "Planning"
-    IN_PROGRESS = "In Progress"
-    READY_FOR_BREAKDOWN = "Ready for Breakdown"
-    IN_DEVELOPMENT = "In Development"
-    DONE = "Done"
-
-
-class EpicStatus(str, Enum):
-    """Status values for Epic tickets in the SDLC workflow.
-
-    DEPRECATED: Use JiraStatus + ForgeLabel instead.
-    """
-
-    PENDING_PLAN_APPROVAL = "Pending Plan Approval"
-    PLANNING = "Planning"
-    READY_FOR_BREAKDOWN = "Ready for Breakdown"
-    IN_PROGRESS = "In Progress"
-    DONE = "Done"
-
-
-class TaskStatus(str, Enum):
-    """Status values for Task tickets in the SDLC workflow.
-
-    DEPRECATED: Use JiraStatus + ForgeLabel instead.
-    """
-
-    CREATED = "Created"
-    IN_DEVELOPMENT = "In Development"
-    PENDING_CICD = "Pending CI/CD"
-    PENDING_AI_REVIEW = "Pending AI Review"
-    IN_REVIEW = "In Review"
-    DONE = "Done"
-    BLOCKED = "Blocked"
-
-
 class TicketType(str, Enum):
     """Jira issue types supported by the orchestrator."""
 
@@ -109,8 +119,7 @@ class TicketType(str, Enum):
     EPIC = "Epic"
     TASK = "Task"
     BUG = "Bug"
-    # Also support Story as an alias for Feature
-    STORY = "Story"
+    STORY = "Story"  # Treated as Feature
 
 
 class WorkspaceStatus(str, Enum):
@@ -131,24 +140,36 @@ def get_workflow_phase(labels: list[str]) -> str | None:
     Returns:
         Current workflow phase or None if not Forge-managed.
     """
-    forge_labels = [l for l in labels if l.startswith("forge:")]
+    forge_labels = [label for label in labels if label.startswith("forge:")]
 
     if not forge_labels:
         return None
 
-    # Priority order for phase detection
+    if ForgeLabel.FORGE_MANAGED.value not in labels:
+        return None
+
+    # Priority order for phase detection (most specific first)
     phase_priority = [
-        (ForgeLabel.PRD_PENDING.value, "prd_approval"),
         (ForgeLabel.PRD_DRAFTING.value, "prd_generation"),
-        (ForgeLabel.SPEC_PENDING.value, "spec_approval"),
+        (ForgeLabel.PRD_PENDING.value, "prd_approval"),
+        (ForgeLabel.PRD_APPROVED.value, "spec_generation"),
         (ForgeLabel.SPEC_DRAFTING.value, "spec_generation"),
-        (ForgeLabel.PLAN_PENDING.value, "plan_approval"),
+        (ForgeLabel.SPEC_PENDING.value, "spec_approval"),
+        (ForgeLabel.SPEC_APPROVED.value, "epic_decomposition"),
         (ForgeLabel.PLAN_DRAFTING.value, "epic_decomposition"),
-        (ForgeLabel.RCA_PENDING.value, "rca_approval"),
-        (ForgeLabel.RCA_DRAFTING.value, "rca_generation"),
-        (ForgeLabel.TASK_REVIEW_PENDING.value, "human_review"),
-        (ForgeLabel.TASK_CI_PENDING.value, "ci_evaluation"),
+        (ForgeLabel.PLAN_PENDING.value, "plan_approval"),
+        (ForgeLabel.PLAN_APPROVED.value, "task_generation"),
+        (ForgeLabel.TASK_GENERATED.value, "task_routing"),
         (ForgeLabel.TASK_IMPLEMENTING.value, "implementation"),
+        (ForgeLabel.TASK_PR_CREATED.value, "pr_created"),
+        (ForgeLabel.TASK_CI_PENDING.value, "ci_evaluation"),
+        (ForgeLabel.TASK_CI_FAILED.value, "ci_fix"),
+        (ForgeLabel.TASK_REVIEW_PENDING.value, "human_review"),
+        (ForgeLabel.TASK_REVIEW_APPROVED.value, "complete"),
+        (ForgeLabel.RCA_DRAFTING.value, "rca_generation"),
+        (ForgeLabel.RCA_PENDING.value, "rca_approval"),
+        (ForgeLabel.RCA_APPROVED.value, "bug_fix"),
+        (ForgeLabel.BLOCKED.value, "blocked"),
     ]
 
     for label, phase in phase_priority:
@@ -156,3 +177,15 @@ def get_workflow_phase(labels: list[str]) -> str | None:
             return phase
 
     return "unknown"
+
+
+def is_forge_managed(labels: list[str]) -> bool:
+    """Check if an issue is managed by Forge.
+
+    Args:
+        labels: List of Jira labels on the issue.
+
+    Returns:
+        True if the issue has the forge:managed label.
+    """
+    return ForgeLabel.FORGE_MANAGED.value in labels
