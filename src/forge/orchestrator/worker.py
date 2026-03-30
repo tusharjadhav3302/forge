@@ -67,15 +67,21 @@ class OrchestratorWorker:
 
             if existing_state and existing_state.values and existing_state.values.get("is_paused"):
                 # Resume paused workflow - check for approval/rejection signals
-                state = await self._handle_resume_event(message, existing_state.values)
+                updated_values = await self._handle_resume_event(message, existing_state.values)
                 logger.info(f"Resuming paused workflow for {ticket_key}")
+
+                # Update the checkpoint state and resume from where we paused
+                await self.workflow.aupdate_state(config, updated_values)
+
+                # Resume the workflow from the checkpoint (pass None to continue)
+                result = await self.workflow.ainvoke(None, config=config)
             else:
                 # New workflow - build initial state
                 state = self._build_initial_state(message)
                 logger.info(f"Starting new workflow for {ticket_key}")
 
-            # Run the workflow
-            result = await self.workflow.ainvoke(state, config=config)
+                # Run the workflow from the beginning
+                result = await self.workflow.ainvoke(state, config=config)
 
             logger.info(
                 f"Workflow completed for {ticket_key}, "
