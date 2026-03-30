@@ -284,7 +284,7 @@
 **Purpose**: Improvements that affect multiple user stories
 
 - [x] T098 [P] Create README.md with project overview and setup instructions
-- [ ] T099 [P] Add API documentation with OpenAPI schema export
+- [x] T099 [P] Add API documentation with OpenAPI schema export
 - [x] T100 Implement rate limiting for external API calls (Jira, GitHub, Claude)
 - [x] T101 [P] Add structured logging throughout application
 - [x] T102 Implement graceful shutdown handling for workers

@@ -17,7 +17,7 @@ from forge.queue.producer import QueueProducer
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/webhooks", tags=["webhooks"])
+router = APIRouter(prefix="/api/v1/webhooks", tags=["github"])
 
 
 @router.post(

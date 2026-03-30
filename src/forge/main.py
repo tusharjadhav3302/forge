@@ -40,11 +40,56 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI instance.
     """
+    description = """
+## Forge SDLC Orchestrator
+
+AI-powered software development lifecycle orchestration.
+
+### Features
+
+- **Webhook Gateway**: Receives events from Jira and GitHub
+- **Workflow Orchestration**: LangGraph-based state machine
+- **AI Integration**: Claude-powered planning and code generation
+- **Multi-repo Support**: Concurrent execution across repositories
+
+### Workflow
+
+1. Receive Jira ticket creation/update webhook
+2. Generate PRD, Spec, Epics, and Tasks using AI
+3. Execute code changes in ephemeral workspaces
+4. Create PRs and monitor CI/CD
+5. AI review before human approval
+6. Aggregate status on merge
+
+### Authentication
+
+All webhook endpoints verify signatures:
+- **Jira**: HMAC-SHA256 signature in headers
+- **GitHub**: HMAC-SHA256 signature in `X-Hub-Signature-256`
+"""
+
     app = FastAPI(
         title="Forge SDLC Orchestrator",
-        description="AI-Integrated SDLC Orchestrator webhook gateway",
+        description=description,
         version=__version__,
         lifespan=lifespan,
+        openapi_tags=[
+            {
+                "name": "health",
+                "description": "Health check and status endpoints",
+            },
+            {
+                "name": "jira",
+                "description": "Jira webhook endpoints",
+            },
+            {
+                "name": "github",
+                "description": "GitHub webhook endpoints",
+            },
+        ],
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
     )
 
     # Configure CORS
