@@ -190,7 +190,7 @@ def create_workflow_graph() -> StateGraph:
         {
             "generate_spec": "generate_spec",
             "regenerate_prd": "regenerate_prd",
-            "prd_approval_gate": "prd_approval_gate",
+            END: END,  # Pause workflow until next webhook
         },
     )
     graph.add_edge("regenerate_prd", "prd_approval_gate")
@@ -203,7 +203,7 @@ def create_workflow_graph() -> StateGraph:
         {
             "decompose_epics": "decompose_epics",
             "regenerate_spec": "regenerate_spec",
-            "spec_approval_gate": "spec_approval_gate",
+            END: END,  # Pause workflow until next webhook
         },
     )
     graph.add_edge("regenerate_spec", "spec_approval_gate")
@@ -217,7 +217,7 @@ def create_workflow_graph() -> StateGraph:
             "generate_tasks": "generate_tasks",
             "regenerate_all_epics": "regenerate_all_epics",
             "update_single_epic": "update_single_epic",
-            "plan_approval_gate": "plan_approval_gate",
+            END: END,  # Pause workflow until next webhook
         },
     )
     graph.add_edge("regenerate_all_epics", "plan_approval_gate")
@@ -281,7 +281,7 @@ def create_workflow_graph() -> StateGraph:
         {
             "implement_task": "implement_task",
             "complete_tasks": "complete_tasks",
-            "human_review_gate": "human_review_gate",
+            END: END,  # Pause workflow until review webhook
         },
     )
     graph.add_edge("complete_tasks", "aggregate_epic_status")
@@ -296,7 +296,7 @@ def create_workflow_graph() -> StateGraph:
         {
             "implement_bug_fix": "implement_bug_fix",
             "regenerate_rca": "regenerate_rca",
-            "rca_approval_gate": "rca_approval_gate",
+            END: END,  # Pause workflow until approval webhook
         },
     )
     graph.add_edge("regenerate_rca", "rca_approval_gate")

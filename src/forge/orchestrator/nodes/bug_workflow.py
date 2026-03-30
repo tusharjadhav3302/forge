@@ -7,7 +7,9 @@ from forge.config import get_settings
 from forge.integrations.claude.client import get_anthropic_client
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.langfuse import trace_llm_call
-from forge.models.workflow import TaskStatus
+from langgraph.graph import END
+
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, set_paused, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -114,7 +116,7 @@ Generate a comprehensive Root Cause Analysis with TDD fix approach.
             {"ticket_key": ticket_key, "summary": bug_summary},
         ) as trace:
             response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_settings().claude_model,
                 max_tokens=4096,
                 system=RCA_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],
@@ -128,8 +130,8 @@ Generate a comprehensive Root Cause Analysis with TDD fix approach.
             f"## Root Cause Analysis\n\n{rca_content}"
         )
 
-        # Transition to pending RCA approval
-        await jira.transition_issue(ticket_key, "Pending RCA Approval")
+        # Set workflow label for RCA pending approval
+        await jira.set_workflow_label(ticket_key, ForgeLabel.RCA_PENDING)
 
         logger.info(f"RCA generated for {ticket_key}")
 
@@ -175,13 +177,14 @@ def route_rca_approval(state: WorkflowState) -> str:
         state: Current workflow state.
 
     Returns:
-        Next node name.
+        Next node name or END.
     """
     if state.get("revision_requested") and state.get("feedback_comment"):
         return "regenerate_rca"
 
     if state.get("is_paused"):
-        return "rca_approval_gate"
+        logger.info(f"RCA approval: workflow paused for {state['ticket_key']}, waiting for approval webhook")
+        return END
 
     return "implement_bug_fix"
 
@@ -236,7 +239,7 @@ Provide complete file contents for:
             {"ticket_key": ticket_key},
         ) as trace:
             response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_settings().claude_model,
                 max_tokens=8192,
                 system="You are an expert writing bug fixes using TDD.",
                 messages=[{"role": "user", "content": fix_prompt}],
@@ -319,7 +322,7 @@ Generate an updated RCA addressing the feedback.
             {"ticket_key": ticket_key, "feedback": feedback[:200]},
         ) as trace:
             response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_settings().claude_model,
                 max_tokens=4096,
                 system=RCA_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],

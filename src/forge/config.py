@@ -33,8 +33,18 @@ class Settings(BaseSettings):
         default=SecretStr(""), description="Shared secret for Jira webhook validation"
     )
     jira_spec_custom_field: str = Field(
-        default="customfield_10050",
-        description="Custom field ID for Specification storage",
+        default="",
+        description="Custom field ID for Specification storage (optional)",
+    )
+
+    # Jira workflow configuration
+    jira_use_labels: bool = Field(
+        default=True,
+        description="Use labels instead of custom statuses for workflow state",
+    )
+    jira_store_in_comments: bool = Field(
+        default=True,
+        description="Store PRD/Spec in comments instead of custom fields",
     )
 
     # GitHub Configuration
@@ -57,6 +67,10 @@ class Settings(BaseSettings):
     anthropic_vertex_region: str = Field(
         default="us-east5",
         description="Google Cloud region for Vertex AI (e.g., us-east5)",
+    )
+    claude_model: str = Field(
+        default="claude-3-5-sonnet-v2@20241022",
+        description="Claude model to use (e.g., claude-3-5-sonnet-v2@20241022 for Vertex AI)",
     )
 
     # Langfuse Configuration

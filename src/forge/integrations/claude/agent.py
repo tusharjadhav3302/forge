@@ -1,56 +1,31 @@
-"""Claude Code SDK wrapper for AI-powered content generation."""
+"""Claude Agent SDK client for AI-powered SDLC orchestration.
+
+Uses the Claude Agent SDK to provide agentic capabilities including
+tool use, file operations, and MCP server access.
+"""
 
 import logging
-from typing import Any, Optional, Union
+import os
+from datetime import datetime
+from typing import Any
 
-from anthropic import AsyncAnthropic
+from claude_agent_sdk import (
+    AssistantMessage,
+    ClaudeAgentOptions,
+    ResultMessage,
+    query,
+)
 
 from forge.config import Settings, get_settings
-from forge.integrations.langfuse import trace_llm_call
 
 logger = logging.getLogger(__name__)
 
-# Type alias for either client type
-AsyncAnthropicClient = Union[AsyncAnthropic, Any]  # Any for AnthropicVertex
-
-
-def get_default_model() -> str:
-    """Get the default model from settings."""
-    return get_settings().claude_model
-
-
-def get_anthropic_client(settings: Optional[Settings] = None) -> AsyncAnthropicClient:
-    """Get an Anthropic client based on configuration.
-
-    Supports both direct Anthropic API and Google Vertex AI.
-
-    Args:
-        settings: Application settings. Uses default if not provided.
-
-    Returns:
-        AsyncAnthropic or AsyncAnthropicVertex client.
-    """
-    settings = settings or get_settings()
-
-    if settings.use_vertex_ai:
-        from anthropic import AsyncAnthropicVertex
-
-        logger.debug(
-            f"Creating Vertex AI client for {settings.anthropic_vertex_region}"
-        )
-        return AsyncAnthropicVertex(
-            project_id=settings.anthropic_vertex_project_id,
-            region=settings.anthropic_vertex_region,
-        )
-    else:
-        logger.debug("Creating direct Anthropic API client")
-        return AsyncAnthropic(
-            api_key=settings.anthropic_api_key.get_secret_value()
-        )
 
 # System prompts for different generation tasks
 PRD_SYSTEM_PROMPT = """You are an expert Product Manager skilled at creating clear,
 structured Product Requirements Documents (PRDs).
+
+Today's date is {current_date}.
 
 When given raw requirements or ideas, you will:
 1. Identify the core business goals and user value
@@ -68,6 +43,8 @@ Output format:
 SPEC_SYSTEM_PROMPT = """You are an expert Business Analyst skilled at creating
 behavioral specifications with precise acceptance criteria.
 
+Today's date is {current_date}.
+
 When given a PRD, you will:
 1. Extract user scenarios and prioritize them (P1, P2, P3)
 2. Define Given/When/Then acceptance criteria for each scenario
@@ -84,6 +61,8 @@ Output format:
 
 EPIC_SYSTEM_PROMPT = """You are an expert Technical Architect skilled at decomposing
 features into logical work units (Epics) with implementation plans.
+
+Today's date is {current_date}.
 
 When given a specification, you will:
 1. Identify 2-5 cohesive capability areas (Epics)
@@ -104,54 +83,116 @@ Output format for each Epic:
 """
 
 
-class ClaudeClient:
-    """Async client for Claude API interactions.
+class ClaudeAgentClient:
+    """Agentic client for Claude using the Claude Agent SDK.
 
     Provides high-level methods for PRD, Spec, and Epic generation
-    with built-in Langfuse tracing.
-
-    Supports both direct Anthropic API and Google Vertex AI.
+    with full tool use capabilities including file access and MCP servers.
     """
 
-    def __init__(self, settings: Optional[Settings] = None):
-        """Initialize the Claude client.
+    def __init__(self, settings: Settings | None = None):
+        """Initialize the Claude Agent client.
 
         Args:
             settings: Application settings. Uses default if not provided.
         """
         self.settings = settings or get_settings()
-        self._client: Optional[AsyncAnthropicClient] = None
+        self._ensure_api_key()
 
-    async def _get_client(self) -> AsyncAnthropicClient:
-        """Get or create the Anthropic client.
+    def _ensure_api_key(self) -> None:
+        """Ensure Anthropic API key is available."""
+        if self.settings.use_vertex_ai:
+            # For Vertex AI, we need GOOGLE_APPLICATION_CREDENTIALS
+            logger.info("Using Vertex AI backend")
+        elif not os.environ.get("ANTHROPIC_API_KEY"):
+            api_key = self.settings.anthropic_api_key.get_secret_value()
+            if api_key:
+                os.environ["ANTHROPIC_API_KEY"] = api_key
 
-        Returns either AsyncAnthropic (direct API) or AsyncAnthropicVertex
-        depending on configuration.
+    def _get_agent_options(
+        self,
+        system_prompt: str,
+        include_tools: bool = True,
+        include_mcp: bool = False,
+    ) -> ClaudeAgentOptions:
+        """Configure agent options with tools and MCP servers.
+
+        Args:
+            system_prompt: System prompt for the agent.
+            include_tools: Whether to include file/bash tools.
+            include_mcp: Whether to include MCP servers.
+
+        Returns:
+            Configured ClaudeAgentOptions.
         """
-        if self._client is None:
-            if self.settings.use_vertex_ai:
-                # Use Google Vertex AI
-                from anthropic import AsyncAnthropicVertex
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        formatted_prompt = system_prompt.format(current_date=current_date)
 
-                self._client = AsyncAnthropicVertex(
-                    project_id=self.settings.anthropic_vertex_project_id,
-                    region=self.settings.anthropic_vertex_region,
-                )
-                logger.info(
-                    f"Using Vertex AI in {self.settings.anthropic_vertex_region}"
-                )
-            else:
-                # Use direct Anthropic API
-                self._client = AsyncAnthropic(
-                    api_key=self.settings.anthropic_api_key.get_secret_value()
-                )
-                logger.info("Using direct Anthropic API")
-        return self._client
+        allowed_tools = []
+        mcp_servers = {}
+
+        if include_tools:
+            allowed_tools.extend(["Read", "Glob", "Grep", "WebSearch"])
+
+        if include_mcp:
+            # Add GitHub MCP if configured
+            github_token = self.settings.github_token.get_secret_value()
+            if github_token and github_token != "your-github-personal-access-token":
+                mcp_servers["github"] = {
+                    "command": "npx",
+                    "args": ["-y", "@modelcontextprotocol/server-github"],
+                    "env": {"GITHUB_TOKEN": github_token},
+                }
+                allowed_tools.append("mcp__github__*")
+
+        return ClaudeAgentOptions(
+            system_prompt=formatted_prompt,
+            allowed_tools=allowed_tools if allowed_tools else None,
+            mcp_servers=mcp_servers if mcp_servers else None,
+            permission_mode="bypassPermissions",  # For automated workflows
+            model=self.settings.claude_model,
+        )
+
+    async def _run_agent(
+        self,
+        prompt: str,
+        system_prompt: str,
+        include_tools: bool = True,
+        include_mcp: bool = False,
+    ) -> str:
+        """Run the agent with the given prompt.
+
+        Args:
+            prompt: User prompt to send.
+            system_prompt: System prompt template.
+            include_tools: Whether to include tools.
+            include_mcp: Whether to include MCP servers.
+
+        Returns:
+            Agent response text.
+        """
+        options = self._get_agent_options(
+            system_prompt=system_prompt,
+            include_tools=include_tools,
+            include_mcp=include_mcp,
+        )
+
+        results = []
+
+        async for message in query(prompt=prompt, options=options):
+            if isinstance(message, AssistantMessage):
+                for block in message.content:
+                    if hasattr(block, "text"):
+                        results.append(block.text)
+            elif isinstance(message, ResultMessage):
+                logger.info(f"Agent completed: {message.subtype}")
+
+        return "\n".join(results)
 
     async def generate_prd(
         self,
         raw_requirements: str,
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """Generate a structured PRD from raw requirements.
 
@@ -162,17 +203,7 @@ class ClaudeClient:
         Returns:
             Generated PRD content.
         """
-        from datetime import datetime
-
-        client = await self._get_client()
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        # Add current date to system prompt
-        system_prompt = f"""Today's date is {current_date}.
-
-{PRD_SYSTEM_PROMPT}"""
-
-        user_prompt = f"""Please create a Product Requirements Document from the following
+        prompt = f"""Please create a Product Requirements Document from the following
 raw requirements:
 
 {raw_requirements}
@@ -180,22 +211,15 @@ raw requirements:
 Additional context:
 {context or 'None provided'}
 
-Current date: {current_date}
-
 Generate a comprehensive, well-structured PRD."""
 
-        with trace_llm_call(
-            "generate_prd",
-            {"raw_requirements": raw_requirements[:500], "context": context},
-        ) as trace:
-            response = await client.messages.create(
-                model=get_default_model(),
-                max_tokens=4096,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            result = response.content[0].text
-            trace["output"] = result[:500]
+        logger.info("Generating PRD using Claude Agent SDK")
+        result = await self._run_agent(
+            prompt=prompt,
+            system_prompt=PRD_SYSTEM_PROMPT,
+            include_tools=True,
+            include_mcp=False,
+        )
 
         logger.info(f"Generated PRD ({len(result)} chars)")
         return result
@@ -203,7 +227,7 @@ Generate a comprehensive, well-structured PRD."""
     async def generate_spec(
         self,
         prd_content: str,
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> str:
         """Generate a behavioral specification from a PRD.
 
@@ -214,16 +238,7 @@ Generate a comprehensive, well-structured PRD."""
         Returns:
             Generated specification content.
         """
-        from datetime import datetime
-
-        client = await self._get_client()
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        system_prompt = f"""Today's date is {current_date}.
-
-{SPEC_SYSTEM_PROMPT}"""
-
-        user_prompt = f"""Please create a detailed behavioral specification from the
+        prompt = f"""Please create a detailed behavioral specification from the
 following Product Requirements Document:
 
 {prd_content}
@@ -231,23 +246,16 @@ following Product Requirements Document:
 Additional context:
 {context or 'None provided'}
 
-Current date: {current_date}
-
 Generate a comprehensive specification with prioritized user scenarios,
 Given/When/Then acceptance criteria, and functional requirements."""
 
-        with trace_llm_call(
-            "generate_spec",
-            {"prd_content": prd_content[:500], "context": context},
-        ) as trace:
-            response = await client.messages.create(
-                model=get_default_model(),
-                max_tokens=8192,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            result = response.content[0].text
-            trace["output"] = result[:500]
+        logger.info("Generating Spec using Claude Agent SDK")
+        result = await self._run_agent(
+            prompt=prompt,
+            system_prompt=SPEC_SYSTEM_PROMPT,
+            include_tools=True,
+            include_mcp=False,
+        )
 
         logger.info(f"Generated specification ({len(result)} chars)")
         return result
@@ -255,7 +263,7 @@ Given/When/Then acceptance criteria, and functional requirements."""
     async def generate_epics(
         self,
         spec_content: str,
-        context: Optional[dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> list[dict[str, str]]:
         """Generate Epic breakdown from a specification.
 
@@ -266,24 +274,13 @@ Given/When/Then acceptance criteria, and functional requirements."""
         Returns:
             List of dicts with 'summary' and 'plan' for each Epic.
         """
-        from datetime import datetime
-
-        client = await self._get_client()
-        current_date = datetime.now().strftime("%Y-%m-%d")
-
-        system_prompt = f"""Today's date is {current_date}.
-
-{EPIC_SYSTEM_PROMPT}"""
-
-        user_prompt = f"""Please decompose the following specification into 2-5
+        prompt = f"""Please decompose the following specification into 2-5
 logical Epics with implementation plans:
 
 {spec_content}
 
 Additional context:
 {context or 'None provided'}
-
-Current date: {current_date}
 
 For each Epic, provide:
 1. A clear summary/title (one line)
@@ -297,18 +294,13 @@ PLAN:
 ---
 (repeat for each Epic)"""
 
-        with trace_llm_call(
-            "generate_epics",
-            {"spec_content": spec_content[:500], "context": context},
-        ) as trace:
-            response = await client.messages.create(
-                model=get_default_model(),
-                max_tokens=8192,
-                system=system_prompt,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            result = response.content[0].text
-            trace["output"] = result[:500]
+        logger.info("Generating Epics using Claude Agent SDK")
+        result = await self._run_agent(
+            prompt=prompt,
+            system_prompt=EPIC_SYSTEM_PROMPT,
+            include_tools=True,
+            include_mcp=True,  # Can access GitHub for repo context
+        )
 
         # Parse the response into Epic structures
         epics = self._parse_epics_response(result)
@@ -331,8 +323,6 @@ PLAN:
         Returns:
             Regenerated content.
         """
-        client = await self._get_client()
-
         system_prompts = {
             "prd": PRD_SYSTEM_PROMPT,
             "spec": SPEC_SYSTEM_PROMPT,
@@ -340,7 +330,7 @@ PLAN:
         }
         system = system_prompts.get(content_type, PRD_SYSTEM_PROMPT)
 
-        user_prompt = f"""Please revise the following {content_type.upper()} based on
+        prompt = f"""Please revise the following {content_type.upper()} based on
 the feedback provided:
 
 ORIGINAL CONTENT:
@@ -352,20 +342,14 @@ FEEDBACK:
 Please regenerate the content addressing all feedback points while maintaining
 the overall structure and quality."""
 
-        with trace_llm_call(
-            f"regenerate_{content_type}",
-            {"feedback": feedback[:500], "content_type": content_type},
-        ) as trace:
-            response = await client.messages.create(
-                model=get_default_model(),
-                max_tokens=8192,
-                system=system,
-                messages=[{"role": "user", "content": user_prompt}],
-            )
-            result = response.content[0].text
-            trace["output"] = result[:500]
+        logger.info(f"Regenerating {content_type} with feedback using Claude Agent SDK")
+        result = await self._run_agent(
+            prompt=prompt,
+            system_prompt=system,
+            include_tools=True,
+        )
 
-        logger.info(f"Regenerated {content_type} with feedback ({len(result)} chars)")
+        logger.info(f"Regenerated {content_type} ({len(result)} chars)")
         return result
 
     @staticmethod
@@ -411,5 +395,5 @@ the overall structure and quality."""
         return epics
 
     async def close(self) -> None:
-        """Close the client (no-op for Anthropic client)."""
-        self._client = None
+        """Close the client (no-op for Agent SDK)."""
+        pass

@@ -7,6 +7,7 @@ import httpx
 
 from forge.config import Settings, get_settings
 from forge.integrations.jira.models import JiraComment, JiraIssue
+from forge.models.workflow import ForgeLabel
 
 logger = logging.getLogger(__name__)
 
@@ -267,24 +268,327 @@ class JiraClient:
             JiraComment.from_api_response(c) for c in data.get("comments", [])
         ]
 
-    @staticmethod
-    def _text_to_adf(text: str) -> dict[str, Any]:
-        """Convert plain text to Atlassian Document Format.
+    async def get_labels(self, issue_key: str) -> list[str]:
+        """Get labels for a Jira issue.
 
         Args:
-            text: Plain text content.
+            issue_key: The Jira issue key.
+
+        Returns:
+            List of label strings.
+        """
+        client = await self._get_client()
+        response = await client.get(f"/issue/{issue_key}?fields=labels")
+        response.raise_for_status()
+        data = response.json()
+        return data.get("fields", {}).get("labels", [])
+
+    async def add_labels(self, issue_key: str, labels: list[str]) -> None:
+        """Add labels to a Jira issue.
+
+        Args:
+            issue_key: The Jira issue key.
+            labels: Labels to add.
+        """
+        client = await self._get_client()
+        response = await client.put(
+            f"/issue/{issue_key}",
+            json={
+                "update": {
+                    "labels": [{"add": label} for label in labels]
+                }
+            },
+        )
+        response.raise_for_status()
+        logger.info(f"Added labels {labels} to {issue_key}")
+
+    async def remove_labels(self, issue_key: str, labels: list[str]) -> None:
+        """Remove labels from a Jira issue.
+
+        Args:
+            issue_key: The Jira issue key.
+            labels: Labels to remove.
+        """
+        client = await self._get_client()
+        response = await client.put(
+            f"/issue/{issue_key}",
+            json={
+                "update": {
+                    "labels": [{"remove": label} for label in labels]
+                }
+            },
+        )
+        response.raise_for_status()
+        logger.info(f"Removed labels {labels} from {issue_key}")
+
+    async def set_workflow_label(
+        self,
+        issue_key: str,
+        new_label: ForgeLabel,
+        remove_prefix: str = "forge:",
+    ) -> None:
+        """Set a workflow label, removing other forge: labels.
+
+        This is used to track Forge workflow state via labels instead of
+        custom Jira statuses. Only one workflow label should be active at a time.
+
+        Args:
+            issue_key: The Jira issue key.
+            new_label: The new workflow label to set.
+            remove_prefix: Prefix of labels to remove (default: "forge:").
+        """
+        # Get current labels
+        current_labels = await self.get_labels(issue_key)
+
+        # Find forge: labels to remove (except the new one and forge:managed)
+        labels_to_remove = [
+            label for label in current_labels
+            if label.startswith(remove_prefix)
+            and label != new_label.value
+            and label != ForgeLabel.FORGE_MANAGED.value
+        ]
+
+        # Build update operations
+        operations: list[dict[str, str]] = []
+        for label in labels_to_remove:
+            operations.append({"remove": label})
+        operations.append({"add": new_label.value})
+
+        # Ensure forge:managed is set
+        if ForgeLabel.FORGE_MANAGED.value not in current_labels:
+            operations.append({"add": ForgeLabel.FORGE_MANAGED.value})
+
+        client = await self._get_client()
+        response = await client.put(
+            f"/issue/{issue_key}",
+            json={"update": {"labels": operations}},
+        )
+        response.raise_for_status()
+        logger.info(
+            f"Set workflow label {new_label.value} on {issue_key} "
+            f"(removed: {labels_to_remove})"
+        )
+
+    async def add_structured_comment(
+        self,
+        issue_key: str,
+        title: str,
+        content: str,
+        comment_type: str = "forge-artifact",
+    ) -> JiraComment:
+        """Add a structured comment with a marker for later retrieval.
+
+        Used to store PRD/Spec content in comments when custom fields
+        are not available.
+
+        Args:
+            issue_key: The Jira issue key.
+            title: Title/header for the comment.
+            content: Main content of the comment.
+            comment_type: Type marker (e.g., 'prd', 'spec', 'plan').
+
+        Returns:
+            The created JiraComment.
+        """
+        # Format with markers for easy parsing
+        formatted_body = (
+            f"[FORGE:{comment_type.upper()}]\n"
+            f"# {title}\n\n"
+            f"{content}\n\n"
+            f"[/FORGE:{comment_type.upper()}]"
+        )
+        return await self.add_comment(issue_key, formatted_body)
+
+    async def get_structured_comment(
+        self,
+        issue_key: str,
+        comment_type: str,
+    ) -> str | None:
+        """Get the latest structured comment of a specific type.
+
+        Args:
+            issue_key: The Jira issue key.
+            comment_type: Type marker to search for.
+
+        Returns:
+            The comment content or None if not found.
+        """
+        comments = await self.get_comments(issue_key)
+        marker_start = f"[FORGE:{comment_type.upper()}]"
+        marker_end = f"[/FORGE:{comment_type.upper()}]"
+
+        # Search in reverse order to get the latest
+        for comment in reversed(comments):
+            body = comment.body
+            if marker_start in body and marker_end in body:
+                # Extract content between markers
+                start_idx = body.index(marker_start) + len(marker_start)
+                end_idx = body.index(marker_end)
+                return body[start_idx:end_idx].strip()
+
+        return None
+
+    @staticmethod
+    def _text_to_adf(text: str) -> dict[str, Any]:
+        """Convert markdown text to Atlassian Document Format.
+
+        Supports: headings, bold, italic, code blocks, inline code,
+        bullet lists, numbered lists, and links.
+
+        Args:
+            text: Markdown text content.
 
         Returns:
             ADF document structure.
         """
-        paragraphs = text.split("\n\n") if text else [""]
-        content = []
+        import re
 
-        for para in paragraphs:
-            if para.strip():
+        content: list[dict[str, Any]] = []
+        lines = text.split("\n") if text else []
+        i = 0
+
+        while i < len(lines):
+            line = lines[i]
+
+            # Code block
+            if line.startswith("```"):
+                code_lines = []
+                language = line[3:].strip() or None
+                i += 1
+                while i < len(lines) and not lines[i].startswith("```"):
+                    code_lines.append(lines[i])
+                    i += 1
+                content.append({
+                    "type": "codeBlock",
+                    "attrs": {"language": language} if language else {},
+                    "content": [{"type": "text", "text": "\n".join(code_lines)}] if code_lines else [],
+                })
+                i += 1
+                continue
+
+            # Heading
+            heading_match = re.match(r"^(#{1,6})\s+(.+)$", line)
+            if heading_match:
+                level = len(heading_match.group(1))
+                heading_text = heading_match.group(2)
+                content.append({
+                    "type": "heading",
+                    "attrs": {"level": level},
+                    "content": JiraClient._parse_inline_markdown(heading_text),
+                })
+                i += 1
+                continue
+
+            # Bullet list
+            if re.match(r"^[\-\*]\s+", line):
+                list_items = []
+                while i < len(lines) and re.match(r"^[\-\*]\s+", lines[i]):
+                    item_text = re.sub(r"^[\-\*]\s+", "", lines[i])
+                    list_items.append({
+                        "type": "listItem",
+                        "content": [{
+                            "type": "paragraph",
+                            "content": JiraClient._parse_inline_markdown(item_text),
+                        }],
+                    })
+                    i += 1
+                content.append({
+                    "type": "bulletList",
+                    "content": list_items,
+                })
+                continue
+
+            # Numbered list
+            if re.match(r"^\d+\.\s+", line):
+                list_items = []
+                while i < len(lines) and re.match(r"^\d+\.\s+", lines[i]):
+                    item_text = re.sub(r"^\d+\.\s+", "", lines[i])
+                    list_items.append({
+                        "type": "listItem",
+                        "content": [{
+                            "type": "paragraph",
+                            "content": JiraClient._parse_inline_markdown(item_text),
+                        }],
+                    })
+                    i += 1
+                content.append({
+                    "type": "orderedList",
+                    "content": list_items,
+                })
+                continue
+
+            # Table (lines starting with |)
+            if line.strip().startswith("|") and line.strip().endswith("|"):
+                table_rows: list[dict[str, Any]] = []
+                is_first_row = True
+                has_header = False
+
+                while i < len(lines) and lines[i].strip().startswith("|") and lines[i].strip().endswith("|"):
+                    row_line = lines[i].strip()
+
+                    # Check if this is a separator row (|---|---|)
+                    if re.match(r"^\|[\s\-:]+\|$", row_line.replace(" ", "")):
+                        has_header = True
+                        i += 1
+                        continue
+
+                    # Parse cells
+                    cells = [cell.strip() for cell in row_line.split("|")[1:-1]]
+                    cell_type = "tableHeader" if is_first_row and has_header is False else "tableCell"
+
+                    # After we've processed the first row and found a separator,
+                    # mark first row as header
+                    if is_first_row and i + 1 < len(lines):
+                        next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
+                        if re.match(r"^\|[\s\-:]+\|$", next_line.replace(" ", "")):
+                            cell_type = "tableHeader"
+
+                    row_content = []
+                    for cell in cells:
+                        row_content.append({
+                            "type": cell_type,
+                            "attrs": {},
+                            "content": [{
+                                "type": "paragraph",
+                                "content": JiraClient._parse_inline_markdown(cell),
+                            }],
+                        })
+
+                    if row_content:
+                        table_rows.append({
+                            "type": "tableRow",
+                            "content": row_content,
+                        })
+
+                    is_first_row = False
+                    i += 1
+
+                if table_rows:
+                    content.append({
+                        "type": "table",
+                        "attrs": {
+                            "isNumberColumnEnabled": False,
+                            "layout": "default",
+                        },
+                        "content": table_rows,
+                    })
+                continue
+
+            # Empty line - skip
+            if not line.strip():
+                i += 1
+                continue
+
+            # Regular paragraph - collect consecutive non-empty lines
+            para_lines = []
+            while i < len(lines) and lines[i].strip() and not re.match(r"^(#{1,6}\s|[\-\*]\s|\d+\.\s|```|\|)", lines[i]):
+                para_lines.append(lines[i])
+                i += 1
+
+            if para_lines:
                 content.append({
                     "type": "paragraph",
-                    "content": [{"type": "text", "text": para}],
+                    "content": JiraClient._parse_inline_markdown(" ".join(para_lines)),
                 })
 
         return {
@@ -292,3 +596,63 @@ class JiraClient:
             "version": 1,
             "content": content or [{"type": "paragraph", "content": []}],
         }
+
+    @staticmethod
+    def _parse_inline_markdown(text: str) -> list[dict[str, Any]]:
+        """Parse inline markdown (bold, italic, code, links) to ADF content.
+
+        Args:
+            text: Text with inline markdown.
+
+        Returns:
+            List of ADF inline content nodes.
+        """
+        import re
+
+        result: list[dict[str, Any]] = []
+        # Pattern matches: **bold**, *italic*, `code`, [text](url)
+        pattern = r"(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[(.+?)\]\((.+?)\))"
+
+        last_end = 0
+        for match in re.finditer(pattern, text):
+            # Add text before match
+            if match.start() > last_end:
+                result.append({"type": "text", "text": text[last_end:match.start()]})
+
+            full_match = match.group(0)
+            if full_match.startswith("**"):
+                # Bold
+                result.append({
+                    "type": "text",
+                    "text": match.group(2),
+                    "marks": [{"type": "strong"}],
+                })
+            elif full_match.startswith("*"):
+                # Italic
+                result.append({
+                    "type": "text",
+                    "text": match.group(3),
+                    "marks": [{"type": "em"}],
+                })
+            elif full_match.startswith("`"):
+                # Inline code
+                result.append({
+                    "type": "text",
+                    "text": match.group(4),
+                    "marks": [{"type": "code"}],
+                })
+            elif full_match.startswith("["):
+                # Link
+                result.append({
+                    "type": "text",
+                    "text": match.group(5),
+                    "marks": [{"type": "link", "attrs": {"href": match.group(6)}}],
+                })
+
+            last_end = match.end()
+
+        # Add remaining text
+        if last_end < len(text):
+            result.append({"type": "text", "text": text[last_end:]})
+
+        return result if result else [{"type": "text", "text": text}]

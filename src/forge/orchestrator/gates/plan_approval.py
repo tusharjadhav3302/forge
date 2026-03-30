@@ -3,6 +3,8 @@
 import logging
 from typing import Literal
 
+from langgraph.graph import END
+
 from forge.models.workflow import FeatureStatus
 from forge.orchestrator.state import WorkflowState, set_paused
 
@@ -31,16 +33,14 @@ def plan_approval_gate(state: WorkflowState) -> WorkflowState:
     return set_paused(state, "plan_approval_gate")
 
 
-def route_plan_approval(
-    state: WorkflowState,
-) -> Literal["generate_tasks", "regenerate_all_epics", "update_single_epic", "plan_approval_gate"]:
+def route_plan_approval(state: WorkflowState) -> str:
     """Route based on plan approval status.
 
     Args:
         state: Current workflow state.
 
     Returns:
-        Next node name.
+        Next node name or END.
     """
     # Check if Feature-level revision requested (regenerate all)
     if state.get("revision_requested"):
@@ -56,9 +56,10 @@ def route_plan_approval(
             logger.info(f"Full Epic regeneration requested for {state['ticket_key']}")
             return "regenerate_all_epics"
 
-    # Check if still paused
+    # Check if still paused - END and wait for approval webhook
     if state.get("is_paused"):
-        return "plan_approval_gate"
+        logger.info(f"Plan approval gate: workflow paused for {state['ticket_key']}, waiting for approval webhook")
+        return END
 
     # All Epics approved, proceed to task generation
     logger.info(f"Epics approved for {state['ticket_key']}, proceeding to task generation")

@@ -3,6 +3,8 @@
 import logging
 from typing import Literal
 
+from langgraph.graph import END
+
 from forge.models.workflow import FeatureStatus
 from forge.orchestrator.state import WorkflowState, set_paused
 
@@ -29,28 +31,29 @@ def prd_approval_gate(state: WorkflowState) -> WorkflowState:
     return set_paused(state, "prd_approval_gate")
 
 
-def route_prd_approval(state: WorkflowState) -> Literal["generate_spec", "regenerate_prd", "prd_approval_gate"]:
+def route_prd_approval(state: WorkflowState) -> str:
     """Route based on PRD approval status.
 
     This routing function determines the next node after PRD approval gate:
     - If PRD is approved (status changed) -> proceed to spec generation
     - If feedback provided (revision requested) -> regenerate PRD
-    - Otherwise -> stay at gate (remain paused)
+    - Otherwise -> END (wait for next webhook to resume)
 
     Args:
         state: Current workflow state.
 
     Returns:
-        Next node name.
+        Next node name or END.
     """
     # Check if revision was requested via comment
     if state.get("revision_requested") and state.get("feedback_comment"):
         logger.info(f"PRD revision requested for {state['ticket_key']}")
         return "regenerate_prd"
 
-    # Check if we should stay paused
+    # Check if we should stay paused - END the workflow and wait for resume
     if state.get("is_paused"):
-        return "prd_approval_gate"
+        logger.info(f"PRD approval gate: workflow paused for {state['ticket_key']}, waiting for approval webhook")
+        return END
 
     # PRD was approved, proceed to spec generation
     logger.info(f"PRD approved for {state['ticket_key']}, proceeding to spec generation")

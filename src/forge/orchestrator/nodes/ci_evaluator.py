@@ -1,14 +1,14 @@
 """CI/CD evaluator node for monitoring and responding to CI results."""
 
 import logging
-from typing import Any, Literal
+from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.claude.client import get_anthropic_client
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.langfuse import trace_llm_call
-from forge.models.workflow import TaskStatus
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -203,7 +203,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             {"ticket_key": ticket_key, "errors": len(failed_checks)},
         ) as trace:
             response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_settings().claude_model,
                 max_tokens=8192,
                 system=FIX_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": fix_prompt}],
@@ -279,7 +279,8 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
         )
 
         await jira.add_comment(ticket_key, comment)
-        await jira.transition_issue(ticket_key, "Blocked")
+        # Set blocked label instead of transitioning to custom status
+        await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
 
         logger.info(f"Ticket {ticket_key} escalated to Blocked")
 

@@ -115,7 +115,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             {"task_key": current_task, "task_summary": task_summary},
         ) as trace:
             response = await anthropic.messages.create(
-                model="claude-sonnet-4-20250514",
+                model=get_settings().claude_model,
                 max_tokens=8192,
                 system=IMPLEMENTATION_SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_prompt}],

@@ -103,7 +103,7 @@ async def review_code(state: WorkflowState) -> WorkflowState:
                 {"ticket_key": ticket_key, "pr_number": pr_number},
             ) as trace:
                 response = await anthropic.messages.create(
-                    model="claude-sonnet-4-20250514",
+                    model=get_settings().claude_model,
                     max_tokens=4096,
                     system=REVIEW_SYSTEM_PROMPT,
                     messages=[{"role": "user", "content": review_prompt}],

@@ -3,6 +3,8 @@
 import logging
 from typing import Literal
 
+from langgraph.graph import END
+
 from forge.models.workflow import FeatureStatus
 from forge.orchestrator.state import WorkflowState, set_paused
 
@@ -29,23 +31,24 @@ def spec_approval_gate(state: WorkflowState) -> WorkflowState:
     return set_paused(state, "spec_approval_gate")
 
 
-def route_spec_approval(state: WorkflowState) -> Literal["decompose_epics", "regenerate_spec", "spec_approval_gate"]:
+def route_spec_approval(state: WorkflowState) -> str:
     """Route based on spec approval status.
 
     Args:
         state: Current workflow state.
 
     Returns:
-        Next node name.
+        Next node name or END.
     """
     # Check if revision was requested
     if state.get("revision_requested") and state.get("feedback_comment"):
         logger.info(f"Spec revision requested for {state['ticket_key']}")
         return "regenerate_spec"
 
-    # Check if still paused
+    # Check if still paused - END and wait for approval webhook
     if state.get("is_paused"):
-        return "spec_approval_gate"
+        logger.info(f"Spec approval gate: workflow paused for {state['ticket_key']}, waiting for approval webhook")
+        return END
 
     # Spec approved, proceed to epic decomposition
     logger.info(f"Spec approved for {state['ticket_key']}, proceeding to epic decomposition")

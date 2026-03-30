@@ -1,88 +1,69 @@
-"""Redis checkpointer for LangGraph workflow state persistence."""
+"""Checkpointer for LangGraph workflow state persistence.
 
-from typing import Optional
+Uses SQLite for checkpoint storage to enable workflow pause/resume
+across process restarts. For production deployments requiring Redis-based
+checkpointing, install Redis with RediSearch module enabled.
+"""
+
+from pathlib import Path
 
 import redis.asyncio as redis
-from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from forge.config import get_settings
 
+# Global instances
+_checkpointer: AsyncSqliteSaver | None = None
+_checkpointer_context = None
+_redis_pool: redis.ConnectionPool | None = None
 
-class RedisCheckpointer(BaseCheckpointSaver):
-    """Redis-based checkpointer for LangGraph state persistence.
+# Default checkpoint database path
+CHECKPOINT_DB_PATH = Path.home() / ".forge" / "checkpoints.db"
 
-    Enables workflow pause/resume across process restarts by storing
-    graph state in Redis with automatic serialization.
+
+async def get_checkpointer() -> AsyncSqliteSaver:
+    """Get a configured SQLite checkpointer instance.
+
+    Uses AsyncSqliteSaver from langgraph-checkpoint-sqlite for proper
+    LangGraph checkpoint API compatibility. Stores checkpoints in
+    ~/.forge/checkpoints.db by default.
+
+    Returns:
+        Configured AsyncSqliteSaver instance.
     """
+    global _checkpointer, _checkpointer_context
 
-    def __init__(self, redis_client: redis.Redis, prefix: str = "forge:checkpoint:"):
-        """Initialize the Redis checkpointer.
+    if _checkpointer is None:
+        # Ensure parent directory exists
+        CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        Args:
-            redis_client: Async Redis client instance.
-            prefix: Key prefix for checkpoint storage.
-        """
-        super().__init__()
-        self.redis = redis_client
-        self.prefix = prefix
+        # from_conn_string returns an async context manager
+        _checkpointer_context = AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
+        # Manually enter the context manager for long-running use
+        _checkpointer = await _checkpointer_context.__aenter__()
 
-    def _make_key(self, thread_id: str, checkpoint_id: str) -> str:
-        """Generate Redis key for a checkpoint."""
-        return f"{self.prefix}{thread_id}:{checkpoint_id}"
-
-    async def aget(self, config: dict) -> Optional[dict]:
-        """Get checkpoint from Redis."""
-        thread_id = config.get("configurable", {}).get("thread_id")
-        checkpoint_id = config.get("configurable", {}).get("checkpoint_id", "latest")
-
-        if not thread_id:
-            return None
-
-        key = self._make_key(thread_id, checkpoint_id)
-        data = await self.redis.get(key)
-
-        if data is None:
-            return None
-
-        import json
-        return json.loads(data)
-
-    async def aput(self, config: dict, checkpoint: dict) -> dict:
-        """Store checkpoint in Redis."""
-        import json
-        import uuid
-
-        thread_id = config.get("configurable", {}).get("thread_id")
-        checkpoint_id = str(uuid.uuid4())
-
-        key = self._make_key(thread_id, checkpoint_id)
-        await self.redis.set(key, json.dumps(checkpoint))
-
-        # Also store as latest
-        latest_key = self._make_key(thread_id, "latest")
-        await self.redis.set(latest_key, json.dumps(checkpoint))
-
-        return {
-            "configurable": {
-                "thread_id": thread_id,
-                "checkpoint_id": checkpoint_id,
-            }
-        }
-
-    def get(self, config: dict) -> Optional[dict]:
-        """Synchronous get - not implemented, use aget."""
-        raise NotImplementedError("Use aget for async operations")
-
-    def put(self, config: dict, checkpoint: dict) -> dict:
-        """Synchronous put - not implemented, use aput."""
-        raise NotImplementedError("Use aput for async operations")
+    return _checkpointer
 
 
-_redis_pool: Optional[redis.ConnectionPool] = None
+async def close_checkpointer() -> None:
+    """Close the checkpointer connection."""
+    global _checkpointer, _checkpointer_context
+
+    if _checkpointer is not None and _checkpointer_context is not None:
+        await _checkpointer_context.__aexit__(None, None, None)
+        _checkpointer = None
+        _checkpointer_context = None
 
 
 async def get_redis_client() -> redis.Redis:
-    """Get a Redis client from the connection pool."""
+    """Get a Redis client from the connection pool.
+
+    This is used by the queue consumer and other components that need
+    direct Redis access for message queuing.
+
+    Returns:
+        Async Redis client instance.
+    """
     global _redis_pool
 
     settings = get_settings()
@@ -95,12 +76,6 @@ async def get_redis_client() -> redis.Redis:
         )
 
     return redis.Redis(connection_pool=_redis_pool)
-
-
-async def get_checkpointer() -> RedisCheckpointer:
-    """Get a configured Redis checkpointer instance."""
-    client = await get_redis_client()
-    return RedisCheckpointer(client)
 
 
 async def close_redis_pool() -> None:

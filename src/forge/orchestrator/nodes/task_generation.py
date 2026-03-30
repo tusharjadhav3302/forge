@@ -4,11 +4,11 @@ import logging
 import re
 from typing import Any
 
-from forge.config import Settings, get_settings
-from forge.integrations.claude.client import get_anthropic_client
+from forge.config import get_settings
+from forge.integrations.claude.client import AsyncAnthropicClient, get_anthropic_client
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.langfuse import trace_llm_call
-from forge.models.workflow import FeatureStatus
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -129,8 +129,8 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
                 logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
 
-        # Transition Feature to Executing
-        await jira.transition_issue(ticket_key, FeatureStatus.EXECUTING.value)
+        # Set workflow label to indicate tasks are generated
+        await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_GENERATED)
 
         logger.info(f"Created {len(all_task_keys)} Tasks for {ticket_key}")
 
@@ -155,7 +155,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
 
 async def _generate_tasks_for_epic(
-    client: AsyncAnthropic,
+    client: AsyncAnthropicClient,
     epic_plan: str,
     epic_summary: str,
     context: dict[str, Any],
@@ -190,7 +190,7 @@ services, or components in the plan)."""
         {"epic_summary": epic_summary, "context": context},
     ) as trace:
         response = await client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model=get_settings().claude_model,
             max_tokens=4096,
             system=TASK_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user_prompt}],
