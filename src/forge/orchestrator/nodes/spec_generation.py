@@ -57,7 +57,7 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
         # Generate specification using Claude
         spec_content = await claude.generate_spec(prd_content, context)
 
-        # Store spec in Jira (comment or custom field based on config)
+        # Store spec in Jira (attachment by default, or custom field/comment if configured)
         settings = get_settings()
         if settings.jira_store_in_comments:
             await jira.add_structured_comment(
@@ -73,10 +73,12 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
                 spec_content,
             )
         else:
-            # Fallback: store as a comment if no custom field configured
-            await jira.add_comment(
+            # Default: store as markdown attachment
+            await jira.add_attachment(
                 ticket_key,
-                f"## Technical Specification\n\n{spec_content}",
+                filename=f"{ticket_key}-spec.md",
+                content=spec_content,
+                content_type="text/markdown",
             )
 
         # Set workflow label (instead of custom status transition)

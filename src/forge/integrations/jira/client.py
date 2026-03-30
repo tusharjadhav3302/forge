@@ -229,6 +229,51 @@ class JiraClient:
         response.raise_for_status()
         logger.info(f"Deleted issue {issue_key}")
 
+    async def add_attachment(
+        self,
+        issue_key: str,
+        filename: str,
+        content: str | bytes,
+        content_type: str = "text/markdown",
+    ) -> dict[str, Any]:
+        """Add an attachment to a Jira issue.
+
+        Args:
+            issue_key: The Jira issue key.
+            filename: Name for the attachment file.
+            content: File content (string or bytes).
+            content_type: MIME type of the content.
+
+        Returns:
+            The attachment metadata from Jira API.
+        """
+        # Attachments require a separate client without JSON content-type
+        async with httpx.AsyncClient(
+            base_url=self.base_url,
+            auth=(
+                self.settings.jira_user_email,
+                self.settings.jira_api_token.get_secret_value(),
+            ),
+            headers={
+                "Accept": "application/json",
+                "X-Atlassian-Token": "no-check",  # Required for attachments
+            },
+            timeout=60.0,
+        ) as client:
+            # Convert string to bytes if needed
+            if isinstance(content, str):
+                content = content.encode("utf-8")
+
+            files = {"file": (filename, content, content_type)}
+            response = await client.post(
+                f"/issue/{issue_key}/attachments",
+                files=files,
+            )
+            response.raise_for_status()
+            data = response.json()
+            logger.info(f"Added attachment {filename} to {issue_key}")
+            return data[0] if data else {}
+
     async def add_comment(self, issue_key: str, body: str) -> JiraComment:
         """Add a comment to a Jira issue.
 
