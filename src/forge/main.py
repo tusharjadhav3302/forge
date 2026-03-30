@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from forge import __version__
-from forge.api.routes import health_router
+from forge.api.routes import github_router, health_router, jira_router
 from forge.config import get_settings
 from forge.orchestrator.checkpointer import close_redis_pool
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager for startup and shutdown."""
     settings = get_settings()
-    logger.info(f"Starting Forge v{__version__} with log level {settings.log_level}")
+    logger.info(f"Starting Forge v{__version__} ({settings.log_level})")
 
     # Startup
     yield
@@ -40,8 +40,6 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI instance.
     """
-    settings = get_settings()
-
     app = FastAPI(
         title="Forge SDLC Orchestrator",
         description="AI-Integrated SDLC Orchestrator webhook gateway",
@@ -60,10 +58,8 @@ def create_app() -> FastAPI:
 
     # Register routes
     app.include_router(health_router)
-
-    # Additional routers will be added here as implemented:
-    # app.include_router(jira_router)
-    # app.include_router(github_router)
+    app.include_router(jira_router)
+    app.include_router(github_router)
 
     return app
 

@@ -69,14 +69,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T023 [P] [US1] Implement Jira webhook payload parsing in src/forge/integrations/jira/webhooks.py
-- [ ] T024 [P] [US1] Implement Claude Code SDK wrapper in src/forge/integrations/claude/client.py
-- [ ] T025 [US1] Implement PRD generation node in src/forge/orchestrator/nodes/prd_generation.py (read raw desc, generate PRD, update Jira)
-- [ ] T026 [US1] Implement PRD approval gate in src/forge/orchestrator/gates/prd_approval.py (pause for PM review)
-- [ ] T027 [US1] Implement Jira description update in src/forge/integrations/jira/client.py (ADF format)
-- [ ] T028 [US1] Implement Jira status transition in src/forge/integrations/jira/client.py
-- [ ] T029 [US1] Add PRD feedback loop handling (read comment, regenerate on rejection)
-- [ ] T030 [US1] Wire PRD nodes into main graph in src/forge/orchestrator/graph.py
+- [x] T023 [P] [US1] Implement Jira webhook payload parsing in src/forge/integrations/jira/webhooks.py
+- [x] T024 [P] [US1] Implement Claude Code SDK wrapper in src/forge/integrations/claude/client.py
+- [x] T025 [US1] Implement PRD generation node in src/forge/orchestrator/nodes/prd_generation.py (read raw desc, generate PRD, update Jira)
+- [x] T026 [US1] Implement PRD approval gate in src/forge/orchestrator/gates/prd_approval.py (pause for PM review)
+- [x] T027 [US1] Implement Jira description update in src/forge/integrations/jira/client.py (ADF format)
+- [x] T028 [US1] Implement Jira status transition in src/forge/integrations/jira/client.py
+- [x] T029 [US1] Add PRD feedback loop handling (read comment, regenerate on rejection)
+- [x] T030 [US1] Wire PRD nodes into main graph in src/forge/orchestrator/graph.py
 
 **Checkpoint**: PRD generation workflow functional and testable independently
 
@@ -90,12 +90,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T031 [US2] Implement spec generation node in src/forge/orchestrator/nodes/spec_generation.py (read PRD, generate spec)
-- [ ] T032 [US2] Implement spec approval gate in src/forge/orchestrator/gates/spec_approval.py (pause for PM review)
-- [ ] T033 [US2] Implement Jira custom field update for Specification in src/forge/integrations/jira/client.py
-- [ ] T034 [US2] Add spec feedback loop handling (read comment, regenerate on rejection)
-- [ ] T035 [US2] Wire spec nodes into main graph in src/forge/orchestrator/graph.py
-- [ ] T036 [US2] Add spec generation prompts with Given/When/Then template
+- [x] T031 [US2] Implement spec generation node in src/forge/orchestrator/nodes/spec_generation.py (read PRD, generate spec)
+- [x] T032 [US2] Implement spec approval gate in src/forge/orchestrator/gates/spec_approval.py (pause for PM review)
+- [x] T033 [US2] Implement Jira custom field update for Specification in src/forge/integrations/jira/client.py
+- [x] T034 [US2] Add spec feedback loop handling (read comment, regenerate on rejection)
+- [x] T035 [US2] Wire spec nodes into main graph in src/forge/orchestrator/graph.py
+- [x] T036 [US2] Add spec generation prompts with Given/When/Then template
 
 **Checkpoint**: Spec generation workflow functional and testable independently
 
@@ -109,14 +109,14 @@
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Implement Epic creation in src/forge/integrations/jira/client.py (create Epic, link to Feature)
-- [ ] T038 [US3] Implement Epic deletion in src/forge/integrations/jira/client.py (for Feature-level regeneration)
-- [ ] T039 [US3] Implement epic decomposition node in src/forge/orchestrator/nodes/epic_decomposition.py
-- [ ] T040 [US3] Implement plan approval gate in src/forge/orchestrator/gates/plan_approval.py (pause for Tech Lead review)
-- [ ] T041 [US3] Add Feature-level feedback handling (delete all Epics, regenerate)
-- [ ] T042 [US3] Add Epic-level feedback handling (update single Epic plan)
-- [ ] T043 [US3] Wire epic nodes into main graph in src/forge/orchestrator/graph.py
-- [ ] T044 [US3] Implement Epic status aggregation (track when all Epics approved)
+- [x] T037 [US3] Implement Epic creation in src/forge/integrations/jira/client.py (create Epic, link to Feature)
+- [x] T038 [US3] Implement Epic deletion in src/forge/integrations/jira/client.py (for Feature-level regeneration)
+- [x] T039 [US3] Implement epic decomposition node in src/forge/orchestrator/nodes/epic_decomposition.py
+- [x] T040 [US3] Implement plan approval gate in src/forge/orchestrator/gates/plan_approval.py (pause for Tech Lead review)
+- [x] T041 [US3] Add Feature-level feedback handling (delete all Epics, regenerate)
+- [x] T042 [US3] Add Epic-level feedback handling (update single Epic plan)
+- [x] T043 [US3] Wire epic nodes into main graph in src/forge/orchestrator/graph.py
+- [x] T044 [US3] Implement Epic status aggregation (track when all Epics approved)
 
 **Checkpoint**: Epic decomposition workflow functional and testable independently
 
@@ -130,11 +130,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T045 [US4] Implement Task creation in src/forge/integrations/jira/client.py (create Task, link to Epic, add labels)
-- [ ] T046 [US4] Implement task generation node in src/forge/orchestrator/nodes/task_generation.py
-- [ ] T047 [US4] Add repository label assignment logic (extract repo from context)
-- [ ] T048 [US4] Wire task generation nodes into main graph in src/forge/orchestrator/graph.py
-- [ ] T049 [US4] Implement Task detail generation prompts (steps, acceptance criteria)
+- [x] T045 [US4] Implement Task creation in src/forge/integrations/jira/client.py (create Task, link to Epic, add labels)
+- [x] T046 [US4] Implement task generation node in src/forge/orchestrator/nodes/task_generation.py
+- [x] T047 [US4] Add repository label assignment logic (extract repo from context)
+- [x] T048 [US4] Wire task generation nodes into main graph in src/forge/orchestrator/graph.py
+- [x] T049 [US4] Implement Task detail generation prompts (steps, acceptance criteria)
 
 **Checkpoint**: Task generation workflow functional and testable independently
 
@@ -148,14 +148,14 @@
 
 ### Implementation for User Story 5
 
-- [ ] T050 [P] [US5] Implement Jira webhook endpoint in src/forge/api/routes/jira.py
-- [ ] T051 [P] [US5] Implement GitHub webhook endpoint in src/forge/api/routes/github.py
-- [ ] T052 [US5] Implement webhook deduplication middleware in src/forge/api/middleware/deduplication.py
-- [ ] T053 [US5] Implement payload validation middleware in src/forge/api/middleware/validation.py
-- [ ] T054 [US5] Implement GitHub webhook payload parsing in src/forge/integrations/github/webhooks.py
-- [ ] T055 [US5] Implement freshness check before processing in src/forge/queue/consumer.py
-- [ ] T056 [US5] Implement FIFO ordering per ticket in queue consumer
-- [ ] T057 [US5] Wire webhook routes into FastAPI app in src/forge/main.py
+- [x] T050 [P] [US5] Implement Jira webhook endpoint in src/forge/api/routes/jira.py
+- [x] T051 [P] [US5] Implement GitHub webhook endpoint in src/forge/api/routes/github.py
+- [x] T052 [US5] Implement webhook deduplication middleware in src/forge/api/middleware/deduplication.py
+- [x] T053 [US5] Implement payload validation middleware in src/forge/api/middleware/validation.py
+- [x] T054 [US5] Implement GitHub webhook payload parsing in src/forge/integrations/github/webhooks.py
+- [x] T055 [US5] Implement freshness check before processing in src/forge/queue/consumer.py
+- [x] T056 [US5] Implement FIFO ordering per ticket in queue consumer
+- [x] T057 [US5] Wire webhook routes into FastAPI app in src/forge/main.py
 
 **Checkpoint**: Webhook processing functional and testable independently
 
