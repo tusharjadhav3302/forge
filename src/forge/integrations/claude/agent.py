@@ -19,6 +19,7 @@ from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
 
 from forge.config import Settings, get_settings
+from forge.integrations.langfuse import get_langfuse_config
 
 # Optional Vertex AI support
 try:
@@ -227,12 +228,23 @@ class DeepAgentClient:
         # Generate unique thread ID for this conversation
         thread_id = str(uuid.uuid4())
 
+        # Build config with Langfuse tracing if enabled
+        config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
+
+        # Add Langfuse callbacks for observability
+        langfuse_config = get_langfuse_config(
+            trace_name="deep_agent_invocation",
+            metadata={"system_prompt_length": len(system_prompt)},
+        )
+        if langfuse_config:
+            config.update(langfuse_config)
+
         # Invoke the agent
         result = agent.invoke(
             {
                 "messages": [{"role": "user", "content": prompt}],
             },
-            config={"configurable": {"thread_id": thread_id}},
+            config=config,
         )
 
         # Extract response text from messages
