@@ -272,6 +272,48 @@ class DeepAgentClient:
 
         return "\n".join(response_text)
 
+    async def run_skill(
+        self,
+        skill_name: str,
+        prompt: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """Run a skill with the given prompt.
+
+        Generic method to invoke any skill from the configured skill paths.
+
+        Args:
+            skill_name: Name of the skill to use (e.g., 'generate-tasks').
+            prompt: The user prompt/content to process.
+            context: Optional context variables for the prompt.
+
+        Returns:
+            Agent response text.
+        """
+        current_date = datetime.now().strftime("%Y-%m-%d")
+
+        # Build system prompt with context
+        system_prompt = f"Today's date is {current_date}."
+        if context:
+            system_prompt += f"\n\nContext:\n"
+            for key, value in context.items():
+                system_prompt += f"- {key}: {value}\n"
+
+        # Format prompt to invoke the skill
+        full_prompt = f"""Use the '{skill_name}' skill to process the following:
+
+{prompt}"""
+
+        logger.info(f"Running skill '{skill_name}' using Deep Agents")
+        result = await self._run_agent(
+            prompt=full_prompt,
+            system_prompt=system_prompt,
+            include_tools=True,
+        )
+
+        logger.info(f"Skill '{skill_name}' completed ({len(result)} chars)")
+        return result
+
     def _load_mcp_config(self) -> dict[str, Any]:
         """Load MCP server configuration from JSON file.
 

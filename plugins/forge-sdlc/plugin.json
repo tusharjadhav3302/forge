@@ -6,7 +6,12 @@
   "skills": [
     "skills/generate-prd",
     "skills/generate-spec",
-    "skills/decompose-epics"
+    "skills/decompose-epics",
+    "skills/generate-tasks",
+    "skills/review-code",
+    "skills/implement-task",
+    "skills/fix-ci",
+    "skills/analyze-bug"
   ],
   "prompts": "prompts/",
   "templates": "templates/",
