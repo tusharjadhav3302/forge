@@ -1,0 +1,224 @@
+"""PR creation node for opening pull requests."""
+
+import logging
+from pathlib import Path
+
+from forge.integrations.github.client import GitHubClient
+from forge.integrations.jira.client import JiraClient
+from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.workspace.git_ops import GitOperations
+from forge.workspace.manager import Workspace
+from forge.workspace.manager import get_workspace_manager
+
+logger = logging.getLogger(__name__)
+
+
+async def create_pull_request(state: WorkflowState) -> WorkflowState:
+    """Create a pull request from the workspace changes.
+
+    This node:
+    1. Pushes the feature branch
+    2. Creates a PR with Task summaries
+    3. Links PR to Jira tickets
+    4. Stores PR URL in state
+
+    Args:
+        state: Current workflow state.
+
+    Returns:
+        Updated state with PR URL.
+    """
+    ticket_key = state["ticket_key"]
+    workspace_path = state.get("workspace_path")
+    current_repo = state.get("current_repo", "")
+    implemented_tasks = state.get("implemented_tasks", [])
+
+    if not workspace_path:
+        logger.error(f"No workspace for PR creation on {ticket_key}")
+        return {
+            **state,
+            "last_error": "Workspace not available",
+            "current_node": "create_pr",
+        }
+
+    if not implemented_tasks:
+        logger.warning(f"No tasks implemented for {ticket_key}")
+        return update_state_timestamp({
+            **state,
+            "current_node": "teardown_workspace",
+            "last_error": None,
+        })
+
+    logger.info(f"Creating PR for {ticket_key} ({len(implemented_tasks)} tasks)")
+
+    github = GitHubClient()
+    jira = JiraClient()
+
+    try:
+        # Set up workspace reference
+        branch_name = state.get("context", {}).get("branch_name", "")
+        workspace = Workspace(
+            path=Path(workspace_path),
+            repo_name=current_repo,
+            branch_name=branch_name,
+            ticket_key=ticket_key,
+        )
+        git = GitOperations(workspace)
+
+        # Push branch to remote
+        git.push()
+
+        # Build PR title and body
+        pr_title = f"[{ticket_key}] {_get_pr_title(state)}"
+        pr_body = _build_pr_body(state, implemented_tasks)
+
+        # Parse owner/repo
+        owner, repo = current_repo.split("/")
+
+        # Create PR
+        pr_data = await github.create_pull_request(
+            owner=owner,
+            repo=repo,
+            title=pr_title,
+            body=pr_body,
+            head=branch_name,
+            base="main",
+        )
+
+        pr_url = pr_data.get("html_url", "")
+        pr_number = pr_data.get("number")
+
+        # Store PR URL
+        pr_urls = state.get("pr_urls", [])
+        pr_urls.append(pr_url)
+
+        # Add comment to Jira with PR link
+        await jira.add_comment(
+            ticket_key,
+            f"Pull request created: {pr_url}\n\n"
+            f"Implements {len(implemented_tasks)} tasks.",
+        )
+
+        logger.info(f"Created PR #{pr_number}: {pr_url}")
+
+        return update_state_timestamp({
+            **state,
+            "pr_urls": pr_urls,
+            "current_pr_url": pr_url,
+            "current_pr_number": pr_number,
+            "current_node": "teardown_workspace",
+            "last_error": None,
+        })
+
+    except Exception as e:
+        logger.error(f"PR creation failed for {ticket_key}: {e}")
+        return {
+            **state,
+            "last_error": str(e),
+            "current_node": "create_pr",
+            "retry_count": state.get("retry_count", 0) + 1,
+        }
+    finally:
+        await github.close()
+        await jira.close()
+
+
+def _get_pr_title(state: WorkflowState) -> str:
+    """Generate PR title from state.
+
+    Args:
+        state: Current workflow state.
+
+    Returns:
+        PR title string.
+    """
+    # Try to get Feature summary from context
+    context = state.get("context", {})
+    if "feature_summary" in context:
+        return context["feature_summary"]
+
+    # Fall back to ticket key
+    return f"Implementation for {state.get('ticket_key', 'Unknown')}"
+
+
+def _build_pr_body(
+    state: WorkflowState,
+    implemented_tasks: list[str],
+) -> str:
+    """Build PR body with task list and context.
+
+    Args:
+        state: Current workflow state.
+        implemented_tasks: List of implemented task keys.
+
+    Returns:
+        Formatted PR body.
+    """
+    ticket_key = state["ticket_key"]
+    current_repo = state.get("current_repo", "")
+
+    body_parts = [
+        "## Summary",
+        "",
+        f"This PR implements tasks for [{ticket_key}].",
+        "",
+        "## Tasks Implemented",
+        "",
+    ]
+
+    for task_key in implemented_tasks:
+        body_parts.append(f"- [x] {task_key}")
+
+    body_parts.extend([
+        "",
+        "## Repository",
+        f"- {current_repo}",
+        "",
+        "---",
+        "*Generated by Forge SDLC Orchestrator*",
+    ])
+
+    return "\n".join(body_parts)
+
+
+async def teardown_and_route(state: WorkflowState) -> WorkflowState:
+    """Teardown workspace and route to next repo or completion.
+
+    Args:
+        state: Current workflow state.
+
+    Returns:
+        Updated state.
+    """
+    from forge.orchestrator.nodes.workspace_setup import teardown_workspace
+
+    # Teardown current workspace
+    state = await teardown_workspace(state)
+
+    # Mark current repo as completed
+    repos_completed = state.get("repos_completed", [])
+    current_repo = state.get("current_repo")
+
+    if current_repo and current_repo not in repos_completed:
+        repos_completed.append(current_repo)
+
+    # Check for remaining repos
+    repos_to_process = state.get("repos_to_process", [])
+    remaining = [r for r in repos_to_process if r not in repos_completed]
+
+    if remaining:
+        # Move to next repo
+        return update_state_timestamp({
+            **state,
+            "repos_completed": repos_completed,
+            "current_repo": remaining[0],
+            "implemented_tasks": [],
+            "current_node": "setup_workspace",
+        })
+
+    # All repos done
+    return update_state_timestamp({
+        **state,
+        "repos_completed": repos_completed,
+        "current_node": "ci_evaluator",
+    })

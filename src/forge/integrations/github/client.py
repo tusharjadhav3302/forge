@@ -216,3 +216,69 @@ class GitHubClient:
         response = await client.get(f"/repos/{owner}/{repo}")
         response.raise_for_status()
         return response.json()
+
+    async def get_failed_check_logs(
+        self, owner: str, repo: str, ref: str
+    ) -> list[dict[str, Any]]:
+        """Get logs for failed check runs.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            ref: Git reference.
+
+        Returns:
+            List of failed checks with log excerpts.
+        """
+        check_runs = await self.get_check_runs(owner, repo, ref)
+        failed_checks = []
+
+        for check in check_runs:
+            if check.get("conclusion") in ("failure", "cancelled"):
+                failed_checks.append({
+                    "name": check.get("name"),
+                    "conclusion": check.get("conclusion"),
+                    "output": check.get("output", {}),
+                    "html_url": check.get("html_url"),
+                })
+
+        return failed_checks
+
+    async def update_pull_request(
+        self,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        title: str | None = None,
+        body: str | None = None,
+        state: str | None = None,
+    ) -> dict[str, Any]:
+        """Update a pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+            title: New title (optional).
+            body: New body (optional).
+            state: New state ("open" or "closed", optional).
+
+        Returns:
+            API response with updated PR details.
+        """
+        client = await self._get_client()
+        data: dict[str, Any] = {}
+        if title is not None:
+            data["title"] = title
+        if body is not None:
+            data["body"] = body
+        if state is not None:
+            data["state"] = state
+
+        response = await client.patch(
+            f"/repos/{owner}/{repo}/pulls/{pr_number}",
+            json=data,
+        )
+        response.raise_for_status()
+        logger.info(f"Updated PR #{pr_number} in {owner}/{repo}")
+        return response.json()

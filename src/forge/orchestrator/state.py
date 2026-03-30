@@ -47,6 +47,15 @@ class WorkflowState(TypedDict, total=False):
     workspace_path: Optional[str]
     pr_urls: list[str]
     ci_status: Optional[str]
+    current_pr_url: Optional[str]
+    current_pr_number: Optional[int]
+
+    # Repository execution tracking
+    current_repo: Optional[str]
+    repos_to_process: list[str]
+    repos_completed: list[str]
+    implemented_tasks: list[str]
+    current_task_key: Optional[str]
 
     # Feedback and comments
     feedback_comment: Optional[str]
@@ -94,6 +103,13 @@ def create_initial_state(
         workspace_path=None,
         pr_urls=[],
         ci_status=None,
+        current_pr_url=None,
+        current_pr_number=None,
+        current_repo=None,
+        repos_to_process=[],
+        repos_completed=[],
+        implemented_tasks=[],
+        current_task_key=None,
         feedback_comment=None,
         revision_requested=False,
         messages=[],

@@ -169,15 +169,15 @@
 
 ### Implementation for User Story 6
 
-- [ ] T058 [P] [US6] Implement workspace manager in src/forge/workspace/manager.py (create tempdir, cleanup)
-- [ ] T059 [P] [US6] Implement git operations in src/forge/workspace/git_ops.py (clone, branch, commit, push)
-- [ ] T060 [US6] Implement guardrails loader in src/forge/workspace/guardrails.py (read constitution.md/agents.md)
-- [ ] T061 [US6] Implement workspace setup node in src/forge/orchestrator/nodes/workspace_setup.py
-- [ ] T062 [US6] Implement implementation node in src/forge/orchestrator/nodes/implementation.py (invoke Claude Code)
-- [ ] T063 [US6] Implement PR creation in src/forge/integrations/github/client.py
-- [ ] T064 [US6] Implement task router node in src/forge/orchestrator/nodes/task_router.py (group by repo)
-- [ ] T065 [US6] Wire execution nodes into main graph in src/forge/orchestrator/graph.py
-- [ ] T066 [US6] Implement workspace destruction on PR creation
+- [x] T058 [P] [US6] Implement workspace manager in src/forge/workspace/manager.py (create tempdir, cleanup)
+- [x] T059 [P] [US6] Implement git operations in src/forge/workspace/git_ops.py (clone, branch, commit, push)
+- [x] T060 [US6] Implement guardrails loader in src/forge/workspace/guardrails.py (read constitution.md/agents.md)
+- [x] T061 [US6] Implement workspace setup node in src/forge/orchestrator/nodes/workspace_setup.py
+- [x] T062 [US6] Implement implementation node in src/forge/orchestrator/nodes/implementation.py (invoke Claude Code)
+- [x] T063 [US6] Implement PR creation in src/forge/integrations/github/client.py
+- [x] T064 [US6] Implement task router node in src/forge/orchestrator/nodes/task_router.py (group by repo)
+- [x] T065 [US6] Wire execution nodes into main graph in src/forge/orchestrator/graph.py
+- [x] T066 [US6] Implement workspace destruction on PR creation
 
 **Checkpoint**: Single-repo execution functional and testable independently
 

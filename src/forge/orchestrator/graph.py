@@ -32,6 +32,10 @@ from forge.orchestrator.nodes.epic_decomposition import (
     update_single_epic,
 )
 from forge.orchestrator.nodes.task_generation import generate_tasks
+from forge.orchestrator.nodes.task_router import route_tasks_by_repo
+from forge.orchestrator.nodes.workspace_setup import setup_workspace, teardown_workspace
+from forge.orchestrator.nodes.implementation import implement_task
+from forge.orchestrator.nodes.pr_creation import create_pull_request, teardown_and_route
 from forge.orchestrator.state import WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -101,8 +105,15 @@ def create_workflow_graph() -> StateGraph:
     # Task Generation nodes (US4)
     graph.add_node("generate_tasks", generate_tasks)
 
+    # Execution nodes (US6)
+    graph.add_node("task_router", route_tasks_by_repo)
+    graph.add_node("setup_workspace", setup_workspace)
+    graph.add_node("implement_task", implement_task)
+    graph.add_node("create_pr", create_pull_request)
+    graph.add_node("teardown_workspace", teardown_and_route)
+
     # Placeholder nodes for future phases
-    graph.add_node("task_router", _placeholder_node("task_router"))
+    graph.add_node("ci_evaluator", _placeholder_node("ci_evaluator"))
     graph.add_node("bug_workflow", _placeholder_node("bug_workflow"))
     graph.add_node("task_workflow", _placeholder_node("task_workflow"))
 
@@ -164,12 +175,62 @@ def create_workflow_graph() -> StateGraph:
     # Task generation flow (US4)
     graph.add_edge("generate_tasks", "task_router")
 
+    # Execution flow (US6)
+    graph.add_edge("task_router", "setup_workspace")
+    graph.add_edge("setup_workspace", "implement_task")
+    graph.add_conditional_edges(
+        "implement_task",
+        _route_implementation,
+        {
+            "implement_task": "implement_task",
+            "create_pr": "create_pr",
+        },
+    )
+    graph.add_edge("create_pr", "teardown_workspace")
+    graph.add_conditional_edges(
+        "teardown_workspace",
+        _route_after_teardown,
+        {
+            "setup_workspace": "setup_workspace",
+            "ci_evaluator": "ci_evaluator",
+        },
+    )
+
     # Placeholder endpoints (will be connected in future phases)
-    graph.add_edge("task_router", END)
+    graph.add_edge("ci_evaluator", END)
     graph.add_edge("bug_workflow", END)
     graph.add_edge("task_workflow", END)
 
     return graph
+
+
+def _route_implementation(
+    state: WorkflowState,
+) -> Literal["implement_task", "create_pr"]:
+    """Route based on task implementation status."""
+    current_task = state.get("current_task_key")
+    current_repo = state.get("current_repo", "")
+    repo_tasks = state.get("tasks_by_repo", {}).get(current_repo, [])
+    implemented = state.get("implemented_tasks", [])
+
+    # Check if all tasks for this repo are done
+    remaining = [t for t in repo_tasks if t not in implemented]
+    if not remaining:
+        return "create_pr"
+    return "implement_task"
+
+
+def _route_after_teardown(
+    state: WorkflowState,
+) -> Literal["setup_workspace", "ci_evaluator"]:
+    """Route after workspace teardown."""
+    repos_to_process = state.get("repos_to_process", [])
+    repos_completed = state.get("repos_completed", [])
+
+    remaining = [r for r in repos_to_process if r not in repos_completed]
+    if remaining:
+        return "setup_workspace"
+    return "ci_evaluator"
 
 
 def _placeholder_node(name: str):
