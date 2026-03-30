@@ -191,13 +191,13 @@
 
 ### Implementation for User Story 7
 
-- [ ] T067 [US7] Implement CI status parsing from GitHub webhooks in src/forge/integrations/github/webhooks.py
-- [ ] T068 [US7] Implement CI evaluator node in src/forge/orchestrator/nodes/ci_evaluator.py
-- [ ] T069 [US7] Implement error log extraction from CI in src/forge/integrations/github/client.py
-- [ ] T070 [US7] Implement autonomous fix logic (read logs, generate fix, commit)
-- [ ] T071 [US7] Implement retry counter with configurable limit
-- [ ] T072 [US7] Implement escalation to "Blocked" status on retry exhaustion
-- [ ] T073 [US7] Wire CI evaluator into main graph with feedback loop
+- [x] T067 [US7] Implement CI status parsing from GitHub webhooks in src/forge/integrations/github/webhooks.py
+- [x] T068 [US7] Implement CI evaluator node in src/forge/orchestrator/nodes/ci_evaluator.py
+- [x] T069 [US7] Implement error log extraction from CI in src/forge/integrations/github/client.py
+- [x] T070 [US7] Implement autonomous fix logic (read logs, generate fix, commit)
+- [x] T071 [US7] Implement retry counter with configurable limit
+- [x] T072 [US7] Implement escalation to "Blocked" status on retry exhaustion
+- [x] T073 [US7] Wire CI evaluator into main graph with feedback loop
 
 **Checkpoint**: CI validation with fix loop functional and testable independently
 
@@ -211,12 +211,12 @@
 
 ### Implementation for User Story 8
 
-- [ ] T074 [US8] Implement AI reviewer node in src/forge/orchestrator/nodes/ai_reviewer.py
-- [ ] T075 [US8] Implement PR comment posting in src/forge/integrations/github/client.py
-- [ ] T076 [US8] Implement spec alignment checking (compare code to spec)
-- [ ] T077 [US8] Implement constitution compliance checking
-- [ ] T078 [US8] Implement review decision routing (pass to human or back to implementation)
-- [ ] T079 [US8] Wire AI reviewer into main graph after CI evaluator
+- [x] T074 [US8] Implement AI reviewer node in src/forge/orchestrator/nodes/ai_reviewer.py
+- [x] T075 [US8] Implement PR comment posting in src/forge/integrations/github/client.py
+- [x] T076 [US8] Implement spec alignment checking (compare code to spec)
+- [x] T077 [US8] Implement constitution compliance checking
+- [x] T078 [US8] Implement review decision routing (pass to human or back to implementation)
+- [x] T079 [US8] Wire AI reviewer into main graph after CI evaluator
 
 **Checkpoint**: AI code review functional and testable independently
 
@@ -230,13 +230,13 @@
 
 ### Implementation for User Story 9
 
-- [ ] T080 [US9] Implement PR review event parsing from GitHub webhooks
-- [ ] T081 [US9] Implement review comment routing back to implementation node
-- [ ] T082 [US9] Implement merge event detection from GitHub webhooks
-- [ ] T083 [US9] Implement Task → Done transition on PR merge
-- [ ] T084 [US9] Implement Epic → Done aggregation (all Tasks done)
-- [ ] T085 [US9] Implement Feature → Done aggregation (all Epics done)
-- [ ] T086 [US9] Wire human review handling into main graph
+- [x] T080 [US9] Implement PR review event parsing from GitHub webhooks
+- [x] T081 [US9] Implement review comment routing back to implementation node
+- [x] T082 [US9] Implement merge event detection from GitHub webhooks
+- [x] T083 [US9] Implement Task → Done transition on PR merge
+- [x] T084 [US9] Implement Epic → Done aggregation (all Tasks done)
+- [x] T085 [US9] Implement Feature → Done aggregation (all Epics done)
+- [x] T086 [US9] Wire human review handling into main graph
 
 **Checkpoint**: Human review and merge workflow functional and testable independently
 
@@ -268,12 +268,12 @@
 
 ### Implementation for User Story 11
 
-- [ ] T092 [US11] Implement bug router node in src/forge/orchestrator/nodes/bug_workflow.py (bypass PRD/Spec/Epic)
-- [ ] T093 [US11] Implement RCA generation node (analyze code, generate root cause analysis)
-- [ ] T094 [US11] Implement RCA approval gate in src/forge/orchestrator/gates/rca_approval.py
-- [ ] T095 [US11] Implement TDD bug fix logic (write failing test first, then fix)
-- [ ] T096 [US11] Implement modular workflow routing based on Issue Type in main graph
-- [ ] T097 [US11] Wire bug workflow into main graph with separate entry point
+- [x] T092 [US11] Implement bug router node in src/forge/orchestrator/nodes/bug_workflow.py (bypass PRD/Spec/Epic)
+- [x] T093 [US11] Implement RCA generation node (analyze code, generate root cause analysis)
+- [x] T094 [US11] Implement RCA approval gate in src/forge/orchestrator/gates/rca_approval.py
+- [x] T095 [US11] Implement TDD bug fix logic (write failing test first, then fix)
+- [x] T096 [US11] Implement modular workflow routing based on Issue Type in main graph
+- [x] T097 [US11] Wire bug workflow into main graph with separate entry point
 
 **Checkpoint**: Bug workflow functional and testable independently
 

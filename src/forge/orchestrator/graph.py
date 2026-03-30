@@ -36,12 +36,32 @@ from forge.orchestrator.nodes.task_router import route_tasks_by_repo
 from forge.orchestrator.nodes.workspace_setup import setup_workspace, teardown_workspace
 from forge.orchestrator.nodes.implementation import implement_task
 from forge.orchestrator.nodes.pr_creation import create_pull_request, teardown_and_route
+from forge.orchestrator.nodes.ci_evaluator import (
+    attempt_ci_fix,
+    escalate_to_blocked,
+    evaluate_ci_status,
+)
+from forge.orchestrator.nodes.ai_reviewer import review_code
+from forge.orchestrator.nodes.human_review import (
+    aggregate_epic_status,
+    aggregate_feature_status,
+    complete_tasks,
+    human_review_gate,
+    route_human_review,
+)
+from forge.orchestrator.nodes.bug_workflow import (
+    analyze_bug,
+    implement_bug_fix,
+    rca_approval_gate,
+    regenerate_rca,
+    route_rca_approval,
+)
 from forge.orchestrator.state import WorkflowState
 
 logger = logging.getLogger(__name__)
 
 
-def route_by_ticket_type(state: WorkflowState) -> Literal["generate_prd", "bug_workflow", "task_workflow"]:
+def route_by_ticket_type(state: WorkflowState) -> Literal["generate_prd", "analyze_bug", "task_workflow"]:
     """Route workflow based on ticket type.
 
     Args:
@@ -55,7 +75,7 @@ def route_by_ticket_type(state: WorkflowState) -> Literal["generate_prd", "bug_w
     if ticket_type == TicketType.FEATURE:
         return "generate_prd"
     elif ticket_type == TicketType.BUG:
-        return "bug_workflow"
+        return "analyze_bug"
     else:
         # Tasks and Epics go directly to task workflow
         return "task_workflow"
@@ -112,9 +132,27 @@ def create_workflow_graph() -> StateGraph:
     graph.add_node("create_pr", create_pull_request)
     graph.add_node("teardown_workspace", teardown_and_route)
 
-    # Placeholder nodes for future phases
-    graph.add_node("ci_evaluator", _placeholder_node("ci_evaluator"))
-    graph.add_node("bug_workflow", _placeholder_node("bug_workflow"))
+    # CI/CD Validation nodes (US7)
+    graph.add_node("ci_evaluator", evaluate_ci_status)
+    graph.add_node("attempt_ci_fix", attempt_ci_fix)
+    graph.add_node("escalate_blocked", escalate_to_blocked)
+
+    # AI Code Review nodes (US8)
+    graph.add_node("ai_review", review_code)
+
+    # Human Review nodes (US9)
+    graph.add_node("human_review_gate", human_review_gate)
+    graph.add_node("complete_tasks", complete_tasks)
+    graph.add_node("aggregate_epic_status", aggregate_epic_status)
+    graph.add_node("aggregate_feature_status", aggregate_feature_status)
+
+    # Bug workflow nodes (US11)
+    graph.add_node("analyze_bug", analyze_bug)
+    graph.add_node("rca_approval_gate", rca_approval_gate)
+    graph.add_node("regenerate_rca", regenerate_rca)
+    graph.add_node("implement_bug_fix", implement_bug_fix)
+
+    # Placeholder for task_workflow (direct task execution)
     graph.add_node("task_workflow", _placeholder_node("task_workflow"))
 
     # Set entry point
@@ -126,7 +164,7 @@ def create_workflow_graph() -> StateGraph:
         route_by_ticket_type,
         {
             "generate_prd": "generate_prd",
-            "bug_workflow": "bug_workflow",
+            "analyze_bug": "analyze_bug",
             "task_workflow": "task_workflow",
         },
     )
@@ -196,9 +234,58 @@ def create_workflow_graph() -> StateGraph:
         },
     )
 
-    # Placeholder endpoints (will be connected in future phases)
-    graph.add_edge("ci_evaluator", END)
-    graph.add_edge("bug_workflow", END)
+    # CI/CD flow (US7)
+    graph.add_conditional_edges(
+        "ci_evaluator",
+        _route_ci_evaluation,
+        {
+            "ai_review": "ai_review",
+            "attempt_ci_fix": "attempt_ci_fix",
+            "escalate_blocked": "escalate_blocked",
+        },
+    )
+    graph.add_edge("attempt_ci_fix", "ci_evaluator")
+    graph.add_edge("escalate_blocked", END)
+
+    # AI Review flow (US8)
+    graph.add_conditional_edges(
+        "ai_review",
+        _route_ai_review,
+        {
+            "human_review_gate": "human_review_gate",
+            "implement_task": "implement_task",
+        },
+    )
+
+    # Human Review flow (US9)
+    graph.add_conditional_edges(
+        "human_review_gate",
+        route_human_review,
+        {
+            "implement_task": "implement_task",
+            "complete_tasks": "complete_tasks",
+            "human_review_gate": "human_review_gate",
+        },
+    )
+    graph.add_edge("complete_tasks", "aggregate_epic_status")
+    graph.add_edge("aggregate_epic_status", "aggregate_feature_status")
+    graph.add_edge("aggregate_feature_status", END)
+
+    # Bug workflow flow (US11)
+    graph.add_edge("analyze_bug", "rca_approval_gate")
+    graph.add_conditional_edges(
+        "rca_approval_gate",
+        route_rca_approval,
+        {
+            "implement_bug_fix": "implement_bug_fix",
+            "regenerate_rca": "regenerate_rca",
+            "rca_approval_gate": "rca_approval_gate",
+        },
+    )
+    graph.add_edge("regenerate_rca", "rca_approval_gate")
+    graph.add_edge("implement_bug_fix", "create_pr")
+
+    # Placeholder endpoint
     graph.add_edge("task_workflow", END)
 
     return graph
@@ -231,6 +318,31 @@ def _route_after_teardown(
     if remaining:
         return "setup_workspace"
     return "ci_evaluator"
+
+
+def _route_ci_evaluation(
+    state: WorkflowState,
+) -> Literal["ai_review", "attempt_ci_fix", "escalate_blocked"]:
+    """Route based on CI evaluation results."""
+    ci_status = state.get("ci_status", "")
+
+    if ci_status == "passed":
+        return "ai_review"
+    elif ci_status == "fixing":
+        return "attempt_ci_fix"
+    else:
+        return "escalate_blocked"
+
+
+def _route_ai_review(
+    state: WorkflowState,
+) -> Literal["human_review_gate", "implement_task"]:
+    """Route based on AI review results."""
+    ai_status = state.get("ai_review_status", "")
+
+    if ai_status == "changes_requested":
+        return "implement_task"
+    return "human_review_gate"
 
 
 def _placeholder_node(name: str):
