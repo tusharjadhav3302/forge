@@ -3,9 +3,8 @@
 import logging
 from typing import Any
 
-from anthropic import AsyncAnthropic
-
 from forge.config import get_settings
+from forge.integrations.claude.client import get_anthropic_client
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.langfuse import trace_llm_call
 from forge.models.workflow import TaskStatus
@@ -77,9 +76,7 @@ async def analyze_bug(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    anthropic = AsyncAnthropic(
-        api_key=settings.anthropic_api_key.get_secret_value()
-    )
+    anthropic = get_anthropic_client(settings)
 
     try:
         # Get bug details
@@ -218,9 +215,7 @@ async def implement_bug_fix(state: WorkflowState) -> WorkflowState:
         })
 
     settings = get_settings()
-    anthropic = AsyncAnthropic(
-        api_key=settings.anthropic_api_key.get_secret_value()
-    )
+    anthropic = get_anthropic_client(settings)
 
     try:
         # Generate test-first implementation
@@ -305,9 +300,7 @@ async def regenerate_rca(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    anthropic = AsyncAnthropic(
-        api_key=settings.anthropic_api_key.get_secret_value()
-    )
+    anthropic = get_anthropic_client(settings)
 
     try:
         prompt = f"""Please revise this RCA based on the feedback:

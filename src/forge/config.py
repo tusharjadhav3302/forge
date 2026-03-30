@@ -44,7 +44,20 @@ class Settings(BaseSettings):
     )
 
     # Anthropic Configuration
-    anthropic_api_key: SecretStr = Field(description="Anthropic API key for Claude")
+    # Option 1: Direct Anthropic API
+    anthropic_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description="Anthropic API key for Claude (leave empty for Vertex AI)",
+    )
+    # Option 2: Google Vertex AI
+    anthropic_vertex_project_id: str = Field(
+        default="",
+        description="Google Cloud project ID for Vertex AI",
+    )
+    anthropic_vertex_region: str = Field(
+        default="us-east5",
+        description="Google Cloud region for Vertex AI (e.g., us-east5)",
+    )
 
     # Langfuse Configuration
     langfuse_public_key: str = Field(default="", description="Langfuse public key")
@@ -69,7 +82,18 @@ class Settings(BaseSettings):
     @property
     def langfuse_enabled(self) -> bool:
         """Check if Langfuse tracing is configured."""
-        return bool(self.langfuse_public_key and self.langfuse_secret_key.get_secret_value())
+        return bool(
+            self.langfuse_public_key
+            and self.langfuse_secret_key.get_secret_value()
+        )
+
+    @property
+    def use_vertex_ai(self) -> bool:
+        """Check if using Vertex AI instead of direct Anthropic API."""
+        return bool(
+            self.anthropic_vertex_project_id
+            and not self.anthropic_api_key.get_secret_value()
+        )
 
 
 @lru_cache

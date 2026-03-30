@@ -3,9 +3,8 @@
 import logging
 from typing import Any, Literal
 
-from anthropic import AsyncAnthropic
-
 from forge.config import get_settings
+from forge.integrations.claude.client import get_anthropic_client
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.integrations.langfuse import trace_llm_call
@@ -182,9 +181,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     github = GitHubClient()
-    anthropic = AsyncAnthropic(
-        api_key=settings.anthropic_api_key.get_secret_value()
-    )
+    anthropic = get_anthropic_client(settings)
 
     try:
         # Collect error information

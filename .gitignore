@@ -2,6 +2,8 @@ ignore
 jira-export
 workflows-plan
 LLD*
+.specify
+.claude
 # Python
 __pycache__/
 *.py[cod]

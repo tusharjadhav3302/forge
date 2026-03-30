@@ -1,7 +1,7 @@
 """Claude Code SDK wrapper for AI-powered content generation."""
 
 import logging
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from anthropic import AsyncAnthropic
 
@@ -10,8 +10,41 @@ from forge.integrations.langfuse import trace_llm_call
 
 logger = logging.getLogger(__name__)
 
+# Type alias for either client type
+AsyncAnthropicClient = Union[AsyncAnthropic, Any]  # Any for AnthropicVertex
+
 # Default model for generation tasks
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
+
+
+def get_anthropic_client(settings: Optional[Settings] = None) -> AsyncAnthropicClient:
+    """Get an Anthropic client based on configuration.
+
+    Supports both direct Anthropic API and Google Vertex AI.
+
+    Args:
+        settings: Application settings. Uses default if not provided.
+
+    Returns:
+        AsyncAnthropic or AsyncAnthropicVertex client.
+    """
+    settings = settings or get_settings()
+
+    if settings.use_vertex_ai:
+        from anthropic import AsyncAnthropicVertex
+
+        logger.debug(
+            f"Creating Vertex AI client for {settings.anthropic_vertex_region}"
+        )
+        return AsyncAnthropicVertex(
+            project_id=settings.anthropic_vertex_project_id,
+            region=settings.anthropic_vertex_region,
+        )
+    else:
+        logger.debug("Creating direct Anthropic API client")
+        return AsyncAnthropic(
+            api_key=settings.anthropic_api_key.get_secret_value()
+        )
 
 # System prompts for different generation tasks
 PRD_SYSTEM_PROMPT = """You are an expert Product Manager skilled at creating clear,
@@ -74,6 +107,8 @@ class ClaudeClient:
 
     Provides high-level methods for PRD, Spec, and Epic generation
     with built-in Langfuse tracing.
+
+    Supports both direct Anthropic API and Google Vertex AI.
     """
 
     def __init__(self, settings: Optional[Settings] = None):
@@ -83,14 +118,32 @@ class ClaudeClient:
             settings: Application settings. Uses default if not provided.
         """
         self.settings = settings or get_settings()
-        self._client: Optional[AsyncAnthropic] = None
+        self._client: Optional[AsyncAnthropicClient] = None
 
-    async def _get_client(self) -> AsyncAnthropic:
-        """Get or create the Anthropic client."""
+    async def _get_client(self) -> AsyncAnthropicClient:
+        """Get or create the Anthropic client.
+
+        Returns either AsyncAnthropic (direct API) or AsyncAnthropicVertex
+        depending on configuration.
+        """
         if self._client is None:
-            self._client = AsyncAnthropic(
-                api_key=self.settings.anthropic_api_key.get_secret_value()
-            )
+            if self.settings.use_vertex_ai:
+                # Use Google Vertex AI
+                from anthropic import AsyncAnthropicVertex
+
+                self._client = AsyncAnthropicVertex(
+                    project_id=self.settings.anthropic_vertex_project_id,
+                    region=self.settings.anthropic_vertex_region,
+                )
+                logger.info(
+                    f"Using Vertex AI in {self.settings.anthropic_vertex_region}"
+                )
+            else:
+                # Use direct Anthropic API
+                self._client = AsyncAnthropic(
+                    api_key=self.settings.anthropic_api_key.get_secret_value()
+                )
+                logger.info("Using direct Anthropic API")
         return self._client
 
     async def generate_prd(

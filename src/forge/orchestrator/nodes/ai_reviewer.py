@@ -3,9 +3,8 @@
 import logging
 from typing import Any, Literal
 
-from anthropic import AsyncAnthropic
-
 from forge.config import get_settings
+from forge.integrations.claude.client import get_anthropic_client
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.langfuse import trace_llm_call
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
@@ -73,9 +72,7 @@ async def review_code(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     github = GitHubClient()
-    anthropic = AsyncAnthropic(
-        api_key=settings.anthropic_api_key.get_secret_value()
-    )
+    anthropic = get_anthropic_client(settings)
 
     all_approved = True
     review_results = []
