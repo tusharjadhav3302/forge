@@ -66,3 +66,5 @@ PLAN:
 ```
 
 Repeat for each Epic (2-5 total).
+
+IMPORTANT: Return ONLY the Epic content. Do not include any planning text, explanations of what you're doing, or meta-commentary. Start directly with the first Epic.

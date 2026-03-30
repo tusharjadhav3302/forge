@@ -40,3 +40,5 @@ Before returning the PRD, verify:
 ## Output Format
 
 Follow the structure in `plugins/forge-sdlc/templates/prd-template.md` exactly.
+
+IMPORTANT: Return ONLY the PRD content. Do not include any planning text, explanations of what you're doing, or meta-commentary. Start directly with the PRD title.

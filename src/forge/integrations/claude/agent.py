@@ -289,15 +289,27 @@ class DeepAgentClient:
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build system prompt with context
-        system_prompt = f"Today's date is {current_date}."
+        # Build system prompt with strict output instructions
+        system_prompt = f"""Today's date is {current_date}.
+
+You are an automated agent. Your task is to execute the requested skill and return ONLY the final generated content.
+
+CRITICAL OUTPUT RULES:
+1. DO NOT include any planning, reasoning, or meta-commentary in your response
+2. DO NOT say things like "Now I have the template" or "Let me generate..."
+3. DO NOT explain what you are doing - just do it
+4. Your response should contain ONLY the final deliverable (PRD, spec, code, etc.)
+5. Start your response directly with the content - no preamble
+
+Execute the skill and return the result immediately."""
+
         if context:
             system_prompt += "\n\nContext:\n"
             for key, value in context.items():
                 system_prompt += f"- {key}: {value}\n"
 
         # Include skill name to help agent match the right skill
-        full_prompt = f"[Skill: {skill_name}]\n\n{prompt}"
+        full_prompt = f"Execute the '{skill_name}' skill now.\n\n{prompt}"
 
         logger.info(f"Running skill '{skill_name}' using Deep Agents")
         result = await self._run_agent(
