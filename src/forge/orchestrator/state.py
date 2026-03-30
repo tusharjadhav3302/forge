@@ -57,6 +57,30 @@ class WorkflowState(TypedDict, total=False):
     implemented_tasks: list[str]
     current_task_key: Optional[str]
 
+    # Parallel execution tracking (US10)
+    parallel_execution_enabled: bool
+    parallel_branch_id: Optional[int]
+    parallel_total_branches: Optional[int]
+
+    # CI/CD tracking (US7)
+    ci_failed_checks: list[dict[str, Any]]
+    ci_fix_attempts: int
+
+    # AI Review tracking (US8)
+    ai_review_status: Optional[str]
+    ai_review_results: list[dict[str, Any]]
+
+    # Human Review tracking (US9)
+    human_review_status: Optional[str]
+    pr_merged: bool
+    tasks_completed: bool
+    epics_completed: bool
+    feature_completed: bool
+
+    # Bug workflow (US11)
+    rca_content: Optional[str]
+    bug_fix_implemented: bool
+
     # Feedback and comments
     feedback_comment: Optional[str]
     revision_requested: bool
@@ -110,6 +134,26 @@ def create_initial_state(
         repos_completed=[],
         implemented_tasks=[],
         current_task_key=None,
+        # Parallel execution
+        parallel_execution_enabled=True,
+        parallel_branch_id=None,
+        parallel_total_branches=None,
+        # CI/CD
+        ci_failed_checks=[],
+        ci_fix_attempts=0,
+        # AI Review
+        ai_review_status=None,
+        ai_review_results=[],
+        # Human Review
+        human_review_status=None,
+        pr_merged=False,
+        tasks_completed=False,
+        epics_completed=False,
+        feature_completed=False,
+        # Bug workflow
+        rca_content=None,
+        bug_fix_implemented=False,
+        # Feedback
         feedback_comment=None,
         revision_requested=False,
         messages=[],

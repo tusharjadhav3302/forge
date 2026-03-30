@@ -250,11 +250,11 @@
 
 ### Implementation for User Story 10
 
-- [ ] T087 [US10] Implement parallel task router with LangGraph Send API in src/forge/orchestrator/nodes/task_router.py
-- [ ] T088 [US10] Implement concurrent workspace spawning
-- [ ] T089 [US10] Implement parallel execution thread tracking in workflow state
-- [ ] T090 [US10] Implement PR aggregation across repositories
-- [ ] T091 [US10] Update graph to support fan-out/fan-in execution pattern
+- [x] T087 [US10] Implement parallel task router with LangGraph Send API in src/forge/orchestrator/nodes/task_router.py
+- [x] T088 [US10] Implement concurrent workspace spawning
+- [x] T089 [US10] Implement parallel execution thread tracking in workflow state
+- [x] T090 [US10] Implement PR aggregation across repositories
+- [x] T091 [US10] Update graph to support fan-out/fan-in execution pattern
 
 **Checkpoint**: Multi-repo concurrent execution functional and testable independently
 

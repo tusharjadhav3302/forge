@@ -19,8 +19,12 @@ from forge.orchestrator.nodes.task_generation import (
     generate_tasks,
 )
 from forge.orchestrator.nodes.task_router import (
+    ParallelExecutionTracker,
+    aggregate_parallel_results,
     get_repo_execution_plan,
     route_tasks_by_repo,
+    route_tasks_parallel,
+    should_use_parallel_execution,
 )
 from forge.orchestrator.nodes.workspace_setup import (
     get_workspace_manager,
@@ -73,9 +77,13 @@ __all__ = [
     # Task generation
     "extract_repo_from_labels",
     "generate_tasks",
-    # Task routing
+    # Task routing and parallel execution
+    "ParallelExecutionTracker",
+    "aggregate_parallel_results",
     "get_repo_execution_plan",
     "route_tasks_by_repo",
+    "route_tasks_parallel",
+    "should_use_parallel_execution",
     # Workspace management
     "get_workspace_manager",
     "setup_workspace",

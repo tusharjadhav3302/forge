@@ -32,7 +32,12 @@ from forge.orchestrator.nodes.epic_decomposition import (
     update_single_epic,
 )
 from forge.orchestrator.nodes.task_generation import generate_tasks
-from forge.orchestrator.nodes.task_router import route_tasks_by_repo
+from forge.orchestrator.nodes.task_router import (
+    aggregate_parallel_results,
+    route_tasks_by_repo,
+    route_tasks_parallel,
+    should_use_parallel_execution,
+)
 from forge.orchestrator.nodes.workspace_setup import setup_workspace, teardown_workspace
 from forge.orchestrator.nodes.implementation import implement_task
 from forge.orchestrator.nodes.pr_creation import create_pull_request, teardown_and_route
@@ -125,6 +130,9 @@ def create_workflow_graph() -> StateGraph:
     # Task Generation nodes (US4)
     graph.add_node("generate_tasks", generate_tasks)
 
+    # Parallel Execution aggregation node (US10)
+    graph.add_node("aggregate_pr_results", aggregate_parallel_results)
+
     # Execution nodes (US6)
     graph.add_node("task_router", route_tasks_by_repo)
     graph.add_node("setup_workspace", setup_workspace)
@@ -213,8 +221,16 @@ def create_workflow_graph() -> StateGraph:
     # Task generation flow (US4)
     graph.add_edge("generate_tasks", "task_router")
 
-    # Execution flow (US6)
-    graph.add_edge("task_router", "setup_workspace")
+    # Execution flow (US6) with parallel support (US10)
+    # Route to either sequential setup_workspace or parallel fan-out
+    graph.add_conditional_edges(
+        "task_router",
+        _route_execution_mode,
+        {
+            "setup_workspace": "setup_workspace",
+            "parallel_fanout": route_tasks_parallel,
+        },
+    )
     graph.add_edge("setup_workspace", "implement_task")
     graph.add_conditional_edges(
         "implement_task",
@@ -318,6 +334,22 @@ def _route_after_teardown(
     if remaining:
         return "setup_workspace"
     return "ci_evaluator"
+
+
+def _route_execution_mode(
+    state: WorkflowState,
+) -> Literal["setup_workspace", "parallel_fanout"]:
+    """Route based on execution mode (sequential vs parallel).
+
+    Args:
+        state: Current workflow state.
+
+    Returns:
+        Node name for sequential, or "parallel_fanout" for Send API.
+    """
+    if should_use_parallel_execution(state):
+        return "parallel_fanout"
+    return "setup_workspace"
 
 
 def _route_ci_evaluation(
