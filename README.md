@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/logo.png" alt="Forge Logo" width="400">
+  <img src="docs/images/logo.png" alt="Forge Logo" width="1000">
 </p>
 
 # Forge - AI-Integrated SDLC Orchestrator
