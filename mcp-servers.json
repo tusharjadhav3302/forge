@@ -6,10 +6,6 @@
       "Authorization": "Bearer ${GITHUB_TOKEN}"
     }
   },
-  "gitmcp": {
-    "transport": "streamable_http",
-    "url": "https://gitmcp.io/{owner}/{repo}"
-  },
   "atlassian": {
     "transport": "sse",
     "url": "http://127.0.0.1:8080/sse"

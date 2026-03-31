@@ -499,6 +499,25 @@ class JiraClient:
             logger.debug(f"Using simple ADF for very long text ({len(text)} chars)")
             return JiraClient._text_to_simple_adf(text)
 
+        # Wrap conversion in try-except to fallback on complex/malformed markdown
+        try:
+            return JiraClient._text_to_adf_impl(text)
+        except Exception as e:
+            logger.warning(f"ADF conversion failed, using simple mode: {e}")
+            return JiraClient._text_to_simple_adf(text)
+
+    @staticmethod
+    def _text_to_adf_impl(text: str) -> dict[str, Any]:
+        """Internal ADF conversion implementation.
+
+        Args:
+            text: Markdown text content.
+
+        Returns:
+            ADF document structure.
+        """
+        import re
+
         content: list[dict[str, Any]] = []
         lines = text.split("\n") if text else []
         i = 0
@@ -646,6 +665,15 @@ class JiraClient:
                     "type": "paragraph",
                     "content": JiraClient._parse_inline_markdown(" ".join(para_lines)),
                 })
+            else:
+                # Line matched exclusion pattern but not a known block type
+                # (e.g., starts with | but isn't a valid table)
+                # Treat as plain text and move on
+                content.append({
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": line}],
+                })
+                i += 1
 
         return {
             "type": "doc",

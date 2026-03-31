@@ -1,0 +1,17 @@
+{
+  "webhookEvent": "jira:issue_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for revision flow",
+      "description": "This is a test feature to validate the revision workflow",
+      "labels": ["forge:managed"]
+    }
+  },
+  "user": {
+    "accountId": "test-user-123",
+    "displayName": "Test User"
+  }
+}

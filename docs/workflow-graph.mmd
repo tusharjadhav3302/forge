@@ -61,6 +61,7 @@ flowchart TD
         aggregate_epic_status["Aggregate Epic Status"]
         aggregate_feature_status["Aggregate Feature Status"]
         END_SUCCESS(("Done"))
+        END_ERROR(("Error"))
     end
 
     subgraph Bug["US11: Bug Workflow"]
@@ -81,19 +82,22 @@ flowchart TD
     route_entry -->|Task/Epic| task_workflow
 
     %% PRD flow
-    generate_prd --> prd_approval_gate
+    generate_prd -->|Success| prd_approval_gate
+    generate_prd -->|Error| END_ERROR
     prd_approval_gate -->|Approved| generate_spec
     prd_approval_gate -->|Rejected| regenerate_prd
     regenerate_prd --> prd_approval_gate
 
     %% Spec flow
-    generate_spec --> spec_approval_gate
+    generate_spec -->|Success| spec_approval_gate
+    generate_spec -->|Error| END_ERROR
     spec_approval_gate -->|Approved| decompose_epics
     spec_approval_gate -->|Rejected| regenerate_spec
     regenerate_spec --> spec_approval_gate
 
     %% Epic flow
-    decompose_epics --> plan_approval_gate
+    decompose_epics -->|Success| plan_approval_gate
+    decompose_epics -->|Error| END_ERROR
     plan_approval_gate -->|Approved| generate_tasks
     plan_approval_gate -->|Reject All| regenerate_all_epics
     plan_approval_gate -->|Reject Epic| update_single_epic
@@ -146,4 +150,4 @@ flowchart TD
 
     class prd_approval_gate,spec_approval_gate,plan_approval_gate,human_review_gate,rca_approval_gate gate
     class START,END_SUCCESS endpoint
-    class escalate_blocked error
+    class escalate_blocked,END_ERROR error

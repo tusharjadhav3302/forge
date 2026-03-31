@@ -71,10 +71,30 @@ class OrchestratorWorker:
                 logger.debug(f"State values: {existing_state.values}")
                 logger.debug(f"is_paused: {existing_state.values.get('is_paused') if existing_state.values else None}")
 
-            if existing_state and existing_state.values and existing_state.values.get("is_paused"):
-                # Resume paused workflow - check for approval/rejection signals
+            # Check if we should resume an existing workflow
+            should_resume = False
+            if existing_state and existing_state.values:
+                values = existing_state.values
+                current_node = values.get("current_node", "")
+                is_paused = values.get("is_paused", False)
+                has_error = values.get("last_error") is not None
+
+                # Resume if: explicitly paused, or has a node state (not at start/end)
+                if is_paused:
+                    should_resume = True
+                    logger.info(f"Workflow is paused at {current_node}")
+                elif current_node and current_node not in ("entry", "__end__", ""):
+                    # Workflow has progress - resume from current state
+                    should_resume = True
+                    if has_error:
+                        logger.info(f"Workflow has error at {current_node}, resuming")
+                    else:
+                        logger.info(f"Workflow in progress at {current_node}, resuming")
+
+            if should_resume:
+                # Resume workflow - check for approval/rejection signals
                 updated_values = await self._handle_resume_event(message, existing_state.values)
-                logger.info(f"Resuming paused workflow for {ticket_key}")
+                logger.info(f"Resuming workflow for {ticket_key}")
 
                 # Update the checkpoint state and resume from where we paused
                 await self.workflow.aupdate_state(config, updated_values)
@@ -165,6 +185,8 @@ class OrchestratorWorker:
         if is_approved:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
+            # Clear previous errors on approval so node can retry
+            updated_state["last_error"] = None
         elif is_rejected and feedback:
             updated_state["revision_requested"] = True
             updated_state["feedback_comment"] = feedback

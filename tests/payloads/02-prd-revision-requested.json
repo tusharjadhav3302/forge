@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for revision flow",
+      "labels": ["forge:managed", "forge:prd-pending"]
+    }
+  },
+  "comment": {
+    "body": "Please add more details on user perspective. Also clarify the expected performance metrics.",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Product Manager"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Product Manager"
+  }
+}

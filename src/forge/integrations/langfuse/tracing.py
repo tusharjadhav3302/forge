@@ -43,8 +43,9 @@ def get_langfuse_handler(
 ) -> Optional[Any]:
     """Get a Langfuse callback handler for LangChain/LangGraph.
 
-    Creates a new handler instance with optional session tracking.
-    Use session_id to group all traces for a ticket together.
+    Creates a new handler instance. Note: In Langfuse v3+, session_id,
+    user_id, and tags must be set via propagate_attributes() context manager
+    around the actual invocation.
 
     Args:
         session_id: Session ID to group traces (e.g., ticket key).
@@ -58,13 +59,9 @@ def get_langfuse_handler(
         return None
 
     try:
-        from langfuse.callback import CallbackHandler
+        from langfuse.langchain import CallbackHandler
 
-        handler = CallbackHandler(
-            session_id=session_id,
-            user_id=user_id,
-            tags=tags,
-        )
+        handler = CallbackHandler()
         if session_id:
             logger.debug(f"Langfuse handler created for session: {session_id}")
         return handler
@@ -79,6 +76,96 @@ def get_langfuse_handler(
         return None
 
 
+class AsyncLangfuseContext:
+    """Async context manager for Langfuse attribute propagation.
+
+    Wraps the sync propagate_attributes context manager for use in async code,
+    suppressing OpenTelemetry context detach errors that occur when async
+    contexts cross coroutine boundaries.
+    """
+
+    def __init__(
+        self,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        metadata: Optional[dict[str, Any]] = None,
+    ):
+        self.session_id = session_id
+        self.user_id = user_id
+        self.tags = tags
+        self.metadata = metadata
+        self._ctx = None
+
+    async def __aenter__(self):
+        if not _ensure_langfuse_env():
+            return self
+
+        try:
+            from langfuse import propagate_attributes
+
+            self._ctx = propagate_attributes(
+                session_id=self.session_id,
+                user_id=self.user_id,
+                tags=self.tags,
+                metadata=self.metadata,
+            )
+            self._ctx.__enter__()
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Langfuse context setup: {e}")
+
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if self._ctx is None:
+            return False
+
+        # Suppress OpenTelemetry context errors during cleanup
+        otel_logger = logging.getLogger("opentelemetry.context")
+        original_level = otel_logger.level
+        otel_logger.setLevel(logging.CRITICAL)
+        try:
+            self._ctx.__exit__(None, None, None)
+        except ValueError:
+            # Ignore "created in a different Context" errors
+            pass
+        except Exception:
+            pass
+        finally:
+            otel_logger.setLevel(original_level)
+
+        return False  # Don't suppress exceptions from the body
+
+
+def get_langfuse_context(
+    session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    tags: Optional[list[str]] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> AsyncLangfuseContext:
+    """Get an async context manager for Langfuse attribute propagation.
+
+    Use this to wrap agent invocations to set session_id, user_id, etc.
+
+    Args:
+        session_id: Session ID to group traces (e.g., ticket key).
+        user_id: Optional user ID for attribution.
+        tags: Optional tags for filtering.
+        metadata: Optional metadata dict.
+
+    Returns:
+        AsyncLangfuseContext instance.
+    """
+    return AsyncLangfuseContext(
+        session_id=session_id,
+        user_id=user_id,
+        tags=tags,
+        metadata=metadata,
+    )
+
+
 def get_langfuse_config(
     trace_name: Optional[str] = None,
     user_id: Optional[str] = None,
@@ -89,8 +176,9 @@ def get_langfuse_config(
     """Get a LangChain config dict with Langfuse callback.
 
     This can be passed directly to agent.invoke() or chain.invoke().
-    Each call creates a new handler with the specified session_id,
-    allowing traces to be grouped by ticket/session.
+    Note: In Langfuse v3+, session_id/user_id/tags are stored in the
+    returned dict under '_langfuse_context' for the caller to use
+    with propagate_attributes().
 
     Args:
         trace_name: Optional name for the trace.
@@ -102,12 +190,7 @@ def get_langfuse_config(
     Returns:
         Config dict with callbacks and metadata, or empty dict if disabled.
     """
-    # Create a handler with session tracking
-    handler = get_langfuse_handler(
-        session_id=session_id,
-        user_id=user_id,
-        tags=tags,
-    )
+    handler = get_langfuse_handler()
     if handler is None:
         return {}
 
@@ -122,6 +205,13 @@ def get_langfuse_config(
 
     if langfuse_metadata:
         config["metadata"] = langfuse_metadata
+
+    # Store context params for caller to use with propagate_attributes
+    config["_langfuse_context"] = {
+        "session_id": session_id,
+        "user_id": user_id,
+        "tags": tags,
+    }
 
     return config
 

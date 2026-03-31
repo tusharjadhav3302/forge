@@ -1,0 +1,25 @@
+{
+  "webhookEvent": "jira:issue_updated",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for revision flow",
+      "labels": ["forge:managed", "forge:spec-approved"]
+    }
+  },
+  "changelog": {
+    "items": [
+      {
+        "field": "labels",
+        "fromString": "forge:managed, forge:spec-pending",
+        "toString": "forge:managed, forge:spec-approved"
+      }
+    ]
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Tech Lead"
+  }
+}

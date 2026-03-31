@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for revision flow",
+      "labels": ["forge:managed", "forge:plan-pending"]
+    }
+  },
+  "comment": {
+    "body": "Epic 2 needs to be split into smaller pieces. The authentication epic is too large.",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Tech Lead"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Tech Lead"
+  }
+}

@@ -183,7 +183,14 @@ def create_workflow_graph() -> StateGraph:
     )
 
     # PRD generation flow (US1)
-    graph.add_edge("generate_prd", "prd_approval_gate")
+    graph.add_conditional_edges(
+        "generate_prd",
+        _route_after_generation,
+        {
+            "prd_approval_gate": "prd_approval_gate",
+            END: END,
+        },
+    )
     graph.add_conditional_edges(
         "prd_approval_gate",
         route_prd_approval,
@@ -196,7 +203,14 @@ def create_workflow_graph() -> StateGraph:
     graph.add_edge("regenerate_prd", "prd_approval_gate")
 
     # Spec generation flow (US2)
-    graph.add_edge("generate_spec", "spec_approval_gate")
+    graph.add_conditional_edges(
+        "generate_spec",
+        _route_after_spec_generation,
+        {
+            "spec_approval_gate": "spec_approval_gate",
+            END: END,
+        },
+    )
     graph.add_conditional_edges(
         "spec_approval_gate",
         route_spec_approval,
@@ -209,7 +223,14 @@ def create_workflow_graph() -> StateGraph:
     graph.add_edge("regenerate_spec", "spec_approval_gate")
 
     # Epic decomposition flow (US3)
-    graph.add_edge("decompose_epics", "plan_approval_gate")
+    graph.add_conditional_edges(
+        "decompose_epics",
+        _route_after_epic_decomposition,
+        {
+            "plan_approval_gate": "plan_approval_gate",
+            END: END,  # Error state - don't advance
+        },
+    )
     graph.add_conditional_edges(
         "plan_approval_gate",
         route_plan_approval,
@@ -313,6 +334,66 @@ def create_workflow_graph() -> StateGraph:
     graph.add_edge("task_workflow", END)
 
     return graph
+
+
+def _route_after_generation(
+    state: WorkflowState,
+) -> str:
+    """Route based on PRD generation success.
+
+    If generation failed (has error and no PRD content), don't advance to approval gate.
+
+    Returns:
+        "prd_approval_gate" on success, END on failure.
+    """
+    last_error = state.get("last_error")
+    prd_content = state.get("prd_content", "")
+
+    if last_error and not prd_content:
+        logger.error(f"PRD generation failed, workflow paused: {last_error}")
+        return END
+
+    return "prd_approval_gate"
+
+
+def _route_after_spec_generation(
+    state: WorkflowState,
+) -> str:
+    """Route based on spec generation success.
+
+    If generation failed (has error and no spec content), don't advance to approval gate.
+
+    Returns:
+        "spec_approval_gate" on success, END on failure.
+    """
+    last_error = state.get("last_error")
+    spec_content = state.get("spec_content", "")
+
+    if last_error and not spec_content:
+        logger.error(f"Spec generation failed, workflow paused: {last_error}")
+        return END
+
+    return "spec_approval_gate"
+
+
+def _route_after_epic_decomposition(
+    state: WorkflowState,
+) -> str:
+    """Route based on epic decomposition success.
+
+    If decomposition failed (has error and no epics), don't advance to approval gate.
+
+    Returns:
+        "plan_approval_gate" on success, END ("__end__") on failure.
+    """
+    last_error = state.get("last_error")
+    epic_keys = state.get("epic_keys", [])
+
+    if last_error and not epic_keys:
+        logger.error(f"Epic decomposition failed, workflow paused: {last_error}")
+        return END
+
+    return "plan_approval_gate"
 
 
 def _route_after_workspace_setup(

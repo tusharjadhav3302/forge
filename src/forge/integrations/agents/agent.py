@@ -4,6 +4,7 @@ Uses LangChain Deep Agents to provide agentic capabilities including
 tool use, file operations, and configurable skill paths.
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -26,7 +27,7 @@ except ImportError:
     HAS_MCP = False
 
 from forge.config import Settings, get_settings
-from forge.integrations.langfuse import get_langfuse_config
+from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.prompts import load_prompt, set_default_version
 
 # Optional Vertex AI support
@@ -333,6 +334,54 @@ class ForgeAgent:
 
         return agent
 
+    # Retry settings for rate-limited API calls
+    MAX_RETRIES = 3
+    INITIAL_BACKOFF_SECONDS = 5
+
+    def _is_rate_limit_error(self, error: Exception) -> bool:
+        """Check if an error is a rate limit error that should be retried.
+
+        Args:
+            error: The exception that occurred.
+
+        Returns:
+            True if this is a rate limit error worth retrying.
+        """
+        error_str = str(error).lower()
+        rate_limit_indicators = (
+            "rate limit",
+            "rate-limit",
+            "ratelimit",
+            "429",
+            "403",  # GitHub returns 403 for rate limits
+            "too many requests",
+            "quota exceeded",
+        )
+        return any(indicator in error_str for indicator in rate_limit_indicators)
+
+    def _extract_retry_delay(self, error: Exception) -> int | None:
+        """Extract retry delay from rate limit error message.
+
+        Args:
+            error: The exception with rate limit info.
+
+        Returns:
+            Number of seconds to wait, or None if not found.
+        """
+        error_str = str(error)
+        # Look for patterns like "rate reset in 30s" or "retry after 60 seconds"
+        import re
+        patterns = [
+            r"reset in (\d+)s",
+            r"retry.{0,10}(\d+)\s*second",
+            r"wait (\d+)\s*second",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, error_str, re.IGNORECASE)
+            if match:
+                return int(match.group(1))
+        return None
+
     async def _run_agent(
         self,
         prompt: str,
@@ -342,6 +391,8 @@ class ForgeAgent:
         trace_name: str | None = None,
     ) -> str:
         """Run the agent with the given prompt.
+
+        Implements exponential backoff retry for rate limit errors.
 
         Args:
             prompt: User prompt to send.
@@ -372,15 +423,50 @@ class ForgeAgent:
             metadata={"system_prompt_length": str(len(system_prompt))},
         )
         if langfuse_config:
+            # Extract context params and remove from config
+            langfuse_ctx_params = langfuse_config.pop("_langfuse_context", {})
             config.update(langfuse_config)
+        else:
+            langfuse_ctx_params = {}
 
-        # Invoke the agent asynchronously (required for async MCP tools)
-        result = await agent.ainvoke(
-            {
-                "messages": [{"role": "user", "content": prompt}],
-            },
-            config=config,
-        )
+        # Invoke the agent with retry logic for rate limits
+        # Use async Langfuse context for session tracking (v3+ API)
+        async with get_langfuse_context(
+            session_id=langfuse_ctx_params.get("session_id"),
+            user_id=langfuse_ctx_params.get("user_id"),
+            tags=langfuse_ctx_params.get("tags"),
+        ):
+            last_error: Exception | None = None
+            for attempt in range(self.MAX_RETRIES):
+                try:
+                    result = await agent.ainvoke(
+                        {
+                            "messages": [{"role": "user", "content": prompt}],
+                        },
+                        config=config,
+                    )
+                    break  # Success, exit retry loop
+                except Exception as e:
+                    last_error = e
+                    if self._is_rate_limit_error(e) and attempt < self.MAX_RETRIES - 1:
+                        # Calculate backoff delay
+                        explicit_delay = self._extract_retry_delay(e)
+                        if explicit_delay:
+                            delay = explicit_delay + 1  # Add 1s buffer
+                        else:
+                            delay = self.INITIAL_BACKOFF_SECONDS * (2 ** attempt)
+
+                        logger.warning(
+                            f"Rate limit hit (attempt {attempt + 1}/{self.MAX_RETRIES}), "
+                            f"retrying in {delay}s: {e}"
+                        )
+                        await asyncio.sleep(delay)
+                    else:
+                        raise
+            else:
+                # All retries exhausted
+                if last_error:
+                    raise last_error
 
         # Extract response text from messages
         # Deep Agents returns LangChain message objects, not dicts

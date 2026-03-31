@@ -2,6 +2,7 @@
 
 from forge.integrations.langfuse.tracing import (
     get_langfuse_config,
+    get_langfuse_context,
     get_langfuse_handler,
     shutdown_langfuse,
     trace_llm_call,
@@ -9,6 +10,7 @@ from forge.integrations.langfuse.tracing import (
 
 __all__ = [
     "get_langfuse_config",
+    "get_langfuse_context",
     "get_langfuse_handler",
     "shutdown_langfuse",
     "trace_llm_call",
