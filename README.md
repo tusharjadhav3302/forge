@@ -122,7 +122,7 @@ By default, MCP tools are restricted to **read-only operations** (`AGENT_MCP_REA
 
 ## Running Locally
 
-### Using Docker Compose
+### Using Docker Compose (not tested)
 
 ```bash
 # Start all services
@@ -243,28 +243,6 @@ uv run ruff format src/
 uv run mypy src/forge/
 ```
 
-## Deployment
-
-### Docker
-
-```bash
-# Build image
-docker build -t forge:latest .
-
-# Run container
-docker run -p 8000:8000 --env-file .env forge:latest
-```
-
-### Kubernetes
-
-Helm charts available in `deploy/helm/forge/`.
-
-```bash
-helm install forge ./deploy/helm/forge \
-  --set secrets.anthropicApiKey=$ANTHROPIC_API_KEY \
-  --set secrets.jiraApiToken=$JIRA_API_TOKEN
-```
-
 ## Observability
 
 ### Langfuse Tracing
@@ -279,16 +257,20 @@ All LLM calls are traced to Langfuse for monitoring and debugging:
 
 ### Metrics
 
-Prometheus metrics exposed at `/metrics`:
+Prometheus metrics exposed at `GET /metrics`:
 
-- `forge_webhooks_received_total` - Webhook events received
-- `forge_workflows_started_total` - Workflows started
-- `forge_workflows_completed_total` - Workflows completed
-- `forge_ci_fix_attempts_total` - CI fix attempts
+- `forge_webhooks_received_total` - Webhook events received (by source, event_type)
+- `forge_webhooks_processed_total` - Webhook events processed
+- `forge_workflows_started_total` - Workflows started (by ticket_type)
+- `forge_workflows_completed_total` - Workflows completed (by ticket_type, final_node)
+- `forge_ci_fix_attempts_total` - CI fix attempts (by repo, result)
+- `forge_agent_invocations_total` - Agent invocations (by task_type)
+- `forge_agent_duration_seconds` - Agent invocation duration histogram
+- `forge_queue_depth` - Current event queue depth
+- `forge_mcp_tools_loaded` - MCP tools loaded per server
 
 ## Security
 
-- All API tokens stored as secrets (never in code)
 - Webhook signature verification for Jira and GitHub
 - Ephemeral workspaces cleaned up after PR creation
 - No persistent storage of source code

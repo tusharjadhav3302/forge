@@ -36,6 +36,7 @@ dependencies = [
     "pydantic-settings>=2.6.0",
     "langfuse>=2.50.0",
     "langchain-mcp-adapters>=0.2.2",
+    "prometheus-client>=0.21.0",
 ]
 
 [project.optional-dependencies]

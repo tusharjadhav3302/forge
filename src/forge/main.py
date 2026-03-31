@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from forge import __version__
-from forge.api.routes import github_router, health_router, jira_router
+from forge.api.routes import github_router, health_router, jira_router, metrics_router
 from forge.config import get_settings
 from forge.orchestrator.checkpointer import close_redis_pool
 
@@ -79,6 +79,10 @@ All webhook endpoints verify signatures:
                 "description": "Health check and status endpoints",
             },
             {
+                "name": "metrics",
+                "description": "Prometheus metrics endpoint",
+            },
+            {
                 "name": "jira",
                 "description": "Jira webhook endpoints",
             },
@@ -103,6 +107,7 @@ All webhook endpoints verify signatures:
 
     # Register routes
     app.include_router(health_router)
+    app.include_router(metrics_router)
     app.include_router(jira_router)
     app.include_router(github_router)
 
