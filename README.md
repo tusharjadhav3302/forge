@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="images/logo.png" alt="Forge Logo" width="400">
+  <img src="docs/images/logo.png" alt="Forge Logo" width="400">
 </p>
 
 # Forge - AI-Integrated SDLC Orchestrator
@@ -42,7 +42,6 @@ Forge orchestrates the complete SDLC workflow:
 
 - Python 3.11+
 - Redis 7.0+
-- Podman or Docker (for GitHub MCP server)
 - Jira Cloud account with API access
 - GitHub account with Personal Access Token
 - Anthropic API key (or Google Vertex AI access)
@@ -114,10 +113,12 @@ Forge agents have access to MCP (Model Context Protocol) servers for external in
 
 | Server | Description | Auth Required |
 |--------|-------------|---------------|
-| `github` | Official GitHub MCP (via podman) | `GITHUB_TOKEN` |
-| `atlassian` | Official Atlassian Rovo MCP | `JIRA_USER_EMAIL` + `JIRA_API_TOKEN` |
+| `github` | GitHub Copilot MCP | `GITHUB_TOKEN` |
+| `atlassian` | Local Atlassian MCP (SSE) | `JIRA_USER_EMAIL` + `JIRA_API_TOKEN` |
 | `context7` | Upstash Context7 for library docs | Optional API key |
 | `gitmcp` | GitMCP.io for repo documentation | None |
+
+By default, MCP tools are restricted to **read-only operations** (`AGENT_MCP_READ_ONLY=true`).
 
 ## Running Locally
 

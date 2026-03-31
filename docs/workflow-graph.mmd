@@ -1,93 +1,149 @@
-Graph compiled successfully!
 ---
+title: Forge SDLC Workflow
 config:
+  theme: base
   flowchart:
-    curve: linear
+    curve: basis
+    padding: 20
 ---
-graph TD;
-	__start__(<p>__start__</p>)
-	route_entry(route_entry)
-	generate_prd(generate_prd)
-	prd_approval_gate(prd_approval_gate)
-	regenerate_prd(regenerate_prd)
-	generate_spec(generate_spec)
-	spec_approval_gate(spec_approval_gate)
-	regenerate_spec(regenerate_spec)
-	decompose_epics(decompose_epics)
-	plan_approval_gate(plan_approval_gate)
-	regenerate_all_epics(regenerate_all_epics)
-	update_single_epic(update_single_epic)
-	generate_tasks(generate_tasks)
-	aggregate_pr_results(aggregate_pr_results)
-	task_router(task_router)
-	setup_workspace(setup_workspace)
-	implement_task(implement_task)
-	create_pr(create_pr)
-	teardown_workspace(teardown_workspace)
-	ci_evaluator(ci_evaluator)
-	attempt_ci_fix(attempt_ci_fix)
-	escalate_blocked(escalate_blocked)
-	ai_review(ai_review)
-	human_review_gate(human_review_gate)
-	complete_tasks(complete_tasks)
-	aggregate_epic_status(aggregate_epic_status)
-	aggregate_feature_status(aggregate_feature_status)
-	analyze_bug(analyze_bug)
-	rca_approval_gate(rca_approval_gate)
-	regenerate_rca(regenerate_rca)
-	implement_bug_fix(implement_bug_fix)
-	task_workflow(task_workflow)
-	__end__(<p>__end__</p>)
-	__start__ --> route_entry;
-	aggregate_epic_status --> aggregate_feature_status;
-	ai_review -.-> human_review_gate;
-	ai_review -.-> implement_task;
-	analyze_bug --> rca_approval_gate;
-	attempt_ci_fix --> ci_evaluator;
-	ci_evaluator -.-> ai_review;
-	ci_evaluator -.-> attempt_ci_fix;
-	ci_evaluator -.-> escalate_blocked;
-	complete_tasks --> aggregate_epic_status;
-	create_pr --> teardown_workspace;
-	decompose_epics --> plan_approval_gate;
-	generate_prd --> prd_approval_gate;
-	generate_spec --> spec_approval_gate;
-	generate_tasks --> task_router;
-	human_review_gate -.-> complete_tasks;
-	human_review_gate -.-> implement_task;
-	implement_bug_fix --> create_pr;
-	implement_task -.-> create_pr;
-	plan_approval_gate -.-> generate_tasks;
-	plan_approval_gate -.-> regenerate_all_epics;
-	plan_approval_gate -.-> update_single_epic;
-	prd_approval_gate -.-> generate_spec;
-	prd_approval_gate -.-> regenerate_prd;
-	rca_approval_gate -.-> implement_bug_fix;
-	rca_approval_gate -.-> regenerate_rca;
-	regenerate_all_epics --> plan_approval_gate;
-	regenerate_prd --> prd_approval_gate;
-	regenerate_rca --> rca_approval_gate;
-	regenerate_spec --> spec_approval_gate;
-	route_entry -.-> analyze_bug;
-	route_entry -.-> generate_prd;
-	route_entry -.-> task_workflow;
-	setup_workspace --> implement_task;
-	spec_approval_gate -.-> decompose_epics;
-	spec_approval_gate -.-> regenerate_spec;
-	teardown_workspace -.-> ci_evaluator;
-	teardown_workspace -.-> setup_workspace;
-	update_single_epic --> plan_approval_gate;
-	aggregate_feature_status --> __end__;
-	escalate_blocked --> __end__;
-	task_router --> __end__;
-	task_workflow --> __end__;
-	human_review_gate -.-> human_review_gate;
-	implement_task -.-> implement_task;
-	plan_approval_gate -.-> plan_approval_gate;
-	prd_approval_gate -.-> prd_approval_gate;
-	rca_approval_gate -.-> rca_approval_gate;
-	spec_approval_gate -.-> spec_approval_gate;
-	classDef default fill:#f2f0ff,line-height:1.2
-	classDef first fill-opacity:0
-	classDef last fill:#bfb6fc
+flowchart TD
+    subgraph Entry["Entry Point"]
+        START(("Start"))
+        route_entry{"Route by<br/>Ticket Type"}
+    end
 
+    subgraph Feature["Feature Workflow"]
+        subgraph PRD["US1: PRD Generation"]
+            generate_prd["Generate PRD"]
+            prd_approval_gate{{"PRD Approval<br/>Gate"}}
+            regenerate_prd["Regenerate PRD"]
+        end
+
+        subgraph Spec["US2: Spec Generation"]
+            generate_spec["Generate Spec"]
+            spec_approval_gate{{"Spec Approval<br/>Gate"}}
+            regenerate_spec["Regenerate Spec"]
+        end
+
+        subgraph Epic["US3: Epic Decomposition"]
+            decompose_epics["Decompose Epics"]
+            plan_approval_gate{{"Plan Approval<br/>Gate"}}
+            regenerate_all_epics["Regenerate All Epics"]
+            update_single_epic["Update Single Epic"]
+        end
+
+        subgraph Tasks["US4: Task Generation"]
+            generate_tasks["Generate Tasks"]
+            task_router["Task Router"]
+        end
+    end
+
+    subgraph Execution["US6: Code Execution"]
+        setup_workspace["Setup Workspace"]
+        implement_task["Implement Task"]
+        create_pr["Create PR"]
+        teardown_workspace["Teardown Workspace"]
+    end
+
+    subgraph CICD["US7: CI/CD Validation"]
+        ci_evaluator{"CI Evaluator"}
+        attempt_ci_fix["Attempt CI Fix"]
+        escalate_blocked["Escalate Blocked"]
+    end
+
+    subgraph Review["US8-9: Code Review"]
+        ai_review["AI Review"]
+        human_review_gate{{"Human Review<br/>Gate"}}
+    end
+
+    subgraph Complete["Completion"]
+        complete_tasks["Complete Tasks"]
+        aggregate_epic_status["Aggregate Epic Status"]
+        aggregate_feature_status["Aggregate Feature Status"]
+        END_SUCCESS(("Done"))
+    end
+
+    subgraph Bug["US11: Bug Workflow"]
+        analyze_bug["Analyze Bug"]
+        rca_approval_gate{{"RCA Approval<br/>Gate"}}
+        regenerate_rca["Regenerate RCA"]
+        implement_bug_fix["Implement Bug Fix"]
+    end
+
+    subgraph Direct["Direct Task Execution"]
+        task_workflow["Task Workflow"]
+    end
+
+    %% Entry routing
+    START --> route_entry
+    route_entry -->|Feature| generate_prd
+    route_entry -->|Bug| analyze_bug
+    route_entry -->|Task/Epic| task_workflow
+
+    %% PRD flow
+    generate_prd --> prd_approval_gate
+    prd_approval_gate -->|Approved| generate_spec
+    prd_approval_gate -->|Rejected| regenerate_prd
+    regenerate_prd --> prd_approval_gate
+
+    %% Spec flow
+    generate_spec --> spec_approval_gate
+    spec_approval_gate -->|Approved| decompose_epics
+    spec_approval_gate -->|Rejected| regenerate_spec
+    regenerate_spec --> spec_approval_gate
+
+    %% Epic flow
+    decompose_epics --> plan_approval_gate
+    plan_approval_gate -->|Approved| generate_tasks
+    plan_approval_gate -->|Reject All| regenerate_all_epics
+    plan_approval_gate -->|Reject Epic| update_single_epic
+    regenerate_all_epics --> plan_approval_gate
+    update_single_epic --> plan_approval_gate
+
+    %% Task execution flow
+    generate_tasks --> task_router
+    task_router --> setup_workspace
+    setup_workspace --> implement_task
+    implement_task -->|More Tasks| implement_task
+    implement_task -->|Done| create_pr
+    create_pr --> teardown_workspace
+    teardown_workspace -->|More Repos| setup_workspace
+    teardown_workspace -->|Done| ci_evaluator
+
+    %% CI/CD flow
+    ci_evaluator -->|Passed| ai_review
+    ci_evaluator -->|Failed| attempt_ci_fix
+    ci_evaluator -->|Max Retries| escalate_blocked
+    attempt_ci_fix --> ci_evaluator
+    escalate_blocked --> END_SUCCESS
+
+    %% Review flow
+    ai_review -->|Approved| human_review_gate
+    ai_review -->|Changes| implement_task
+    human_review_gate -->|Approved| complete_tasks
+    human_review_gate -->|Changes| implement_task
+
+    %% Completion flow
+    complete_tasks --> aggregate_epic_status
+    aggregate_epic_status --> aggregate_feature_status
+    aggregate_feature_status --> END_SUCCESS
+
+    %% Bug workflow
+    analyze_bug --> rca_approval_gate
+    rca_approval_gate -->|Approved| implement_bug_fix
+    rca_approval_gate -->|Rejected| regenerate_rca
+    regenerate_rca --> rca_approval_gate
+    implement_bug_fix --> create_pr
+
+    %% Direct task
+    task_workflow --> END_SUCCESS
+
+    %% Styling
+    classDef gate fill:#ffd700,stroke:#b8860b,stroke-width:2px
+    classDef node fill:#e6f3ff,stroke:#4a90d9,stroke-width:1px
+    classDef endpoint fill:#90EE90,stroke:#228B22,stroke-width:2px
+    classDef error fill:#ffcccb,stroke:#dc143c,stroke-width:1px
+
+    class prd_approval_gate,spec_approval_gate,plan_approval_gate,human_review_gate,rca_approval_gate gate
+    class START,END_SUCCESS endpoint
+    class escalate_blocked error
