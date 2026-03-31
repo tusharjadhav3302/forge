@@ -320,8 +320,8 @@ class ForgeAgent:
         if langfuse_config:
             config.update(langfuse_config)
 
-        # Invoke the agent
-        result = agent.invoke(
+        # Invoke the agent asynchronously (required for async MCP tools)
+        result = await agent.ainvoke(
             {
                 "messages": [{"role": "user", "content": prompt}],
             },
