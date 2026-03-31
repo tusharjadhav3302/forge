@@ -493,10 +493,10 @@ class JiraClient:
         """
         import re
 
-        # For long texts, use simple paragraph mode to avoid regex issues
-        # Threshold lowered after observing hangs with complex markdown
-        if len(text) > 3000:
-            logger.debug(f"Using simple ADF for long text ({len(text)} chars)")
+        # For extremely long texts, use simple paragraph mode to avoid regex issues
+        # Threshold set high since PRDs/specs need proper markdown rendering
+        if len(text) > 100000:
+            logger.debug(f"Using simple ADF for very long text ({len(text)} chars)")
             return JiraClient._text_to_simple_adf(text)
 
         content: list[dict[str, Any]] = []
