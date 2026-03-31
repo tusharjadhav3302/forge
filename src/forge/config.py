@@ -136,6 +136,10 @@ class Settings(BaseSettings):
         default="*",
         description="MCP servers to enable: '*' for all from config, or comma-separated list",
     )
+    agent_mcp_read_only: bool = Field(
+        default=True,
+        description="Restrict MCP tools to read-only operations (no create/update/delete)",
+    )
     agent_mcp_config_path: str = Field(
         default="",
         description="Path to MCP servers config file (default: mcp-servers.json in project root)",

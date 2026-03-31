@@ -166,11 +166,21 @@ class ForgeAgent:
             return Path(self.settings.agent_working_directory)
         return PROJECT_ROOT
 
+    # Write operation patterns to filter out in read-only mode
+    WRITE_TOOL_PATTERNS = (
+        # Prefixes
+        "create", "add", "update", "delete", "remove", "push", "merge",
+        "fork", "assign", "edit", "transition", "close", "reopen",
+        "comment", "reply", "approve", "reject", "request", "run",
+    )
+    # Suffixes that indicate write operations
+    WRITE_TOOL_SUFFIXES = ("_write",)
+
     async def _load_mcp_tools(self) -> list[Any]:
         """Load tools from configured MCP servers.
 
         Returns:
-            List of tools from MCP servers.
+            List of tools from MCP servers (filtered if read-only mode).
         """
         if not HAS_MCP:
             logger.warning("langchain-mcp-adapters not installed, MCP tools unavailable")
@@ -188,10 +198,54 @@ class ForgeAgent:
             client = MultiServerMCPClient(mcp_config)
             tools = await client.get_tools()
             logger.info(f"Loaded {len(tools)} tools from MCP servers")
+
+            # Filter to read-only tools if configured
+            if self.settings.agent_mcp_read_only:
+                tools = self._filter_read_only_tools(tools)
+
             return tools
         except Exception as e:
             logger.error(f"Failed to load MCP tools: {e}")
             return []
+
+    def _filter_read_only_tools(self, tools: list[Any]) -> list[Any]:
+        """Filter tools to only read-only operations.
+
+        Args:
+            tools: List of MCP tools.
+
+        Returns:
+            Filtered list with write operations removed.
+        """
+        read_only_tools = []
+        excluded_count = 0
+
+        for tool in tools:
+            name = tool.name if hasattr(tool, "name") else str(tool)
+            name_lower = name.lower()
+
+            # Check if tool name matches write patterns
+            is_write_tool = (
+                # Starts with or contains write prefix
+                any(
+                    name_lower.startswith(prefix) or f"_{prefix}" in name_lower
+                    for prefix in self.WRITE_TOOL_PATTERNS
+                )
+                # Or ends with write suffix
+                or any(name_lower.endswith(suffix) for suffix in self.WRITE_TOOL_SUFFIXES)
+            )
+
+            if is_write_tool:
+                excluded_count += 1
+                logger.debug(f"Excluding write tool: {name}")
+            else:
+                read_only_tools.append(tool)
+
+        logger.info(
+            f"MCP read-only mode: kept {len(read_only_tools)} tools, "
+            f"excluded {excluded_count} write tools"
+        )
+        return read_only_tools
 
     async def _create_agent_async(
         self,
