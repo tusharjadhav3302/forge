@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.png" alt="Forge Logo" width="400">
+</p>
+
 # Forge - AI-Integrated SDLC Orchestrator
 
 An intelligent orchestration system that automates the software development lifecycle from Feature ideation through code delivery using AI-powered planning and execution.
@@ -38,10 +42,10 @@ Forge orchestrates the complete SDLC workflow:
 
 - Python 3.11+
 - Redis 7.0+
-- Docker and Docker Compose (for local development)
+- Podman or Docker (for GitHub MCP server)
 - Jira Cloud account with API access
-- GitHub organization with webhook access
-- Anthropic API key
+- GitHub account with Personal Access Token
+- Anthropic API key (or Google Vertex AI access)
 
 ## Installation
 
@@ -68,36 +72,52 @@ pip install -e .
 
 ## Configuration
 
-Create a `.env` file with the following variables:
+Create a `.env` file with the following variables (see `.env.example` for full list):
 
 ```bash
 # Jira Configuration
 JIRA_BASE_URL=https://your-org.atlassian.net
-JIRA_USERNAME=your-email@example.com
+JIRA_USER_EMAIL=your-email@example.com
 JIRA_API_TOKEN=your-jira-api-token
 
 # GitHub Configuration
-GITHUB_TOKEN=ghp_your_github_token
-GITHUB_APP_ID=123456
-GITHUB_APP_PRIVATE_KEY_PATH=/path/to/private-key.pem
-GITHUB_WEBHOOK_SECRET=your-webhook-secret
+GITHUB_TOKEN=github_pat_your_token
+GITHUB_KNOWN_REPOS=org/repo1,org/repo2
+GITHUB_DEFAULT_REPO=org/repo1
 
-# Anthropic Configuration
+# Anthropic Configuration (choose one)
+# Option 1: Direct API
 ANTHROPIC_API_KEY=sk-ant-your-api-key
+# Option 2: Google Vertex AI
+ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project
+ANTHROPIC_VERTEX_REGION=us-east5
+
+# Claude Model
+CLAUDE_MODEL=claude-opus-4-5@20251101
 
 # Redis Configuration
-REDIS_URL=redis://localhost:6379/0
+REDIS_URL=redis://localhost:6380/0
+
+# MCP Servers (all enabled by default)
+AGENT_ENABLE_MCP=true
+AGENT_MCP_SERVERS=*
 
 # Langfuse Observability (optional)
 LANGFUSE_SECRET_KEY=sk-lf-...
 LANGFUSE_PUBLIC_KEY=pk-lf-...
 LANGFUSE_HOST=https://cloud.langfuse.com
-
-# Application Settings
-LOG_LEVEL=INFO
-CI_FIX_MAX_RETRIES=3
-WORKSPACE_BASE_PATH=/tmp/forge-workspaces
 ```
+
+### MCP Servers
+
+Forge agents have access to MCP (Model Context Protocol) servers for external integrations. Configure in `mcp-servers.json`:
+
+| Server | Description | Auth Required |
+|--------|-------------|---------------|
+| `github` | Official GitHub MCP (via podman) | `GITHUB_TOKEN` |
+| `atlassian` | Official Atlassian Rovo MCP | `JIRA_USER_EMAIL` + `JIRA_API_TOKEN` |
+| `context7` | Upstash Context7 for library docs | Optional API key |
+| `gitmcp` | GitMCP.io for repo documentation | None |
 
 ## Running Locally
 
@@ -175,16 +195,20 @@ src/forge/
 ├── integrations/       # External service clients
 │   ├── jira/          # Jira REST client
 │   ├── github/        # GitHub REST client
-│   ├── claude/        # Anthropic SDK wrapper
+│   ├── agents/        # Deep Agents with MCP integration
 │   └── langfuse/      # Observability
 ├── models/            # Domain and event models
 ├── orchestrator/      # LangGraph workflow
 │   ├── nodes/        # Workflow node implementations
 │   ├── gates/        # Human-in-the-loop gates
 │   └── state.py      # Workflow state schema
+├── prompts/           # Versioned prompt templates
+│   └── v1/           # Prompt version 1
 ├── queue/            # Redis Streams producer/consumer
 ├── workspace/        # Ephemeral workspace management
 └── config.py         # Application configuration
+
+mcp-servers.json       # MCP server configurations
 ```
 
 ## Development
@@ -276,6 +300,4 @@ Prometheus metrics exposed at `/metrics`:
 4. Run tests and linting
 5. Submit a pull request
 
-## License
 
-MIT License - See [LICENSE](LICENSE) for details.

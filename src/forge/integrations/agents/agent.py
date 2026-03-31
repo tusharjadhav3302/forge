@@ -18,8 +18,16 @@ from deepagents.backends.filesystem import FilesystemBackend
 from langchain_anthropic import ChatAnthropic
 from langgraph.checkpoint.memory import MemorySaver
 
+# Optional MCP support
+try:
+    from langchain_mcp_adapters.client import MultiServerMCPClient
+    HAS_MCP = True
+except ImportError:
+    HAS_MCP = False
+
 from forge.config import Settings, get_settings
 from forge.integrations.langfuse import get_langfuse_config
+from forge.prompts import load_prompt, set_default_version
 
 # Optional Vertex AI support
 try:
@@ -31,10 +39,6 @@ except ImportError:
 # Project root directory
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.parent
 
-# Plugin directory containing skills, prompts, and templates
-PLUGIN_DIR = PROJECT_ROOT / "plugins" / "forge-sdlc"
-PROMPTS_DIR = PLUGIN_DIR / "prompts"
-
 # Default MCP servers config file locations (checked in order)
 MCP_CONFIG_PATHS = [
     PROJECT_ROOT / "mcp-servers.json",
@@ -45,38 +49,6 @@ MCP_CONFIG_PATHS = [
 logger = logging.getLogger(__name__)
 
 
-def load_prompt(name: str, context: dict[str, Any] | None = None) -> str:
-    """Load a system prompt from the prompts directory.
-
-    Args:
-        name: Prompt name (without .md extension).
-        context: Variables to substitute in the prompt.
-
-    Returns:
-        Formatted prompt content.
-    """
-    prompt_file = PROMPTS_DIR / f"{name}.md"
-
-    if not prompt_file.exists():
-        logger.warning(f"Prompt file not found: {prompt_file}")
-        return ""
-
-    content = prompt_file.read_text()
-
-    # Substitute context variables
-    if context:
-        for key, value in context.items():
-            content = content.replace(f"{{{key}}}", str(value))
-
-    return content
-
-
-# Fallback prompts if files not found
-FALLBACK_PROMPTS = {
-    "prd": "Today's date is {current_date}. Generate a PRD using the generate-prd skill.",
-    "spec": "Today's date is {current_date}. Generate a spec using the generate-spec skill.",
-    "epic": "Today's date is {current_date}. Decompose into epics using the decompose-epics skill.",
-}
 
 
 def get_weather(city: str) -> str:
@@ -101,6 +73,10 @@ class ForgeAgent:
         self.settings = settings or get_settings()
         self._ensure_api_key()
         self._checkpointer = MemorySaver()
+        self._current_repo: str = ""  # Set per-task for dynamic MCP URLs
+
+        # Set prompt version from config
+        set_default_version(self.settings.prompt_version)
 
     def _ensure_api_key(self) -> None:
         """Ensure Anthropic API key is available."""
@@ -161,6 +137,25 @@ class ForgeAgent:
         logger.debug(f"Using skill paths: {paths}")
         return paths
 
+    def _get_allowed_tools(self) -> list[str] | None:
+        """Get list of allowed tools based on config.
+
+        Returns:
+            List of tool names, or None if all tools allowed.
+        """
+        if not self.settings.agent_enable_tools:
+            logger.debug("Agent tools disabled via config")
+            return []
+
+        allowed = self.settings.agent_allowed_tools.strip()
+        if allowed == "*":
+            logger.debug("All agent tools allowed")
+            return None  # None means all tools
+
+        tools = [t.strip() for t in allowed.split(",") if t.strip()]
+        logger.debug(f"Allowed agent tools: {tools}")
+        return tools
+
     def _get_root_dir(self) -> Path:
         """Get the root directory for the filesystem backend.
 
@@ -171,12 +166,39 @@ class ForgeAgent:
             return Path(self.settings.agent_working_directory)
         return PROJECT_ROOT
 
-    def _create_agent(
+    async def _load_mcp_tools(self) -> list[Any]:
+        """Load tools from configured MCP servers.
+
+        Returns:
+            List of tools from MCP servers.
+        """
+        if not HAS_MCP:
+            logger.warning("langchain-mcp-adapters not installed, MCP tools unavailable")
+            return []
+
+        mcp_config = self._load_mcp_config()
+
+        if not mcp_config:
+            logger.debug("No MCP servers configured")
+            return []
+
+        logger.info(f"Loading MCP tools from servers: {list(mcp_config.keys())}")
+
+        try:
+            client = MultiServerMCPClient(mcp_config)
+            tools = await client.get_tools()
+            logger.info(f"Loaded {len(tools)} tools from MCP servers")
+            return tools
+        except Exception as e:
+            logger.error(f"Failed to load MCP tools: {e}")
+            return []
+
+    async def _create_agent_async(
         self,
         system_prompt: str,
         include_tools: bool = True,
     ) -> Any:
-        """Create a Deep Agent instance with configured skills.
+        """Create a Deep Agent instance with configured skills and MCP tools.
 
         Args:
             system_prompt: System prompt for the agent.
@@ -187,6 +209,11 @@ class ForgeAgent:
         """
         root_dir = self._get_root_dir()
         skill_paths = self._get_skill_paths()
+        allowed_tools = self._get_allowed_tools()
+
+        # Log configuration for visibility
+        logger.info(f"Agent config: root_dir={root_dir}, skills={skill_paths}")
+        logger.info(f"Agent tools: {'all' if allowed_tools is None else allowed_tools}")
 
         # Create filesystem backend
         backend = FilesystemBackend(root_dir=str(root_dir))
@@ -194,7 +221,54 @@ class ForgeAgent:
         # Create the model (supports both direct API and Vertex AI)
         model = self._create_model()
 
-        # Create the agent - no interrupts for automated workflows
+        # Load MCP tools if enabled
+        mcp_tools = await self._load_mcp_tools() if include_tools else []
+
+        # Create the agent with MCP tools
+        agent = create_deep_agent(
+            model=model,
+            backend=backend,
+            skills=skill_paths,
+            system_prompt=system_prompt,
+            checkpointer=self._checkpointer,
+            tools=mcp_tools if mcp_tools else None,
+        )
+
+        return agent
+
+    def _create_agent(
+        self,
+        system_prompt: str,
+        include_tools: bool = True,
+    ) -> Any:
+        """Create a Deep Agent instance (sync wrapper).
+
+        For MCP tools, use _create_agent_async instead.
+
+        Args:
+            system_prompt: System prompt for the agent.
+            include_tools: Whether to include file/search tools.
+
+        Returns:
+            Configured Deep Agent.
+        """
+        root_dir = self._get_root_dir()
+        skill_paths = self._get_skill_paths()
+        allowed_tools = self._get_allowed_tools()
+        mcp_config = self._load_mcp_config()
+
+        # Log configuration for visibility
+        logger.info(f"Agent config: root_dir={root_dir}, skills={skill_paths}")
+        logger.info(f"Agent tools: {'all' if allowed_tools is None else allowed_tools}")
+        logger.info(f"Agent MCP servers: {list(mcp_config.keys())}")
+
+        # Create filesystem backend
+        backend = FilesystemBackend(root_dir=str(root_dir))
+
+        # Create the model (supports both direct API and Vertex AI)
+        model = self._create_model()
+
+        # Create the agent (MCP tools loaded in async version)
         agent = create_deep_agent(
             model=model,
             backend=backend,
@@ -225,7 +299,8 @@ class ForgeAgent:
         Returns:
             Agent response text.
         """
-        agent = self._create_agent(
+        # Use async version to load MCP tools
+        agent = await self._create_agent_async(
             system_prompt=system_prompt,
             include_tools=include_tools,
         )
@@ -295,19 +370,12 @@ class ForgeAgent:
         """
         current_date = datetime.now().strftime("%Y-%m-%d")
 
-        # Build system prompt - let agent choose the best approach
-        system_prompt = f"""Today's date is {current_date}.
+        # Set current repo for dynamic MCP URLs (e.g., gitmcp.io/{owner}/{repo})
+        if context and context.get("current_repo"):
+            self._current_repo = context["current_repo"]
 
-You are an automated SDLC agent. Analyze the task and use the most appropriate skill or approach to complete it.
-
-CRITICAL OUTPUT RULES:
-1. DO NOT include any planning, reasoning, or meta-commentary in your response
-2. DO NOT say things like "Now I have the template" or "Let me generate..."
-3. DO NOT explain what you are doing - just do it
-4. Your response should contain ONLY the final deliverable (PRD, spec, plan, code, etc.)
-5. Start your response directly with the content - no preamble
-
-Complete the task and return the result immediately."""
+        # Load system prompt from file
+        system_prompt = load_prompt("system", current_date=current_date)
 
         if context:
             system_prompt += "\n\nContext:\n"
@@ -333,21 +401,47 @@ Complete the task and return the result immediately."""
         """Load MCP server configuration from JSON file.
 
         Returns:
-            Dictionary with MCP server configurations.
+            Dictionary with server names as keys and configs as values.
+            Format matches langchain-mcp-adapters MultiServerMCPClient.
         """
+        if not self.settings.agent_enable_mcp:
+            logger.debug("MCP disabled via config")
+            return {}
+
+        # Load full config from file
+        all_servers: dict[str, Any] = {}
+
         if self.settings.agent_mcp_config_path:
             custom_path = Path(self.settings.agent_mcp_config_path)
             if custom_path.exists():
-                return self._parse_mcp_config(custom_path)
-            logger.warning(f"MCP config not found at {custom_path}")
+                all_servers = self._parse_mcp_config(custom_path)
+            else:
+                logger.warning(f"MCP config not found at {custom_path}")
+        else:
+            for config_path in MCP_CONFIG_PATHS:
+                if config_path.exists():
+                    logger.debug(f"Loading MCP config from {config_path}")
+                    all_servers = self._parse_mcp_config(config_path)
+                    break
 
-        for config_path in MCP_CONFIG_PATHS:
-            if config_path.exists():
-                logger.debug(f"Loading MCP config from {config_path}")
-                return self._parse_mcp_config(config_path)
+        # Filter servers based on agent_mcp_servers setting
+        enabled_setting = self.settings.agent_mcp_servers.strip()
 
-        logger.debug("No MCP config file found, using empty config")
-        return {"mcpServers": {}}
+        if enabled_setting == "*":
+            # All servers enabled
+            logger.info(f"MCP enabled with all servers: {list(all_servers.keys())}")
+            return all_servers
+
+        # Filter to only enabled servers
+        enabled_list = [s.strip() for s in enabled_setting.split(",") if s.strip()]
+        filtered_servers = {
+            name: config
+            for name, config in all_servers.items()
+            if name in enabled_list
+        }
+
+        logger.info(f"MCP enabled with servers: {list(filtered_servers.keys())}")
+        return filtered_servers
 
     def _parse_mcp_config(self, config_path: Path) -> dict[str, Any]:
         """Parse MCP config file and expand environment variables.
@@ -363,19 +457,22 @@ Complete the task and return the result immediately."""
         return self._expand_env_vars(config)
 
     def _expand_env_vars(self, obj: Any) -> Any:
-        """Recursively expand ${VAR} patterns in config values.
+        """Recursively expand ${VAR} and {owner}/{repo} patterns in config values.
 
         Args:
             obj: Config object (dict, list, or string).
 
         Returns:
-            Object with environment variables expanded.
+            Object with variables expanded.
         """
         if isinstance(obj, dict):
             return {k: self._expand_env_vars(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [self._expand_env_vars(item) for item in obj]
         elif isinstance(obj, str):
+            result = obj
+
+            # Expand ${VAR} patterns (environment variables and settings)
             pattern = r"\$\{([^}]+)\}"
 
             def replace_var(match: re.Match[str]) -> str:
@@ -384,7 +481,13 @@ Complete the task and return the result immediately."""
                     return os.environ[var_name]
                 return self._get_setting_value(var_name)
 
-            return re.sub(pattern, replace_var, obj)
+            result = re.sub(pattern, replace_var, result)
+
+            # Expand {owner}/{repo} pattern for GitMCP URLs
+            if "{owner}/{repo}" in result and self._current_repo:
+                result = result.replace("{owner}/{repo}", self._current_repo)
+
+            return result
         return obj
 
     def _get_setting_value(self, var_name: str) -> str:
@@ -398,9 +501,12 @@ Complete the task and return the result immediately."""
         """
         var_mapping = {
             "GITHUB_TOKEN": lambda: self.settings.github_token.get_secret_value(),
+            "GITHUB_PERSONAL_ACCESS_TOKEN": lambda: self.settings.github_token.get_secret_value(),
             "JIRA_API_TOKEN": lambda: self.settings.jira_api_token.get_secret_value(),
             "JIRA_USER_EMAIL": lambda: self.settings.jira_user_email,
             "JIRA_BASE_URL": lambda: self.settings.jira_base_url,
+            "JIRA_DOMAIN": lambda: self.settings.jira_domain_resolved,
+            "ATLASSIAN_AUTH_BASE64": lambda: self.settings.atlassian_auth_base64,
             "AGENT_WORKING_DIRECTORY": lambda: (
                 self.settings.agent_working_directory or os.getcwd()
             ),
@@ -438,14 +544,11 @@ Complete the task and return the result immediately."""
         Returns:
             Generated PRD content.
         """
-        prompt = f"""Please create a Product Requirements Document from the following raw requirements:
-
-{raw_requirements}
-
-Additional context:
-{context or 'None provided'}
-
-Generate a comprehensive, well-structured PRD following the instructions provided."""
+        prompt = load_prompt(
+            "generate-prd",
+            raw_requirements=raw_requirements,
+            context=context or "None provided",
+        )
 
         logger.info("Generating PRD using Deep Agents with skill")
         result = await self.run_task(
@@ -476,14 +579,11 @@ Generate a comprehensive, well-structured PRD following the instructions provide
         Returns:
             Generated specification content.
         """
-        prompt = f"""Please create a detailed behavioral specification from the following Product Requirements Document:
-
-{prd_content}
-
-Additional context:
-{context or 'None provided'}
-
-Generate a comprehensive specification following the instructions provided."""
+        prompt = load_prompt(
+            "generate-spec",
+            prd_content=prd_content,
+            context=context or "None provided",
+        )
 
         logger.info("Generating Spec using Deep Agents with skill")
         result = await self.run_task(
@@ -515,7 +615,6 @@ Generate a comprehensive specification following the instructions provided."""
             List of dicts with 'summary' and 'plan' for each Epic.
         """
         available_repos = context.get("available_repos", []) if context else []
-        repo_instruction = ""
         if available_repos:
             repo_list = "\n".join(f"  - {r}" for r in available_repos)
             repo_instruction = f"""
@@ -528,16 +627,13 @@ Use REPO: <owner/repo> format in your output. Do NOT invent new repositories."""
             repo_instruction = """
 NOTE: No repositories configured. Use REPO: unknown for now."""
 
-        prompt = f"""Please decompose the following specification into 2-5 logical Epics with implementation plans:
-
-{spec_content}
-
-Additional context:
-- Feature: {context.get('feature_summary', 'Not provided') if context else 'Not provided'}
-- Project: {context.get('project_key', 'Not provided') if context else 'Not provided'}
-{repo_instruction}
-
-Generate the Epic breakdown following the instructions provided."""
+        prompt = load_prompt(
+            "decompose-epics",
+            spec_content=spec_content,
+            feature_summary=context.get("feature_summary", "Not provided") if context else "Not provided",
+            project_key=context.get("project_key", "Not provided") if context else "Not provided",
+            repo_instruction=repo_instruction,
+        )
 
         logger.info("Generating Epics using Deep Agents with skill")
         result = await self.run_task(
@@ -578,15 +674,12 @@ Generate the Epic breakdown following the instructions provided."""
         }
         skill_name = skill_map.get(content_type, "generate-prd")
 
-        prompt = f"""Please revise the following {content_type.upper()} based on the feedback provided:
-
-ORIGINAL CONTENT:
-{original_content}
-
-FEEDBACK:
-{feedback}
-
-Regenerate the content addressing all feedback points while maintaining the overall structure and quality."""
+        prompt = load_prompt(
+            "regenerate",
+            content_type=content_type.upper(),
+            original_content=original_content,
+            feedback=feedback,
+        )
 
         logger.info(f"Regenerating {content_type} with feedback using Deep Agents")
         result = await self.run_task(

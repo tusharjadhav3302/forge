@@ -6,6 +6,7 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
+from forge.prompts import load_prompt
 from langgraph.graph import END
 
 from forge.models.workflow import ForgeLabel
@@ -57,15 +58,11 @@ async def analyze_bug(state: WorkflowState) -> WorkflowState:
         }
 
         # Generate RCA using Deep Agents
-        user_prompt = f"""Please analyze this bug report and generate an RCA:
-
-## Bug: {bug_summary}
-
-## Description
-{bug_description}
-
-Generate a comprehensive Root Cause Analysis with TDD fix approach.
-"""
+        user_prompt = load_prompt(
+            "analyze-bug",
+            bug_summary=bug_summary,
+            bug_description=bug_description,
+        )
 
         rca_content = await agent.run_task(
             task="analyze-bug",
@@ -171,17 +168,7 @@ async def implement_bug_fix(state: WorkflowState) -> WorkflowState:
 
     try:
         # Generate test-first implementation using Deep Agents
-        fix_prompt = f"""Based on this RCA, implement the bug fix using TDD:
-
-{rca_content}
-
-First, write the failing test that would catch this bug.
-Then, implement the minimal fix to make the test pass.
-
-Provide complete file contents for:
-1. The test file
-2. The implementation files that need to change
-"""
+        fix_prompt = load_prompt("fix-bug", rca_content=rca_content)
 
         result = await agent.run_task(
             task="implement-task",
@@ -252,16 +239,11 @@ async def regenerate_rca(state: WorkflowState) -> WorkflowState:
     agent = ForgeAgent(settings)
 
     try:
-        prompt = f"""Please revise this RCA based on the feedback:
-
-ORIGINAL RCA:
-{original_rca}
-
-FEEDBACK:
-{feedback}
-
-Generate an updated RCA addressing the feedback.
-"""
+        prompt = load_prompt(
+            "regenerate-rca",
+            original_rca=original_rca,
+            feedback=feedback,
+        )
 
         new_rca = await agent.run_task(
             task="analyze-bug",

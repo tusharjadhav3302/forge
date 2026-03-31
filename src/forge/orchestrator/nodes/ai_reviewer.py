@@ -6,6 +6,7 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
+from forge.prompts import load_prompt
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -149,33 +150,21 @@ def _build_review_prompt(
     Returns:
         Formatted review prompt.
     """
-    parts = [
-        f"# Pull Request: {pr_title}",
-        "",
-        "## Description",
-        pr_body or "No description provided.",
-        "",
-    ]
-
+    spec_section = ""
     if spec_content:
-        parts.extend([
-            "## Original Specification",
-            spec_content[:3000],  # Truncate if too long
-            "",
-        ])
+        spec_section = f"## Original Specification\n{spec_content[:3000]}\n"
 
+    guardrails_section = ""
     if guardrails:
-        parts.extend([
-            "## Project Guidelines",
-            guardrails[:2000],
-            "",
-        ])
+        guardrails_section = f"## Project Guidelines\n{guardrails[:2000]}\n"
 
-    parts.extend([
-        "Please review this PR for quality, security, and spec alignment.",
-    ])
-
-    return "\n".join(parts)
+    return load_prompt(
+        "review-code",
+        pr_title=pr_title,
+        pr_body=pr_body or "No description provided.",
+        spec_section=spec_section,
+        guardrails_section=guardrails_section,
+    )
 
 
 def _parse_review_decision(review_text: str) -> bool:

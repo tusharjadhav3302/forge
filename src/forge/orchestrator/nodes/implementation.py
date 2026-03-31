@@ -7,6 +7,7 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
+from forge.prompts import load_prompt
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
@@ -160,29 +161,17 @@ def _build_implementation_prompt(
     Returns:
         Formatted prompt.
     """
-    prompt_parts = [
-        f"# Task: {task_summary}",
-        "",
-        "## Description",
-        task_description,
-        "",
-    ]
-
+    guardrails_section = ""
     if guardrails:
-        prompt_parts.extend([
-            "## Project Guidelines",
-            guardrails,
-            "",
-        ])
+        guardrails_section = f"## Project Guidelines\n{guardrails}\n"
 
-    prompt_parts.extend([
-        f"## Workspace: {workspace_path}",
-        "",
-        "Please implement this Task following the guidelines.",
-        "Provide the complete file contents for each file you modify.",
-    ])
-
-    return "\n".join(prompt_parts)
+    return load_prompt(
+        "implement-task",
+        task_summary=task_summary,
+        task_description=task_description,
+        guardrails_section=guardrails_section,
+        workspace_path=workspace_path,
+    )
 
 
 def _apply_code_changes(

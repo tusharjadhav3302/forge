@@ -27,6 +27,21 @@ class Settings(BaseSettings):
     jira_base_url: str = Field(
         description="Jira instance URL (e.g., https://company.atlassian.net)"
     )
+    jira_domain: str = Field(
+        default="",
+        description="Jira domain for MCP (e.g., company.atlassian.net, derived from base URL if empty)"
+    )
+
+    @property
+    def jira_domain_resolved(self) -> str:
+        """Get Jira domain, derived from base URL if not explicitly set."""
+        if self.jira_domain:
+            return self.jira_domain
+        # Extract domain from base URL (e.g., https://company.atlassian.net -> company.atlassian.net)
+        from urllib.parse import urlparse
+        parsed = urlparse(self.jira_base_url)
+        return parsed.netloc or self.jira_base_url
+
     jira_api_token: SecretStr = Field(description="Jira API token for authentication")
     jira_user_email: str = Field(description="Email associated with Jira API token")
     jira_webhook_secret: SecretStr = Field(
@@ -46,6 +61,13 @@ class Settings(BaseSettings):
         default=True,
         description="Store PRD/Spec in comments instead of custom fields",
     )
+
+    @property
+    def atlassian_auth_base64(self) -> str:
+        """Generate base64-encoded auth string for Atlassian MCP (email:api_token)."""
+        import base64
+        credentials = f"{self.jira_user_email}:{self.jira_api_token.get_secret_value()}"
+        return base64.b64encode(credentials.encode()).decode()
 
     # GitHub Configuration
     github_token: SecretStr = Field(description="GitHub personal access token")
@@ -103,16 +125,16 @@ class Settings(BaseSettings):
         description="Enable agent tools (Read, Glob, Grep, WebSearch)",
     )
     agent_allowed_tools: str = Field(
-        default="Read,Glob,Grep,WebSearch",
-        description="Comma-separated list of allowed agent tools",
+        default="*",
+        description="Allowed agent tools: '*' for all, or comma-separated list",
     )
     agent_enable_mcp: bool = Field(
-        default=False,
+        default=True,
         description="Enable MCP server integrations",
     )
     agent_mcp_servers: str = Field(
-        default="github",
-        description="Comma-separated list of MCP servers to enable (as defined in mcp-servers.json)",
+        default="*",
+        description="MCP servers to enable: '*' for all from config, or comma-separated list",
     )
     agent_mcp_config_path: str = Field(
         default="",
@@ -129,6 +151,12 @@ class Settings(BaseSettings):
     agent_backend: str = Field(
         default="filesystem",
         description="Deep Agents backend type: filesystem, state, or store",
+    )
+
+    # Prompt Configuration
+    prompt_version: str = Field(
+        default="v1",
+        description="Prompt template version to use (e.g., v1, v2)",
     )
 
     # Application Configuration

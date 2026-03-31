@@ -6,6 +6,7 @@ from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
+from forge.prompts import load_prompt
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
@@ -169,16 +170,11 @@ async def _generate_tasks_for_epic(
     Returns:
         List of Task dicts with summary, description, repo.
     """
-    prompt = f"""Please break down the following Epic into implementation Tasks:
-
-EPIC: {epic_summary}
-
-IMPLEMENTATION PLAN:
-{epic_plan}
-
-Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
-Include repository assignment when possible (look for mentions of specific repos,
-services, or components in the plan)."""
+    prompt = load_prompt(
+        "generate-tasks",
+        epic_summary=epic_summary,
+        epic_plan=epic_plan,
+    )
 
     result = await agent.run_task(
         task="generate-tasks",

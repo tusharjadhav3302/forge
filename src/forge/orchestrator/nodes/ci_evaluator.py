@@ -6,6 +6,7 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
+from forge.prompts import load_prompt
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
@@ -345,11 +346,4 @@ def _build_fix_prompt(error_info: str) -> str:
     Returns:
         Prompt for Claude.
     """
-    return f"""The following CI checks have failed. Please analyze the errors
-and generate a fix.
-
-{error_info}
-
-Generate the minimal code changes needed to fix these failures.
-Provide complete file contents for any files that need to be modified.
-"""
+    return load_prompt("fix-ci", error_info=error_info)

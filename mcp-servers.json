@@ -1,32 +1,32 @@
 {
-  "mcpServers": {
-    "github": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
-      }
-    },
-    "jira": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-server-atlassian"],
-      "env": {
-        "ATLASSIAN_API_TOKEN": "${JIRA_API_TOKEN}",
-        "ATLASSIAN_EMAIL": "${JIRA_USER_EMAIL}",
-        "ATLASSIAN_BASE_URL": "${JIRA_BASE_URL}"
-      }
-    },
-    "filesystem": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${AGENT_WORKING_DIRECTORY}"]
-    },
-    "memory": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-memory"]
-    },
-    "fetch": {
-      "command": "npx",
-      "args": ["-y", "@anthropic/mcp-server-fetch"]
+  "github": {
+    "transport": "stdio",
+    "command": "podman",
+    "args": [
+      "run", "-i", "--rm",
+      "-e", "GITHUB_PERSONAL_ACCESS_TOKEN",
+      "ghcr.io/github/github-mcp-server"
+    ],
+    "env": {
+      "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
     }
+  },
+  "gitmcp": {
+    "transport": "streamable_http",
+    "url": "https://gitmcp.io/{owner}/{repo}"
+  },
+  "atlassian": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": [
+      "-y", "mcp-remote@latest",
+      "https://mcp.atlassian.com/v1/mcp",
+      "--header", "Authorization: Basic ${ATLASSIAN_AUTH_BASE64}"
+    ]
+  },
+  "context7": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@upstash/context7-mcp"]
   }
 }
