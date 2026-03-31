@@ -61,11 +61,16 @@ class GitOperations:
 
         return result
 
-    def clone(self, repo_url: Optional[str] = None) -> None:
+    def clone(
+        self,
+        repo_url: Optional[str] = None,
+        timeout: int = 300,
+    ) -> None:
         """Clone the repository into the workspace.
 
         Args:
             repo_url: Repository URL. Constructs from settings if None.
+            timeout: Timeout in seconds for the clone operation.
         """
         if repo_url is None:
             token = self.settings.github_token.get_secret_value()
@@ -74,13 +79,25 @@ class GitOperations:
                 f"{self.workspace.repo_name}.git"
             )
 
-        # Clone to workspace path
-        subprocess.run(
-            ["git", "clone", repo_url, str(self.repo_path)],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        # Build clone command (single-branch for faster clone)
+        cmd = ["git", "clone", "--single-branch", repo_url, str(self.repo_path)]
+
+        logger.info(f"Cloning {self.workspace.repo_name}...")
+
+        # Clone with timeout
+        try:
+            subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            raise GitError(
+                f"Clone timed out after {timeout}s for {self.workspace.repo_name}"
+            )
+
         logger.info(f"Cloned {self.workspace.repo_name} to {self.repo_path}")
 
     def create_branch(self, base_branch: str = "main") -> None:

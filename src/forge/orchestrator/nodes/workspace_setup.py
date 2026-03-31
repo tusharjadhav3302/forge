@@ -80,10 +80,13 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         )
 
         # Initialize git operations
+        logger.debug(f"Initializing git operations for {workspace}")
         git = GitOperations(workspace)
 
         # Clone repository
+        logger.info(f"Starting clone of {current_repo}...")
         git.clone()
+        logger.info(f"Clone completed for {current_repo}")
 
         # Create feature branch
         git.create_branch()
