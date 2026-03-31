@@ -16,13 +16,8 @@
     "url": "https://gitmcp.io/{owner}/{repo}"
   },
   "atlassian": {
-    "transport": "stdio",
-    "command": "npx",
-    "args": [
-      "-y", "mcp-remote@latest",
-      "https://mcp.atlassian.com/v1/mcp",
-      "--header", "Authorization: Basic ${ATLASSIAN_AUTH_BASE64}"
-    ]
+    "transport": "sse",
+    "url": "http://127.0.0.1:8080/sse"
   },
   "context7": {
     "transport": "stdio",
