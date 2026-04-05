@@ -1,0 +1,36 @@
+{
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "id": "10456",
+  "self": "https://acme.atlassian.net/rest/api/3/issue/10456",
+  "key": "PROJ-156",
+  "fields": {
+    "issuetype": {
+      "self": "https://acme.atlassian.net/rest/api/3/issuetype/10004",
+      "id": "10004",
+      "description": "A problem or error",
+      "iconUrl": "https://acme.atlassian.net/images/icons/issuetypes/bug.svg",
+      "name": "Bug",
+      "subtask": false,
+      "hierarchyLevel": 0
+    },
+    "project": {
+      "self": "https://acme.atlassian.net/rest/api/3/project/10000",
+      "id": "10000",
+      "key": "PROJ",
+      "name": "Project Alpha"
+    },
+    "created": "2024-03-18T09:15:30.000+0000",
+    "updated": "2024-03-18T09:15:30.000+0000",
+    "priority": {
+      "name": "High",
+      "id": "2"
+    },
+    "labels": ["forge:managed", "production", "urgent"],
+    "status": {
+      "name": "New",
+      "id": "1"
+    },
+    "summary": "Login fails when password contains special characters",
+    "description": "Steps to reproduce:\n1. Go to login page\n2. Enter valid email\n3. Enter password with $, @, or ! characters\n4. Click Login\n\nExpected: User logs in successfully\nActual: 500 Internal Server Error\n\nStack trace from logs:\nValueError: Invalid character in password field at validators.py:23\n\nAffects: 15% of users who have special characters in passwords"
+  }
+}

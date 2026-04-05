@@ -1,0 +1,95 @@
+{
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "id": "10500",
+  "self": "https://acme.atlassian.net/rest/api/3/issue/10500",
+  "key": "PROJ-200",
+  "fields": {
+    "issuetype": {
+      "self": "https://acme.atlassian.net/rest/api/3/issuetype/10000",
+      "id": "10000",
+      "description": "A collection of related features",
+      "iconUrl": "https://acme.atlassian.net/images/icons/issuetypes/epic.svg",
+      "name": "Epic",
+      "subtask": false,
+      "hierarchyLevel": 1
+    },
+    "parent": {
+      "id": "10423",
+      "key": "PROJ-104",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10423",
+      "fields": {
+        "summary": "Implement OAuth2 authentication flow",
+        "status": {
+          "name": "In Progress",
+          "id": "3"
+        },
+        "issuetype": {
+          "name": "Feature",
+          "id": "10001"
+        }
+      }
+    },
+    "project": {
+      "key": "PROJ",
+      "name": "Project Alpha"
+    },
+    "created": "2024-03-20T11:00:00.000+0000",
+    "updated": "2024-03-21T15:45:00.000+0000",
+    "labels": ["forge:managed", "authentication"],
+    "status": {
+      "name": "In Progress",
+      "id": "3"
+    },
+    "summary": "Google OAuth2 Integration",
+    "description": {
+      "version": 1,
+      "type": "doc",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {"type": "text", "text": "Implement Google OAuth2 provider integration including:"}
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {"type": "text", "text": "OAuth2 client configuration"}
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {"type": "text", "text": "Callback handler"}
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {"type": "text", "text": "Token storage and refresh"}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

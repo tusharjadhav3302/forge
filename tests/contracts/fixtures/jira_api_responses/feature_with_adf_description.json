@@ -1,0 +1,130 @@
+{
+  "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+  "id": "10423",
+  "self": "https://acme.atlassian.net/rest/api/3/issue/10423",
+  "key": "PROJ-104",
+  "fields": {
+    "issuetype": {
+      "self": "https://acme.atlassian.net/rest/api/3/issuetype/10001",
+      "id": "10001",
+      "description": "A feature or enhancement",
+      "iconUrl": "https://acme.atlassian.net/images/icons/issuetypes/feature.svg",
+      "name": "Feature",
+      "subtask": false,
+      "hierarchyLevel": 0
+    },
+    "project": {
+      "self": "https://acme.atlassian.net/rest/api/3/project/10000",
+      "id": "10000",
+      "key": "PROJ",
+      "name": "Project Alpha",
+      "projectTypeKey": "software",
+      "simplified": false
+    },
+    "created": "2024-03-15T10:23:45.000+0000",
+    "updated": "2024-03-20T14:30:22.000+0000",
+    "priority": {
+      "self": "https://acme.atlassian.net/rest/api/3/priority/3",
+      "iconUrl": "https://acme.atlassian.net/images/icons/priorities/medium.svg",
+      "name": "Medium",
+      "id": "3"
+    },
+    "labels": ["forge:managed", "forge:prd-pending", "backend"],
+    "status": {
+      "self": "https://acme.atlassian.net/rest/api/3/status/10001",
+      "description": "Work being drafted",
+      "iconUrl": "https://acme.atlassian.net/images/icons/status.svg",
+      "name": "Refinement",
+      "id": "10001",
+      "statusCategory": {
+        "self": "https://acme.atlassian.net/rest/api/3/statuscategory/4",
+        "id": 4,
+        "key": "indeterminate",
+        "colorName": "yellow",
+        "name": "In Progress"
+      }
+    },
+    "summary": "Implement OAuth2 authentication flow",
+    "description": {
+      "version": 1,
+      "type": "doc",
+      "content": [
+        {
+          "type": "heading",
+          "attrs": {"level": 2},
+          "content": [
+            {"type": "text", "text": "User Story"}
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {"type": "text", "text": "As a developer, I want to authenticate users via OAuth2 so that we can integrate with third-party identity providers."}
+          ]
+        },
+        {
+          "type": "heading",
+          "attrs": {"level": 2},
+          "content": [
+            {"type": "text", "text": "Requirements"}
+          ]
+        },
+        {
+          "type": "bulletList",
+          "content": [
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {"type": "text", "text": "Support Google and GitHub as identity providers"}
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {"type": "text", "text": "Store refresh tokens securely"}
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "listItem",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {"type": "text", "text": "Implement token refresh logic"}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "creator": {
+      "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5b10a2844c20165700ede21g",
+      "accountId": "5b10a2844c20165700ede21g",
+      "emailAddress": "pm@acme.com",
+      "displayName": "Alice Johnson",
+      "active": true,
+      "timeZone": "America/Los_Angeles"
+    },
+    "reporter": {
+      "self": "https://acme.atlassian.net/rest/api/3/user?accountId=5b10a2844c20165700ede21g",
+      "accountId": "5b10a2844c20165700ede21g",
+      "emailAddress": "pm@acme.com",
+      "displayName": "Alice Johnson",
+      "active": true
+    },
+    "customfield_10001": "https://github.com/acme/backend",
+    "customfield_10002": "Q2 2024"
+  }
+}
