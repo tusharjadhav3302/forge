@@ -30,10 +30,25 @@ def plan_approval_gate(state: WorkflowState) -> WorkflowState:
         state: Current workflow state.
 
     Returns:
-        State with is_paused=True.
+        State with is_paused=True, or error state if no epics.
     """
     ticket_key = state["ticket_key"]
-    epic_count = len(state.get("epic_keys", []))
+    epic_keys = state.get("epic_keys", [])
+    epic_count = len(epic_keys)
+
+    # Validate that we actually have epics to approve
+    if epic_count == 0:
+        logger.error(
+            f"Plan approval gate reached with 0 Epics for {ticket_key}. "
+            "This indicates epic decomposition failed. Routing back to retry."
+        )
+        return {
+            **state,
+            "last_error": "No Epics generated - decomposition may have failed",
+            "current_node": "decompose_epics",
+            "retry_count": state.get("retry_count", 0) + 1,
+        }
+
     logger.info(
         f"Plan approval gate: pausing workflow for {ticket_key} ({epic_count} Epics)"
     )

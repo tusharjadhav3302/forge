@@ -149,14 +149,49 @@ class OrchestratorWorker:
         is_rejected = False
         feedback = None
 
+        current_node = current_state.get("current_node", "")
+
         for change in label_changes:
             to_labels = change.get("toString", "")
             from_labels = change.get("fromString", "")
 
-            # Check for approval labels
+            # Check for approval labels - but only if it matches the current stage
             if "approved" in to_labels.lower() and "pending" in from_labels.lower():
-                is_approved = True
-                logger.info(f"Detected approval via label change: {from_labels} -> {to_labels}")
+                # Validate the approval matches the workflow stage
+                approval_stage = None
+                if "prd-approved" in to_labels.lower():
+                    approval_stage = "prd"
+                elif "spec-approved" in to_labels.lower():
+                    approval_stage = "spec"
+                elif "plan-approved" in to_labels.lower():
+                    approval_stage = "plan"
+
+                # Map current node to expected approval stage
+                node_to_stage = {
+                    "prd_approval_gate": "prd",
+                    "generate_prd": "prd",
+                    "regenerate_prd": "prd",
+                    "spec_approval_gate": "spec",
+                    "generate_spec": "spec",
+                    "regenerate_spec": "spec",
+                    "plan_approval_gate": "plan",
+                    "decompose_epics": "plan",
+                    "regenerate_all_epics": "plan",
+                    "update_single_epic": "plan",
+                }
+                expected_stage = node_to_stage.get(current_node)
+
+                if approval_stage and expected_stage and approval_stage == expected_stage:
+                    is_approved = True
+                    logger.info(
+                        f"Detected {approval_stage} approval via label change: "
+                        f"{from_labels} -> {to_labels}"
+                    )
+                elif approval_stage:
+                    logger.warning(
+                        f"Ignoring {approval_stage} approval - workflow at {current_node} "
+                        f"(expects {expected_stage})"
+                    )
 
         # Check for rejection comment (contains feedback)
         if comment:
@@ -185,8 +220,15 @@ class OrchestratorWorker:
         if is_approved:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
-            # Clear previous errors on approval so node can retry
-            updated_state["last_error"] = None
+            # Only clear errors if workflow was paused at an approval gate
+            # Don't clear errors if node failed (needs retry, not just approval)
+            if current_state.get("is_paused"):
+                updated_state["last_error"] = None
+            else:
+                logger.info(
+                    f"Keeping last_error for {message.ticket_key} - "
+                    "workflow was not paused, may need retry"
+                )
         elif is_rejected and feedback:
             updated_state["revision_requested"] = True
             updated_state["feedback_comment"] = feedback
