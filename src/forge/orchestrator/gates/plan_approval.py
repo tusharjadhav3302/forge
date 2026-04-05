@@ -12,6 +12,7 @@ import logging
 
 from langgraph.graph import END
 
+from forge.api.routes.metrics import record_approval, record_revision_requested
 from forge.orchestrator.state import WorkflowState, set_paused
 
 logger = logging.getLogger(__name__)
@@ -57,12 +58,14 @@ def route_plan_approval(state: WorkflowState) -> str:
         if current_epic:
             # Single Epic update
             logger.info(f"Single Epic revision requested for {current_epic}")
+            record_revision_requested("plan")
             return "update_single_epic"
         elif feedback:
             # Feature-level regeneration
             logger.info(
                 f"Full Epic regeneration requested for {state['ticket_key']}"
             )
+            record_revision_requested("plan")
             return "regenerate_all_epics"
 
     # Check if still paused - END and wait for approval webhook
@@ -77,4 +80,5 @@ def route_plan_approval(state: WorkflowState) -> str:
     logger.info(
         f"Epics approved for {state['ticket_key']}, proceeding to task generation"
     )
+    record_approval("plan")
     return "generate_tasks"

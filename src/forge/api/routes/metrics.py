@@ -49,6 +49,19 @@ WORKFLOWS_FAILED = Counter(
     ["ticket_type", "error_type"],
 )
 
+# Review/Approval metrics
+APPROVALS = Counter(
+    "forge_approvals_total",
+    "Total number of approvals by stage",
+    ["stage"],  # prd, spec, plan
+)
+
+REVISIONS_REQUESTED = Counter(
+    "forge_revisions_requested_total",
+    "Total number of revision requests by stage",
+    ["stage"],  # prd, spec, plan
+)
+
 # CI/CD metrics
 CI_FIX_ATTEMPTS = Counter(
     "forge_ci_fix_attempts_total",
@@ -152,3 +165,13 @@ def set_queue_depth(queue_name: str, depth: int) -> None:
 def set_mcp_tools_loaded(server: str, count: int) -> None:
     """Set number of MCP tools loaded from a server."""
     MCP_TOOLS_LOADED.labels(server=server).set(count)
+
+
+def record_approval(stage: str) -> None:
+    """Record an approval for a stage (prd, spec, plan)."""
+    APPROVALS.labels(stage=stage).inc()
+
+
+def record_revision_requested(stage: str) -> None:
+    """Record a revision request for a stage (prd, spec, plan)."""
+    REVISIONS_REQUESTED.labels(stage=stage).inc()

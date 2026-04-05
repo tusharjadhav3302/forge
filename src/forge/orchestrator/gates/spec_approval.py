@@ -12,6 +12,7 @@ import logging
 
 from langgraph.graph import END
 
+from forge.api.routes.metrics import record_approval, record_revision_requested
 from forge.orchestrator.state import WorkflowState, set_paused
 
 logger = logging.getLogger(__name__)
@@ -49,6 +50,7 @@ def route_spec_approval(state: WorkflowState) -> str:
     # Check if revision was requested
     if state.get("revision_requested") and state.get("feedback_comment"):
         logger.info(f"Spec revision requested for {state['ticket_key']}")
+        record_revision_requested("spec")
         return "regenerate_spec"
 
     # Check if still paused - END and wait for approval webhook
@@ -63,4 +65,5 @@ def route_spec_approval(state: WorkflowState) -> str:
     logger.info(
         f"Spec approved for {state['ticket_key']}, proceeding to epic decomposition"
     )
+    record_approval("spec")
     return "decompose_epics"
