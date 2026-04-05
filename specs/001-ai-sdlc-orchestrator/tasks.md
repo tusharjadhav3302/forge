@@ -384,6 +384,62 @@
 
 ---
 
+## Phase 19: Error Handling & Resilience
+
+**Goal**: Improve error visibility, user notification, and workflow resilience
+
+**Source**: Error handling analysis (2026-04-05)
+
+### User-Facing Error Communication
+
+- [ ] T138 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/prd_generation.py
+- [ ] T139 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/spec_generation.py
+- [ ] T140 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/epic_decomposition.py
+- [ ] T141 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/task_generation.py
+- [ ] T142 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/implementation.py
+- [ ] T143 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/workspace_setup.py
+- [ ] T144 Create shared error reporting helper in src/forge/orchestrator/nodes/error_handler.py
+
+### Retry Logic & Circuit Breakers
+
+- [ ] T145 Add max retry cap checking to all nodes (compare retry_count vs settings.max_retries)
+- [ ] T146 Implement exponential backoff helper in src/forge/utils/backoff.py
+- [ ] T147 Add retry logic with backoff to GitHub client in src/forge/integrations/github/client.py
+- [ ] T148 Handle 5xx server errors with retry in Jira client (currently only handles 429)
+
+### Queue Consumer Resilience
+
+- [ ] T149 Fix silent exception handling in src/forge/queue/consumer.py:165 (add logging with context)
+- [ ] T150 Improve freshness check error handling in src/forge/queue/consumer.py (don't silently proceed)
+- [ ] T151 Add structured error logging with correlation IDs to consumer
+
+### State & Idempotency
+
+- [ ] T152 Track created resources in state for idempotent retries (avoid duplicate Jira tickets)
+- [ ] T153 Add checkpoint freshness validation before workflow resume
+- [ ] T154 Implement partial failure recovery (skip already-completed tasks on retry)
+
+### API Client Error Handling
+
+- [ ] T155 Handle specific HTTP error codes in Jira client (404, 403, 400) with meaningful errors
+- [ ] T156 Handle specific HTTP error codes in GitHub client with meaningful errors
+- [ ] T157 Add connection timeout and retry for network errors in both clients
+
+### Structured Error Context
+
+- [ ] T158 Enhance WorkflowState with error_type, error_timestamp, error_traceback fields
+- [ ] T159 Add structured error logging middleware with context dict (task_key, repo, node)
+- [ ] T160 Update ForgeLabel enum with BLOCKED_ERROR label for permanent failures
+
+### Error Escalation
+
+- [ ] T161 Implement error threshold escalation (after N retries, post summary to Jira and stop)
+- [ ] T162 Add Slack/webhook notification option for critical failures in src/forge/integrations/notifications/
+
+**Checkpoint**: Errors visible to users, workflows resilient to transient failures
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -400,6 +456,7 @@
 - **Metrics (Phase 16)**: Foundational only - can run in parallel with other work
 - **CLI (Phase 17)**: Depends on API endpoints existing (Phase 2+)
 - **Edge Case Hardening (Phase 18)**: Can run anytime after relevant features exist
+- **Error Handling (Phase 19)**: Can run anytime after relevant nodes exist
 
 ### User Story Dependencies
 
@@ -471,11 +528,12 @@
 
 ## Summary
 
-- **Total Tasks**: 137 (T001-T137)
+- **Total Tasks**: 162 (T001-T162)
 - **Completed**: 134 tasks
-- **Remaining**: 3 tasks (T104, T105, T129)
+- **Remaining**: 28 tasks
 - **New Phases Added** (2026-04-05 via spec sync):
   - Phase 15: US12 Observability (9 tasks) - 9 done
   - Phase 16: US13 Metrics (8 tasks) - 8 done
   - Phase 17: US14 CLI (8 tasks) - 7 done
   - Phase 18: Edge Case Hardening (7 tasks) - 7 done
+  - Phase 19: Error Handling & Resilience (25 tasks) - 0 done
