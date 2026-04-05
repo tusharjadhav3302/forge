@@ -2,7 +2,8 @@
 
 **Feature Branch**: `001-ai-sdlc-orchestrator`
 **Created**: 2026-03-30
-**Status**: Draft
+**Last Modified**: 2026-04-05
+**Status**: Updated (sync-applied)
 **Input**: AI-Integrated SDLC Orchestrator implementation based on LLD
 
 ## User Scenarios & Testing *(mandatory)*
@@ -190,6 +191,71 @@ For Bug tickets, the system bypasses PRD/Spec phases and enters a specialized wo
 
 ---
 
+### User Story 12 - Observability and Tracing (Priority: P3)
+
+The system provides distributed tracing for all workflow executions, enabling operators to trace requests from webhook receipt through AI processing to final output. Each operation is tagged with correlation IDs for end-to-end visibility.
+
+**Why this priority**: Observability is essential for debugging production issues and understanding system behavior at scale.
+
+**Independent Test**: Can be tested by executing a workflow and verifying that trace data appears in the configured tracing backend with complete request paths.
+
+**Acceptance Scenarios**:
+
+1. **Given** a webhook event, **When** processed through the workflow, **Then** all operations are tagged with a correlation ID traceable end-to-end.
+2. **Given** multiple concurrent workflows, **When** an operator queries traces, **Then** each workflow's operations are distinguishable by correlation ID.
+3. **Given** a failed operation, **When** an operator investigates, **Then** the trace shows the exact failure point with context.
+
+**Functional Requirements**:
+- **FR-021**: System MUST assign unique correlation IDs to all incoming requests and propagate them through all downstream operations
+- **FR-022**: System MUST export traces to configurable backends (OpenTelemetry-compatible)
+- **FR-023**: System MUST include workflow phase, ticket ID, and repository in trace metadata
+
+---
+
+### User Story 13 - System Metrics (Priority: P3)
+
+The system exposes operational metrics via a /metrics endpoint for monitoring and alerting. Metrics include workflow throughput, phase durations, error rates, and resource utilization.
+
+**Why this priority**: Metrics enable proactive monitoring and capacity planning, improving operational reliability.
+
+**Independent Test**: Can be tested by sending requests and verifying that counters and histograms update at the /metrics endpoint.
+
+**Acceptance Scenarios**:
+
+1. **Given** the system is running, **When** an operator queries /metrics, **Then** Prometheus-compatible metrics are returned.
+2. **Given** workflows are executing, **When** metrics are scraped, **Then** throughput and duration histograms reflect actual performance.
+3. **Given** errors occur, **When** metrics are queried, **Then** error counters are incremented with appropriate labels.
+
+**Functional Requirements**:
+- **FR-024**: System MUST expose Prometheus-compatible metrics at /metrics endpoint
+- **FR-025**: System MUST track workflow counts, phase durations, error rates, and queue depths
+
+**Success Criteria**:
+- **SC-013**: Metrics endpoint SHOULD respond promptly under normal load
+
+---
+
+### User Story 14 - Command Line Interface (Priority: P3)
+
+Operators can manage the system via a CLI tool, including starting workflows manually, querying status, and viewing logs. The CLI provides an alternative to webhook-driven automation for debugging and manual intervention.
+
+**Why this priority**: CLI access improves operator experience and enables debugging without external tool dependencies.
+
+**Independent Test**: Can be tested by running CLI commands and verifying expected output and system state changes.
+
+**Acceptance Scenarios**:
+
+1. **Given** the CLI is installed, **When** an operator runs `forge status <ticket-id>`, **Then** the current workflow state is displayed.
+2. **Given** a stalled workflow, **When** an operator runs `forge retry <ticket-id>`, **Then** the workflow resumes from the last checkpoint.
+3. **Given** running workflows, **When** an operator runs `forge list`, **Then** all active workflows are displayed with status.
+
+**Functional Requirements**:
+- **FR-026**: CLI MUST support status queries for individual tickets and workflows
+- **FR-027**: CLI MUST support manual workflow triggers and retries
+- **FR-028**: CLI MUST support viewing structured logs filtered by ticket ID
+
+---
+
 ### Edge Cases
 
 - What happens when Jira API rate limits are exceeded during bulk Epic/Task creation?
@@ -203,7 +269,7 @@ For Bug tickets, the system bypasses PRD/Spec phases and enters a specialized wo
 
 ### Functional Requirements
 
-- **FR-001**: System MUST receive webhooks from Jira and acknowledge with HTTP 200 within 500ms
+- **FR-001**: System MUST receive webhooks from Jira and acknowledge with HTTP 202 (Accepted) within 500ms
 - **FR-002**: System MUST process events for the same Jira ticket sequentially (FIFO ordering)
 - **FR-003**: System MUST deduplicate webhook events using unique event identifiers
 - **FR-004**: System MUST verify current Jira ticket status before processing stale queued events
@@ -219,9 +285,9 @@ For Bug tickets, the system bypasses PRD/Spec phases and enters a specialized wo
 - **FR-014**: System MUST attempt autonomous CI failure fixes up to a configurable retry limit
 - **FR-015**: System MUST escalate to human intervention when retry limits are exceeded
 - **FR-016**: System MUST perform AI code review checking quality, security, spec alignment, and constitution compliance
-- **FR-017**: System MUST transition Jira tickets through workflow states as phases complete
+- **FR-017**: System MUST track workflow progress using forge: labels on Jira tickets. Labels indicate current phase (e.g., forge:prd-pending, forge:spec-approved). This approach enables workflow visibility without requiring custom Jira workflow configurations in each target project.
 - **FR-018**: System MUST support modular workflow routing based on Jira Issue Type (Feature, Bug, Tech Debt)
-- **FR-019**: System MUST support concurrent execution across multiple repositories
+- **FR-019**: System MUST support concurrent execution across multiple repositories, with a default limit of 5 concurrent repository workspaces to manage resource consumption. This limit is configurable.
 - **FR-020**: System MUST persist workflow state to survive orchestrator restarts
 
 ### Key Entities
@@ -242,7 +308,7 @@ For Bug tickets, the system bypasses PRD/Spec phases and enters a specialized wo
 - **SC-002**: Spec generation completes within 5 minutes of PRD approval
 - **SC-003**: Epic creation completes within 10 minutes of Spec approval
 - **SC-004**: Task generation completes within 5 minutes per Epic after approval
-- **SC-005**: Webhook acknowledgment occurs within 500ms for 99% of events
+- **SC-005**: Webhook endpoints SHOULD respond promptly. Response time monitoring is available via the /metrics endpoint.
 - **SC-006**: Single-repository PR creation completes within 30 minutes of task assignment
 - **SC-007**: Multi-repository parallel execution opens all PRs within 45 minutes for 5 repositories
 - **SC-008**: Autonomous CI fix attempts resolve 60% of common failures without human intervention
