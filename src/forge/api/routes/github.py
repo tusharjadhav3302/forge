@@ -13,9 +13,12 @@ from forge.integrations.github.webhooks import (
     parse_github_webhook,
 )
 from forge.models.events import EventSource
+from forge.observability.config import get_tracer
+from forge.observability.context import get_correlation_id
 from forge.queue.producer import QueueProducer
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer("forge.api.github")
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["github"])
 
@@ -53,41 +56,62 @@ async def receive_github_webhook(
         Acknowledgment with event ID.
     """
     settings = get_settings()
+    span = tracer.start_span(
+        "github_webhook",
+        attributes={
+            "correlation_id": get_correlation_id(),
+            "forge.source": "github",
+            "forge.event_type": x_github_event,
+        },
+    )
 
-    # Handle ping events
-    if x_github_event == "ping":
-        return {"status": "pong", "event_id": x_github_delivery}
+    try:
+        # Handle ping events
+        if x_github_event == "ping":
+            span.set_attribute("forge.skipped", True)
+            span.set_attribute("forge.skip_reason", "ping")
+            return {"status": "pong", "event_id": x_github_delivery}
 
-    # Read raw body for signature verification
-    body = await request.body()
+        # Read raw body for signature verification
+        body = await request.body()
 
-    # Validate signature
-    if settings.github_webhook_secret.get_secret_value():
-        if not _verify_github_signature(body, x_hub_signature_256, settings.github_webhook_secret.get_secret_value()):
-            logger.warning("Invalid GitHub webhook signature")
+        # Validate signature
+        if settings.github_webhook_secret.get_secret_value():
+            if not _verify_github_signature(
+                body,
+                x_hub_signature_256,
+                settings.github_webhook_secret.get_secret_value(),
+            ):
+                span.set_attribute("error", True)
+                span.set_attribute("error.type", "auth_failure")
+                logger.warning("Invalid GitHub webhook signature")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid webhook signature",
+                )
+
+        # Parse JSON payload
+        try:
+            payload: dict[str, Any] = await request.json()
+        except Exception as e:
+            span.set_attribute("error", True)
+            span.set_attribute("error.type", "parse_error")
+            logger.error(f"Failed to parse GitHub webhook payload: {e}")
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid webhook signature",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid JSON payload",
             )
 
-    # Parse JSON payload
-    try:
-        payload: dict[str, Any] = await request.json()
-    except Exception as e:
-        logger.error(f"Failed to parse GitHub webhook payload: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid JSON payload",
-        )
+        event_id = x_github_delivery or _generate_event_id(payload)
+        span.set_attribute("forge.event_id", event_id)
 
-    event_id = x_github_delivery or _generate_event_id(payload)
-
-    try:
         # Parse webhook data
         webhook_data = parse_github_webhook(payload, x_github_event, event_id)
 
         # Skip events without ticket association
         if not webhook_data.ticket_key:
+            span.set_attribute("forge.skipped", True)
+            span.set_attribute("forge.skip_reason", "no_ticket_association")
             logger.debug(f"Skipping GitHub event {event_id} - no ticket association")
             return {
                 "status": "skipped",
@@ -95,6 +119,7 @@ async def receive_github_webhook(
                 "reason": "no_ticket_association",
             }
 
+        span.set_attribute("forge.ticket_key", webhook_data.ticket_key)
         webhook_event = create_github_webhook_event(webhook_data)
 
         # Queue for async processing
@@ -107,6 +132,7 @@ async def receive_github_webhook(
             payload=webhook_event.payload,
         )
 
+        span.set_attribute("forge.queued", True)
         logger.info(f"Queued GitHub event {event_id} for {webhook_data.ticket_key}")
 
         return {
@@ -115,18 +141,26 @@ async def receive_github_webhook(
             "ticket_key": webhook_data.ticket_key,
         }
 
+    except HTTPException:
+        raise
     except ValueError as e:
+        span.set_attribute("error", True)
+        span.set_attribute("error.type", "validation_error")
         logger.error(f"Failed to parse GitHub webhook: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        span.set_attribute("error", True)
+        span.set_attribute("error.type", "internal_error")
         logger.error(f"Failed to queue GitHub event: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to queue event",
         )
+    finally:
+        span.end()
 
 
 def _verify_github_signature(payload: bytes, signature: str, secret: str) -> bool:

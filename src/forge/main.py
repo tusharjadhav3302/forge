@@ -11,6 +11,8 @@ from forge import __version__
 from forge.api.routes import github_router, health_router, jira_router, metrics_router
 from forge.config import get_settings
 from forge.orchestrator.checkpointer import close_redis_pool
+from forge.api.middleware.correlation import CorrelationIdMiddleware
+from forge.observability.config import configure_tracing, shutdown_tracing
 
 # Configure logging
 logging.basicConfig(
@@ -26,11 +28,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
     logger.info(f"Starting Forge v{__version__} ({settings.log_level})")
 
-    # Startup
+    # Startup - initialize tracing
+    if settings.tracing_enabled:
+        configure_tracing(
+            service_name=settings.otlp_service_name,
+            use_console=(settings.log_level == "DEBUG"),
+        )
+        logger.info("Distributed tracing initialized")
+
     yield
 
     # Shutdown
     logger.info("Shutting down Forge...")
+    if settings.tracing_enabled:
+        await shutdown_tracing()
     await close_redis_pool()
 
 
@@ -104,6 +115,9 @@ All webhook endpoints verify signatures:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Add correlation ID middleware for request tracking
+    app.add_middleware(CorrelationIdMiddleware)
 
     # Register routes
     app.include_router(health_router)

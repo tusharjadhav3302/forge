@@ -248,6 +248,31 @@ async def _check_epic_completion(jira: JiraClient, epic_key: str) -> bool:
     Returns:
         True if all Tasks are done.
     """
-    # In a real implementation, would query for child issues
-    # For now, assume completion if we reach this point
-    return True
+    try:
+        children = await jira.get_epic_children(epic_key)
+
+        if not children:
+            # Edge case: Epic with no Tasks is considered complete
+            logger.warning(f"Epic {epic_key} has no child Tasks - treating as complete")
+            return True
+
+        done_statuses = {"Done", "Closed", "Resolved"}
+        incomplete = [
+            child for child in children
+            if child.status not in done_statuses
+        ]
+
+        if incomplete:
+            logger.info(
+                f"Epic {epic_key} has {len(incomplete)} incomplete Tasks: "
+                f"{[c.key for c in incomplete]}"
+            )
+            return False
+
+        logger.info(f"All {len(children)} Tasks under Epic {epic_key} are done")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to check Epic completion for {epic_key}: {e}")
+        # On error, don't falsely report completion
+        return False

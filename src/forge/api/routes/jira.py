@@ -13,9 +13,12 @@ from forge.integrations.jira.webhooks import (
     parse_jira_webhook,
 )
 from forge.models.events import EventSource
+from forge.observability.config import get_tracer
+from forge.observability.context import get_correlation_id
 from forge.queue.producer import QueueProducer
 
 logger = logging.getLogger(__name__)
+tracer = get_tracer("forge.api.jira")
 
 router = APIRouter(prefix="/api/v1/webhooks", tags=["jira"])
 
@@ -49,36 +52,54 @@ async def receive_jira_webhook(
         Acknowledgment with event ID.
     """
     settings = get_settings()
+    span = tracer.start_span(
+        "jira_webhook",
+        attributes={
+            "correlation_id": get_correlation_id(),
+            "forge.source": "jira",
+        },
+    )
 
-    # Read raw body for signature verification
-    body = await request.body()
+    try:
+        # Read raw body for signature verification
+        body = await request.body()
 
-    # Validate signature if webhook secret is configured
-    if settings.jira_webhook_secret.get_secret_value():
-        x_hub_signature = request.headers.get("X-Hub-Signature-256", "")
-        if not _verify_jira_signature(body, x_hub_signature, settings.jira_webhook_secret.get_secret_value()):
-            logger.warning("Invalid Jira webhook signature")
+        # Validate signature if webhook secret is configured
+        if settings.jira_webhook_secret.get_secret_value():
+            x_hub_signature = request.headers.get("X-Hub-Signature-256", "")
+            if not _verify_jira_signature(
+                body,
+                x_hub_signature,
+                settings.jira_webhook_secret.get_secret_value(),
+            ):
+                span.set_attribute("error", True)
+                span.set_attribute("error.type", "auth_failure")
+                logger.warning("Invalid Jira webhook signature")
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid webhook signature",
+                )
+
+        # Parse JSON payload
+        try:
+            payload: dict[str, Any] = await request.json()
+        except Exception as e:
+            span.set_attribute("error", True)
+            span.set_attribute("error.type", "parse_error")
+            logger.error(f"Failed to parse Jira webhook payload: {e}")
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid webhook signature",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid JSON payload",
             )
 
-    # Parse JSON payload
-    try:
-        payload: dict[str, Any] = await request.json()
-    except Exception as e:
-        logger.error(f"Failed to parse Jira webhook payload: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid JSON payload",
-        )
+        # Generate event ID if not provided
+        event_id = x_atlassian_webhook_identifier or _generate_event_id(payload)
+        span.set_attribute("forge.event_id", event_id)
 
-    # Generate event ID if not provided
-    event_id = x_atlassian_webhook_identifier or _generate_event_id(payload)
-
-    try:
         # Parse webhook data
         webhook_data = parse_jira_webhook(payload, event_id)
+        span.set_attribute("forge.ticket_key", webhook_data.ticket_key)
+        span.set_attribute("forge.event_type", webhook_data.event_type)
 
         # Filter: only process issues with forge:managed label
         issue_labels = payload.get("issue", {}).get("fields", {}).get("labels", [])
@@ -94,6 +115,8 @@ async def receive_jira_webhook(
                     break
 
         if not has_forge_managed:
+            span.set_attribute("forge.skipped", True)
+            span.set_attribute("forge.skip_reason", "missing forge:managed label")
             logger.debug(
                 f"Skipping {webhook_data.ticket_key}: missing forge:managed label"
             )
@@ -116,6 +139,7 @@ async def receive_jira_webhook(
             payload=webhook_event.payload,
         )
 
+        span.set_attribute("forge.queued", True)
         logger.info(f"Queued Jira event {event_id} for {webhook_data.ticket_key}")
 
         return {
@@ -124,18 +148,26 @@ async def receive_jira_webhook(
             "ticket_key": webhook_data.ticket_key,
         }
 
+    except HTTPException:
+        raise
     except ValueError as e:
+        span.set_attribute("error", True)
+        span.set_attribute("error.type", "validation_error")
         logger.error(f"Failed to parse Jira webhook: {e}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
     except Exception as e:
+        span.set_attribute("error", True)
+        span.set_attribute("error.type", "internal_error")
         logger.error(f"Failed to queue Jira event: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to queue event",
         )
+    finally:
+        span.end()
 
 
 def _verify_jira_signature(payload: bytes, signature: str, secret: str) -> bool:

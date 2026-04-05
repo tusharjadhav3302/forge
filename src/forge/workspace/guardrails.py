@@ -71,32 +71,56 @@ class GuardrailsLoader:
         """
         self.repo_path = repo_path
 
-    def load(self) -> Guardrails:
+    def load(self, require_guardrails: bool = False) -> Guardrails:
         """Load guardrails from the repository.
+
+        Args:
+            require_guardrails: If True, raise error when guardrails missing.
 
         Returns:
             Loaded Guardrails instance.
+
+        Raises:
+            ValueError: If require_guardrails is True and no guardrails found.
         """
+        repo_name = self.repo_path.name
         constitution = self._load_file(CONSTITUTION_PATHS)
         agents = self._load_file(AGENTS_PATHS)
 
         if constitution:
             logger.info(
-                f"Loaded constitution ({len(constitution)} chars)"
+                f"[{repo_name}] Loaded constitution ({len(constitution)} chars)"
             )
         else:
-            logger.info("No constitution found")
+            logger.warning(
+                f"[{repo_name}] No constitution.md found. "
+                "AI may operate without project-specific constraints. "
+                f"Consider adding CONSTITUTION.md to {self.repo_path}"
+            )
 
         if agents:
-            logger.info(f"Loaded agents guidelines ({len(agents)} chars)")
+            logger.info(f"[{repo_name}] Loaded agents guidelines ({len(agents)} chars)")
         else:
-            logger.info("No agents guidelines found")
+            logger.warning(
+                f"[{repo_name}] No agents.md/CLAUDE.md found. "
+                "Using default agent behavior. "
+                f"Consider adding AGENTS.md or CLAUDE.md to {self.repo_path}"
+            )
 
-        return Guardrails(
+        guardrails = Guardrails(
             constitution=constitution,
             agents=agents,
             repo_path=self.repo_path,
         )
+
+        # Optionally block execution when guardrails are missing
+        if require_guardrails and not guardrails.has_constitution and not guardrails.has_agents:
+            raise ValueError(
+                f"[{repo_name}] No guardrails found and require_guardrails=True. "
+                "Refusing to execute code without any constraints."
+            )
+
+        return guardrails
 
     def _load_file(self, candidate_paths: list[str]) -> Optional[str]:
         """Load the first existing file from candidate paths.

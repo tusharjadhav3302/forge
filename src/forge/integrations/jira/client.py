@@ -1,5 +1,6 @@
 """Jira REST API client for CRUD operations on tickets."""
 
+import asyncio
 import logging
 from typing import Any, Optional
 
@@ -10,6 +11,11 @@ from forge.integrations.jira.models import JiraComment, JiraIssue
 from forge.models.workflow import ForgeLabel
 
 logger = logging.getLogger(__name__)
+
+# Rate limit retry configuration
+MAX_RETRIES = 5
+INITIAL_BACKOFF_SECONDS = 1.0
+MAX_BACKOFF_SECONDS = 60.0
 
 
 class JiraClient:
@@ -52,6 +58,57 @@ class JiraClient:
             await self._client.aclose()
             self._client = None
 
+    async def _request_with_retry(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Any,
+    ) -> httpx.Response:
+        """Make a request with rate limit handling and exponential backoff.
+
+        Args:
+            method: HTTP method (GET, POST, PUT, DELETE).
+            url: Request URL (relative to base_url).
+            **kwargs: Additional arguments to pass to httpx request.
+
+        Returns:
+            httpx.Response on success.
+
+        Raises:
+            httpx.HTTPStatusError: If request fails after all retries.
+        """
+        client = await self._get_client()
+        backoff = INITIAL_BACKOFF_SECONDS
+
+        for attempt in range(MAX_RETRIES):
+            response = await client.request(method, url, **kwargs)
+
+            if response.status_code != 429:
+                return response
+
+            # Rate limited - apply exponential backoff
+            retry_after = response.headers.get("Retry-After")
+            if retry_after:
+                try:
+                    wait_time = float(retry_after)
+                except ValueError:
+                    wait_time = backoff
+            else:
+                wait_time = backoff
+
+            wait_time = min(wait_time, MAX_BACKOFF_SECONDS)
+
+            logger.warning(
+                f"Jira rate limited (attempt {attempt + 1}/{MAX_RETRIES}). "
+                f"Waiting {wait_time:.1f}s before retry."
+            )
+            await asyncio.sleep(wait_time)
+            backoff = min(backoff * 2, MAX_BACKOFF_SECONDS)
+
+        # Final attempt
+        response = await client.request(method, url, **kwargs)
+        return response
+
     async def get_issue(self, issue_key: str) -> JiraIssue:
         """Fetch a Jira issue by key.
 
@@ -61,8 +118,7 @@ class JiraClient:
         Returns:
             JiraIssue with fields populated from the API response.
         """
-        client = await self._get_client()
-        response = await client.get(f"/issue/{issue_key}")
+        response = await self._request_with_retry("GET", f"/issue/{issue_key}")
         response.raise_for_status()
         data = response.json()
         return JiraIssue.from_api_response(data)
@@ -477,6 +533,52 @@ class JiraClient:
                 return body[start_idx:end_idx].strip()
 
         return None
+
+    async def search_issues(
+        self,
+        jql: str,
+        fields: list[str] | None = None,
+        max_results: int = 50,
+    ) -> list[JiraIssue]:
+        """Search for issues using JQL.
+
+        Args:
+            jql: JQL query string.
+            fields: Optional list of fields to return.
+            max_results: Maximum number of results (default: 50).
+
+        Returns:
+            List of matching JiraIssue objects.
+        """
+        client = await self._get_client()
+        params: dict[str, Any] = {
+            "jql": jql,
+            "maxResults": max_results,
+        }
+        if fields:
+            params["fields"] = ",".join(fields)
+
+        response = await client.get("/search", params=params)
+        response.raise_for_status()
+        data = response.json()
+
+        return [JiraIssue.from_api_response(issue) for issue in data.get("issues", [])]
+
+    async def get_epic_children(self, epic_key: str) -> list[JiraIssue]:
+        """Get all child issues (Tasks/Stories) linked to an Epic.
+
+        Args:
+            epic_key: The Epic's Jira key.
+
+        Returns:
+            List of child JiraIssue objects.
+        """
+        # Use parent link - works in both classic and next-gen projects
+        jql = f'"Parent" = {epic_key} OR "Epic Link" = {epic_key}'
+        return await self.search_issues(
+            jql=jql,
+            fields=["summary", "status", "issuetype"],
+        )
 
     @staticmethod
     def _text_to_adf(text: str) -> dict[str, Any]:

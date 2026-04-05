@@ -174,6 +174,20 @@ class Settings(BaseSettings):
         default=0.5, description="Webhook acknowledgment timeout in seconds"
     )
 
+    # OpenTelemetry Configuration
+    otlp_endpoint: str = Field(
+        default="",
+        description="OTLP endpoint for trace export (e.g., http://localhost:4317)",
+    )
+    otlp_service_name: str = Field(
+        default="forge",
+        description="Service name for trace attribution",
+    )
+    tracing_enabled: bool = Field(
+        default=True,
+        description="Enable distributed tracing",
+    )
+
     @property
     def langfuse_enabled(self) -> bool:
         """Check if Langfuse tracing is configured."""

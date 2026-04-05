@@ -294,6 +294,96 @@
 
 ---
 
+## Phase 15: User Story 12 - Observability and Tracing (Priority: P3)
+
+**Goal**: Provide distributed tracing for all workflow executions with correlation IDs
+
+**Independent Test**: Execute a workflow and verify trace data appears in configured backend with complete request path
+
+**Source**: Added via spec sync (2026-04-05)
+
+### Implementation for User Story 12
+
+- [x] T106 [US12] Create OpenTelemetry configuration in src/forge/observability/config.py (tracer provider, exporters)
+- [x] T107 [US12] Implement correlation ID middleware in src/forge/api/middleware/correlation.py (generate/propagate request IDs)
+- [x] T108 [US12] Implement trace context propagation in src/forge/observability/context.py (thread-local storage)
+- [x] T109 [P] [US12] Add tracing instrumentation to webhook endpoints in src/forge/api/routes/jira.py
+- [x] T110 [P] [US12] Add tracing instrumentation to webhook endpoints in src/forge/api/routes/github.py
+- [x] T111 [US12] Instrument LangGraph workflow execution in src/forge/orchestrator/graph.py
+- [x] T112 [US12] Add trace metadata (workflow phase, ticket ID, repository) to all spans
+- [x] T113 [US12] Implement trace exporter configuration (Jaeger, OTLP endpoints) in src/forge/config.py
+- [x] T114 [US12] Wire tracing into FastAPI app lifecycle in src/forge/main.py
+
+**Checkpoint**: Distributed tracing functional with end-to-end correlation IDs
+
+---
+
+## Phase 16: User Story 13 - System Metrics (Priority: P3)
+
+**Goal**: Expose Prometheus-compatible metrics for monitoring and alerting
+
+**Independent Test**: Send requests and verify counters/histograms update at /metrics endpoint
+
+**Source**: Added via spec sync (2026-04-05)
+
+### Implementation for User Story 13
+
+- [x] T115 [US13] Create Prometheus metrics registry in src/forge/api/routes/metrics.py
+- [x] T116 [US13] Implement /metrics endpoint in src/forge/api/routes/metrics.py
+- [x] T117 [P] [US13] Add workflow counter metrics (total, by phase, by status)
+- [x] T118 [P] [US13] Add phase duration histogram metrics
+- [x] T119 [P] [US13] Add error rate counter metrics with labels (error type, phase)
+- [x] T120 [US13] Add queue depth gauge metrics in src/forge/queue/consumer.py
+- [x] T121 [US13] Instrument external API calls (Jira, GitHub, Claude) with latency histograms
+- [x] T122 [US13] Wire metrics middleware into FastAPI app in src/forge/main.py
+
+**Checkpoint**: Prometheus metrics endpoint functional and scrape-ready
+
+---
+
+## Phase 17: User Story 14 - Command Line Interface (Priority: P3)
+
+**Goal**: CLI tool for operators to manage workflows, query status, and view logs
+
+**Independent Test**: Run CLI commands and verify expected output and system state changes
+
+**Source**: Added via spec sync (2026-04-05)
+
+### Implementation for User Story 14
+
+- [x] T123 [US14] Create CLI entry point in src/forge/cli.py (uses argparse)
+- [x] T124 [US14] Implement `forge check <ticket-id>` command in src/forge/cli.py (status query)
+- [x] T125 [US14] Implement `forge list` command (active workflows) in src/forge/cli.py
+- [x] T126 [US14] Implement `forge retry <ticket-id>` command in src/forge/cli.py
+- [x] T127 [US14] Implement `forge logs <ticket-id>` command in src/forge/cli.py
+- [x] T128 [US14] Implement `forge run <ticket-id>` command (manual workflow start) in src/forge/cli.py
+- [ ] T129 [US14] Add CLI configuration (API endpoint, auth) in src/forge/cli/config.py
+- [x] T130 [US14] Register CLI as console script in pyproject.toml
+
+**Checkpoint**: CLI functional for status queries, retries, and manual triggers
+
+---
+
+## Phase 18: Edge Case Hardening
+
+**Goal**: Address edge cases identified in spec sync drift analysis
+
+**Source**: align-tasks.md from spec sync (2026-04-05)
+
+### Implementation for Edge Cases
+
+- [x] T131 [US9] Fix _check_epic_completion stub in src/forge/orchestrator/nodes/human_review.py (query Jira for child Tasks)
+- [x] T132 Add Jira rate limit handling with exponential backoff in src/forge/integrations/jira/client.py
+- [x] T133 Implement webhook retry queue in src/forge/queue/retry.py (persist failed events, dead-letter queue)
+- [x] T134 Add branch conflict detection before push in src/forge/workspace/git_ops.py
+- [x] T135 Verify and document checkpoint recovery in src/forge/orchestrator/checkpointer.py
+- [x] T136 Add missing guardrails validation warnings in src/forge/workspace/guardrails.py
+- [x] T137 Add merge conflict detection before PR creation in src/forge/orchestrator/nodes/pr_creation.py
+
+**Checkpoint**: Edge cases handled, system more resilient to failures
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -306,6 +396,10 @@
   - US7-9 (P3) depend on US6 (execution must work first)
   - US10-11 (P4) depend on US6 (extends single-repo execution)
 - **Polish (Phase 14)**: Depends on all desired user stories being complete
+- **Observability (Phase 15)**: Foundational only - can run in parallel with other work
+- **Metrics (Phase 16)**: Foundational only - can run in parallel with other work
+- **CLI (Phase 17)**: Depends on API endpoints existing (Phase 2+)
+- **Edge Case Hardening (Phase 18)**: Can run anytime after relevant features exist
 
 ### User Story Dependencies
 
@@ -320,6 +414,9 @@
 - **US9 (Human Review)**: Depends on US8 (AI review must pass first)
 - **US10 (Multi-Repo)**: Extends US6 (single-repo must work)
 - **US11 (Bug Workflow)**: Foundational + US6 (separate entry but uses execution)
+- **US12 (Observability)**: Foundational only - can run in parallel with other stories
+- **US13 (Metrics)**: Foundational only - can run in parallel with other stories
+- **US14 (CLI)**: Foundational only - needs API endpoints to query
 
 ### Parallel Opportunities
 
@@ -371,3 +468,14 @@
 - Each user story checkpoint = independently testable increment
 - Follow LLD phased rollout: Planning Only → Single-Repo → CI/CD → Multi-Repo
 - Commit after each task or logical group
+
+## Summary
+
+- **Total Tasks**: 137 (T001-T137)
+- **Completed**: 134 tasks
+- **Remaining**: 3 tasks (T104, T105, T129)
+- **New Phases Added** (2026-04-05 via spec sync):
+  - Phase 15: US12 Observability (9 tasks) - 9 done
+  - Phase 16: US13 Metrics (8 tasks) - 8 done
+  - Phase 17: US14 CLI (8 tasks) - 7 done
+  - Phase 18: Edge Case Hardening (7 tasks) - 7 done

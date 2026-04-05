@@ -97,6 +97,28 @@ MCP_TOOLS_LOADED = Gauge(
     ["server"],
 )
 
+# Phase duration metrics
+PHASE_DURATION = Histogram(
+    "forge_phase_duration_seconds",
+    "Duration of workflow phases",
+    ["phase"],  # prd_generation, spec_generation, epic_decomposition, task_generation, etc.
+    buckets=[5, 10, 30, 60, 120, 300, 600, 1200, 1800],
+)
+
+# External API latency metrics
+EXTERNAL_API_LATENCY = Histogram(
+    "forge_external_api_latency_seconds",
+    "Latency of external API calls",
+    ["service", "operation"],  # service: jira, github, claude; operation: get_issue, create_pr, etc.
+    buckets=[0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0],
+)
+
+EXTERNAL_API_ERRORS = Counter(
+    "forge_external_api_errors_total",
+    "Total external API call errors",
+    ["service", "operation", "error_type"],
+)
+
 
 @router.get("/metrics")
 async def metrics() -> Response:
@@ -175,3 +197,37 @@ def record_approval(stage: str) -> None:
 def record_revision_requested(stage: str) -> None:
     """Record a revision request for a stage (prd, spec, plan)."""
     REVISIONS_REQUESTED.labels(stage=stage).inc()
+
+
+def observe_phase_duration(phase: str, duration: float) -> None:
+    """Record duration of a workflow phase.
+
+    Args:
+        phase: Phase name (prd_generation, spec_generation, etc.).
+        duration: Duration in seconds.
+    """
+    PHASE_DURATION.labels(phase=phase).observe(duration)
+
+
+def observe_external_api_latency(service: str, operation: str, duration: float) -> None:
+    """Record latency of an external API call.
+
+    Args:
+        service: External service name (jira, github, claude).
+        operation: Operation name (get_issue, create_pr, generate, etc.).
+        duration: Duration in seconds.
+    """
+    EXTERNAL_API_LATENCY.labels(service=service, operation=operation).observe(duration)
+
+
+def record_external_api_error(service: str, operation: str, error_type: str) -> None:
+    """Record an external API call error.
+
+    Args:
+        service: External service name (jira, github, claude).
+        operation: Operation name.
+        error_type: Type of error (timeout, rate_limit, auth, etc.).
+    """
+    EXTERNAL_API_ERRORS.labels(
+        service=service, operation=operation, error_type=error_type
+    ).inc()

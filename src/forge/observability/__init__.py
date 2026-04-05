@@ -1,0 +1,21 @@
+"""Observability module for distributed tracing and metrics."""
+
+from forge.observability.config import (
+    configure_tracing,
+    get_tracer,
+    shutdown_tracing,
+)
+from forge.observability.context import (
+    CorrelationContext,
+    get_correlation_id,
+    set_correlation_id,
+)
+
+__all__ = [
+    "configure_tracing",
+    "get_tracer",
+    "shutdown_tracing",
+    "CorrelationContext",
+    "get_correlation_id",
+    "set_correlation_id",
+]

@@ -5,11 +5,62 @@ from pathlib import Path
 
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
+from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
-from forge.workspace.git_ops import GitOperations
+from forge.workspace.git_ops import GitError, GitOperations
 from forge.workspace.manager import Workspace
 
 logger = logging.getLogger(__name__)
+
+
+async def check_merge_conflicts(
+    git: GitOperations,
+    target_branch: str = "main",
+) -> tuple[bool, list[str]]:
+    """Check if the branch would have merge conflicts with target.
+
+    Simulates a merge to detect conflicts before PR creation.
+
+    Args:
+        git: GitOperations instance.
+        target_branch: Target branch to merge into.
+
+    Returns:
+        Tuple of (has_conflicts, conflicting_files).
+    """
+    try:
+        # Fetch latest target branch
+        git._run_git("fetch", "origin", target_branch, check=False)
+
+        # Try merge in dry-run mode
+        result = git._run_git(
+            "merge-tree",
+            f"origin/{target_branch}",
+            "HEAD",
+            check=False,
+        )
+
+        # merge-tree outputs conflict markers if there would be conflicts
+        output = result.stdout or ""
+
+        if "CONFLICT" in output or "<<<<<<< " in output:
+            # Parse conflicting files from output
+            conflicting_files: list[str] = []
+            for line in output.split("\n"):
+                if line.startswith("CONFLICT"):
+                    # Extract filename from "CONFLICT (content): Merge conflict in file.py"
+                    if " in " in line:
+                        filename = line.split(" in ")[-1].strip()
+                        conflicting_files.append(filename)
+
+            return True, conflicting_files
+
+        return False, []
+
+    except Exception as e:
+        logger.warning(f"Could not check merge conflicts: {e}")
+        # On error, proceed without blocking
+        return False, []
 
 
 async def create_pull_request(state: WorkflowState) -> WorkflowState:
@@ -63,6 +114,32 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             ticket_key=ticket_key,
         )
         git = GitOperations(workspace)
+
+        # Check for merge conflicts before pushing
+        has_conflicts, conflicting_files = await check_merge_conflicts(git, "main")
+
+        if has_conflicts:
+            logger.warning(
+                f"Merge conflicts detected for {ticket_key}: {conflicting_files}"
+            )
+
+            # Transition to blocked status
+            await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
+            await jira.add_comment(
+                ticket_key,
+                f"**Merge Conflicts Detected**\n\n"
+                f"Cannot create PR due to merge conflicts with main branch.\n\n"
+                f"**Conflicting files:**\n"
+                + "\n".join(f"- `{f}`" for f in conflicting_files)
+                + "\n\n*Human intervention required to resolve conflicts.*"
+            )
+
+            return update_state_timestamp({
+                **state,
+                "current_node": "blocked",
+                "last_error": f"Merge conflicts: {conflicting_files}",
+                "merge_conflicts": conflicting_files,
+            })
 
         # Push branch to remote
         git.push()

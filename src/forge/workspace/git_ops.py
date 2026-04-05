@@ -166,12 +166,102 @@ class GitOperations:
         logger.info(f"Committed: {message[:50]}...")
         return True
 
-    def push(self, force: bool = False) -> None:
+    def check_for_conflicts(self, target_branch: str = "main") -> tuple[bool, list[str]]:
+        """Check if pushing would cause conflicts with remote.
+
+        Fetches remote and checks if local and remote have diverged.
+
+        Args:
+            target_branch: Branch to check against (default: main).
+
+        Returns:
+            Tuple of (has_conflicts, conflicting_files).
+            has_conflicts is True if remote has commits not in local.
+        """
+        # Fetch remote changes
+        self._run_git("fetch", "origin", check=False)
+
+        # Check if remote branch exists
+        result = self._run_git(
+            "ls-remote", "--heads", "origin", self.workspace.branch_name,
+            check=False
+        )
+
+        if not result.stdout.strip():
+            # Branch doesn't exist on remote, no conflicts
+            return False, []
+
+        # Check for divergence
+        local_sha = self._run_git(
+            "rev-parse", self.workspace.branch_name, check=False
+        ).stdout.strip()
+
+        remote_sha = self._run_git(
+            "rev-parse", f"origin/{self.workspace.branch_name}", check=False
+        ).stdout.strip()
+
+        if local_sha == remote_sha:
+            # No divergence
+            return False, []
+
+        # Check if remote has commits not in local (we need to merge/rebase)
+        result = self._run_git(
+            "rev-list", "--count",
+            f"{self.workspace.branch_name}..origin/{self.workspace.branch_name}",
+            check=False
+        )
+
+        remote_ahead = int(result.stdout.strip() or "0")
+        if remote_ahead == 0:
+            # We're ahead but not diverged
+            return False, []
+
+        # Check for actual file conflicts with target branch
+        conflicting_files: list[str] = []
+
+        # Try a dry-run merge to detect conflicts
+        result = self._run_git(
+            "merge", "--no-commit", "--no-ff", f"origin/{target_branch}",
+            check=False
+        )
+
+        if result.returncode != 0:
+            # Merge would fail - get conflicting files
+            status = self._run_git("status", "--porcelain", check=False)
+            for line in status.stdout.split("\n"):
+                if line.startswith("UU") or line.startswith("AA") or line.startswith("DD"):
+                    conflicting_files.append(line[3:].strip())
+
+            # Abort the merge attempt
+            self._run_git("merge", "--abort", check=False)
+
+        logger.warning(
+            f"Branch {self.workspace.branch_name} has diverged from remote. "
+            f"Remote is {remote_ahead} commits ahead. "
+            f"Conflicting files: {conflicting_files or 'none detected'}"
+        )
+
+        return True, conflicting_files
+
+    def push(self, force: bool = False, check_conflicts: bool = True) -> None:
         """Push the current branch to origin.
 
         Args:
             force: Force push (use with caution).
+            check_conflicts: Check for conflicts before pushing (default: True).
+
+        Raises:
+            GitError: If conflicts detected and check_conflicts is True.
         """
+        if check_conflicts and not force:
+            has_conflicts, conflicting_files = self.check_for_conflicts()
+            if has_conflicts:
+                raise GitError(
+                    f"Cannot push: branch has diverged from remote. "
+                    f"Conflicting files: {conflicting_files}. "
+                    "Use force=True to override or resolve conflicts first."
+                )
+
         args = ["push", "-u", "origin", self.workspace.branch_name]
         if force:
             args.insert(1, "--force")

@@ -310,6 +310,134 @@ async def cmd_clear_checkpoint(args: argparse.Namespace) -> int:
         return 1
 
 
+async def cmd_list(args: argparse.Namespace) -> int:
+    """List active workflows."""
+    from forge.orchestrator.checkpointer import get_redis_client
+
+    redis_client = await get_redis_client()
+    try:
+        # Scan for workflow checkpoints
+        cursor = 0
+        workflows: list[dict[str, Any]] = []
+
+        while True:
+            cursor, keys = await redis_client.scan(
+                cursor=cursor,
+                match="langgraph:checkpoint:*",
+                count=100,
+            )
+
+            for key in keys:
+                # Extract ticket ID from key
+                key_str = key.decode() if isinstance(key, bytes) else key
+                parts = key_str.split(":")
+                if len(parts) >= 3:
+                    ticket_id = parts[2]
+                    # Get checkpoint data
+                    data = await redis_client.get(key)
+                    if data:
+                        workflows.append({
+                            "ticket": ticket_id,
+                            "key": key_str,
+                        })
+
+            if cursor == 0:
+                break
+
+        if not workflows:
+            print("No active workflows found.")
+            return 0
+
+        # Filter and display based on status flag
+        print(f"\nActive Workflows ({len(workflows)} total):\n")
+        print(f"{'Ticket':<20} {'Checkpoint Key'}")
+        print("-" * 60)
+
+        for wf in sorted(workflows, key=lambda x: x["ticket"]):
+            print(f"{wf['ticket']:<20} {wf['key'][:40]}...")
+
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+async def cmd_retry(args: argparse.Namespace) -> int:
+    """Retry a failed or blocked workflow."""
+    from forge.orchestrator.checkpointer import get_checkpointer
+    from forge.orchestrator.graph import get_workflow
+
+    try:
+        checkpointer = await get_checkpointer()
+        workflow = get_workflow(checkpointer=checkpointer)
+        config = {"configurable": {"thread_id": args.ticket}}
+
+        # Get current state
+        state = await workflow.aget_state(config)
+        if not state or not state.values:
+            print(f"No workflow state found for {args.ticket}")
+            return 1
+
+        current_state = state.values
+        print(f"Current node: {current_state.get('current_node')}")
+        print(f"Retry count: {current_state.get('retry_count', 0)}")
+
+        # Reset retry count and error state
+        updated_state = {
+            **current_state,
+            "retry_count": 0,
+            "last_error": None,
+            "is_paused": False,
+        }
+
+        # Resume workflow
+        result = await workflow.ainvoke(updated_state, config=config)
+        print(f"\nWorkflow retried, now at: {result.get('current_node')}")
+        if result.get('is_paused'):
+            print("Workflow paused, waiting for approval")
+        if result.get('last_error'):
+            print(f"Error: {result.get('last_error')}")
+
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+async def cmd_logs(args: argparse.Namespace) -> int:
+    """View logs for a ticket workflow."""
+    from forge.orchestrator.checkpointer import get_redis_client
+
+    redis_client = await get_redis_client()
+    try:
+        # Look for workflow logs in Redis
+        log_key = f"forge:logs:{args.ticket}"
+        logs = await redis_client.lrange(log_key, 0, args.limit - 1)
+
+        if not logs:
+            # Try to get checkpoint state for any info
+            checkpoint_key = f"langgraph:checkpoint:{args.ticket}"
+            data = await redis_client.get(checkpoint_key)
+            if data:
+                print(f"No logs found, but checkpoint exists for {args.ticket}")
+                print("Use 'forge check {args.ticket}' to see current state")
+            else:
+                print(f"No logs or checkpoint found for {args.ticket}")
+            return 0
+
+        print(f"\nLogs for {args.ticket} (last {len(logs)} entries):\n")
+        print("-" * 80)
+
+        for log_entry in reversed(logs):
+            entry = log_entry.decode() if isinstance(log_entry, bytes) else log_entry
+            print(entry)
+
+        return 0
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 async def cmd_health(args: argparse.Namespace) -> int:
     """Check system health."""
     from forge.orchestrator.checkpointer import get_redis_client
@@ -447,6 +575,32 @@ def main() -> int:
         help="Check system health",
     )
 
+    # list command
+    subparsers.add_parser(
+        "list",
+        help="List active workflows",
+    )
+
+    # retry command
+    retry_parser = subparsers.add_parser(
+        "retry",
+        help="Retry a failed or blocked workflow",
+    )
+    retry_parser.add_argument("ticket", help="Jira ticket key")
+
+    # logs command
+    logs_parser = subparsers.add_parser(
+        "logs",
+        help="View logs for a ticket workflow",
+    )
+    logs_parser.add_argument("ticket", help="Jira ticket key")
+    logs_parser.add_argument(
+        "--limit", "-n",
+        type=int,
+        default=50,
+        help="Number of log entries to show (default: 50)",
+    )
+
     args = parser.parse_args()
     setup_logging(args.verbose)
 
@@ -465,6 +619,9 @@ def main() -> int:
         "reject": cmd_reject,
         "clear-checkpoint": cmd_clear_checkpoint,
         "health": cmd_health,
+        "list": cmd_list,
+        "retry": cmd_retry,
+        "logs": cmd_logs,
     }
 
     handler = handlers.get(args.command)
