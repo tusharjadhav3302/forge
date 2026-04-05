@@ -1,0 +1,159 @@
+{
+  "generated": "2026-04-05T17:15:00Z",
+  "based_on": "drift-report from 2026-04-05T17:00:00Z",
+  "summary": {
+    "total_proposals": 9,
+    "approved": 9,
+    "rejected": 0,
+    "skipped": 0,
+    "backfill_count": 4,
+    "align_count": 7,
+    "new_spec_count": 3
+  },
+  "proposals": [
+    {
+      "id": 1,
+      "requirement": "FR-001",
+      "direction": "BACKFILL",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "current_text": "System MUST receive webhooks from Jira and acknowledge with HTTP 200 within 500ms",
+      "proposed_text": "System MUST receive webhooks from Jira and acknowledge with HTTP 202 (Accepted) within 500ms",
+      "rationale": "HTTP 202 is semantically correct for async processing per RFC 7231",
+      "confidence": "HIGH"
+    },
+    {
+      "id": 2,
+      "requirement": "FR-017",
+      "direction": "BACKFILL",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "current_text": "System MUST transition Jira tickets through workflow states as phases complete",
+      "proposed_text": "System MUST track workflow progress using forge: labels on Jira tickets. Labels indicate current phase (e.g., forge:prd-pending, forge:spec-approved). This approach enables workflow visibility without requiring custom Jira workflow configurations in each target project.",
+      "rationale": "Label-based approach works across any Jira project without admin configuration",
+      "confidence": "HIGH"
+    },
+    {
+      "id": 3,
+      "requirement": "FR-019",
+      "direction": "BACKFILL",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "current_text": "System MUST support concurrent execution across multiple repositories",
+      "proposed_text": "System MUST support concurrent execution across multiple repositories, with a default limit of 5 concurrent repository workspaces to manage resource consumption. This limit is configurable.",
+      "rationale": "Unbounded concurrency would exhaust system resources",
+      "confidence": "HIGH"
+    },
+    {
+      "id": 4,
+      "requirement": "SC-005",
+      "direction": "BACKFILL",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "current_text": "Webhook acknowledgment occurs within 500ms for 99% of events",
+      "proposed_text": "Webhook endpoints SHOULD respond promptly. Response time monitoring is available via the /metrics endpoint.",
+      "rationale": "Removes hard SLA without monitoring infrastructure in place",
+      "confidence": "HIGH"
+    },
+    {
+      "id": 5,
+      "requirement": "US9-check-epic-completion",
+      "direction": "ALIGN",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "location": "src/forge/orchestrator/nodes/human_review.py:241-253",
+      "description": "Implement _check_epic_completion to query Jira for child Tasks and verify all are Done",
+      "estimated_effort": "1 hour",
+      "confidence": "HIGH"
+    },
+    {
+      "id": 6,
+      "requirement": "edge-cases",
+      "direction": "ALIGN",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "tasks": [
+        {
+          "name": "Rate Limit Handling",
+          "location": "src/forge/integrations/jira/client.py",
+          "description": "Add exponential backoff and 429 retry logic"
+        },
+        {
+          "name": "Webhook Retry/Dead-Letter",
+          "location": "src/forge/queue/",
+          "description": "Add failed event persistence and retry queue"
+        },
+        {
+          "name": "Branch Conflict Detection",
+          "location": "src/forge/workspace/git_ops.py",
+          "description": "Check for remote changes before push"
+        },
+        {
+          "name": "Interrupted Execution Recovery",
+          "location": "src/forge/orchestrator/checkpointer.py",
+          "description": "Verify and document checkpoint recovery"
+        },
+        {
+          "name": "Guardrails Validation",
+          "location": "src/forge/workspace/guardrails.py",
+          "description": "Add explicit warnings for missing guardrails"
+        },
+        {
+          "name": "Merge Conflict Detection",
+          "location": "src/forge/orchestrator/nodes/pr_creation.py",
+          "description": "Detect conflicts and escalate to blocked"
+        }
+      ],
+      "estimated_effort": "2-3 days",
+      "confidence": "HIGH"
+    },
+    {
+      "id": 7,
+      "requirement": "US12-observability",
+      "direction": "NEW_SPEC",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "title": "User Story 12 - Observability and Tracing",
+      "priority": "P3",
+      "new_requirements": ["FR-021", "FR-022", "FR-023"],
+      "confidence": "MEDIUM"
+    },
+    {
+      "id": 8,
+      "requirement": "US13-metrics",
+      "direction": "NEW_SPEC",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "title": "User Story 13 - System Metrics",
+      "priority": "P3",
+      "new_requirements": ["FR-024", "FR-025"],
+      "new_success_criteria": ["SC-013"],
+      "confidence": "MEDIUM",
+      "modified": true,
+      "modification": "Softened SC-013 to remove hard 100ms SLA"
+    },
+    {
+      "id": 9,
+      "requirement": "US14-cli",
+      "direction": "NEW_SPEC",
+      "status": "APPROVED",
+      "spec_id": "001-ai-sdlc-orchestrator",
+      "title": "User Story 14 - Command Line Interface",
+      "priority": "P3",
+      "new_requirements": ["FR-026", "FR-027", "FR-028"],
+      "confidence": "MEDIUM"
+    }
+  ],
+  "next_steps": [
+    {
+      "action": "apply_backfill",
+      "command": "/speckit.sync.apply --backfill",
+      "description": "Update spec file with approved backfill changes"
+    },
+    {
+      "action": "apply_align",
+      "command": "/speckit.sync.apply --align",
+      "description": "Generate implementation tasks for code changes"
+    }
+  ]
+}

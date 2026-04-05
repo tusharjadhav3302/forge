@@ -1,0 +1,127 @@
+{
+  "generated": "2026-04-05T17:00:00Z",
+  "project": "forge",
+  "summary": {
+    "specs_analyzed": 1,
+    "requirements_checked": 43,
+    "aligned": 37,
+    "drifted": 4,
+    "not_implemented": 2,
+    "unspecced_features": 3
+  },
+  "specs": [
+    {
+      "id": "001-ai-sdlc-orchestrator",
+      "title": "AI-Integrated SDLC Orchestrator",
+      "aligned": [
+        "US1",
+        "US2",
+        "US3",
+        "US4",
+        "US5",
+        "US6",
+        "US7",
+        "US8",
+        "US9",
+        "US10",
+        "US11",
+        "FR-002",
+        "FR-003",
+        "FR-004",
+        "FR-005",
+        "FR-006",
+        "FR-007",
+        "FR-008",
+        "FR-009",
+        "FR-010",
+        "FR-011",
+        "FR-012",
+        "FR-013",
+        "FR-014",
+        "FR-015",
+        "FR-016",
+        "FR-018",
+        "FR-020"
+      ],
+      "drifted": [
+        {
+          "requirement": "FR-001",
+          "spec_text": "System MUST receive webhooks from Jira and acknowledge with HTTP 200 within 500ms",
+          "actual": "Returns HTTP 202 (Accepted) instead of HTTP 200",
+          "location": "src/forge/api/routes/jira.py:23-25",
+          "severity": "minor"
+        },
+        {
+          "requirement": "FR-017",
+          "spec_text": "System MUST transition Jira tickets through workflow states as phases complete",
+          "actual": "Uses ForgeLabel labels instead of Jira workflow status transitions",
+          "location": "src/forge/models/workflow.py, orchestrator nodes",
+          "severity": "moderate"
+        },
+        {
+          "requirement": "FR-019",
+          "spec_text": "System MUST support concurrent execution across multiple repositories",
+          "actual": "Concurrent execution limited to MAX_CONCURRENT_REPOS = 5",
+          "location": "src/forge/orchestrator/nodes/task_router.py:16",
+          "severity": "minor"
+        },
+        {
+          "requirement": "SC-005",
+          "spec_text": "Webhook acknowledgment occurs within 500ms for 99% of events",
+          "actual": "No explicit timing measurement or enforcement",
+          "location": "N/A",
+          "severity": "minor"
+        }
+      ],
+      "not_implemented": [
+        {
+          "requirement": "US9-check-epic-completion",
+          "description": "_check_epic_completion is a placeholder that always returns True",
+          "location": "src/forge/orchestrator/nodes/human_review.py:241-253"
+        },
+        {
+          "requirement": "edge-cases",
+          "description": "6 edge cases from spec not explicitly handled: rate limits, webhook drops, manual commits, interrupted execution, missing guardrails, merge conflicts"
+        }
+      ]
+    }
+  ],
+  "unspecced": [
+    {
+      "feature": "Langfuse Tracing Integration",
+      "location": "src/forge/integrations/langfuse/",
+      "lines": 200,
+      "suggested_spec": "Add observability section"
+    },
+    {
+      "feature": "Metrics Endpoint",
+      "location": "src/forge/api/routes/metrics.py",
+      "lines": 50,
+      "suggested_spec": "Document monitoring capabilities"
+    },
+    {
+      "feature": "CLI Interface",
+      "location": "src/forge/cli.py",
+      "lines": 100,
+      "suggested_spec": "Add CLI usage documentation"
+    }
+  ],
+  "test_coverage": {
+    "well_covered": [
+      "tests/unit/orchestrator/",
+      "tests/unit/api/routes/",
+      "tests/flows/status_transitions/"
+    ],
+    "gaps": [
+      "tests/integration/jira/",
+      "tests/integration/github/",
+      "tests/integration/agents/",
+      "tests/unit/workspace/",
+      "tests/unit/queue/",
+      "tests/flows/parallel_execution/",
+      "tests/flows/ci_recovery/",
+      "tests/flows/error_recovery/"
+    ]
+  },
+  "conflicts": []
+}
