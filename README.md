@@ -142,7 +142,7 @@ docker-compose up -d redis
 uv run uvicorn forge.main:app --reload --port 8000
 
 # In another terminal, run the queue worker
-uv run python -m forge.queue.worker
+uv run forge worker
 ```
 
 ## API Endpoints

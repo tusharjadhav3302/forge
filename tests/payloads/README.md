@@ -52,4 +52,4 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 
 - Set `JIRA_WEBHOOK_SECRET=` (empty) in `.env` to skip signature validation during testing
 - Change `TEST-123` to match your actual ticket key
-- The workflow must be running (`uv run python -m forge.queue.worker`)
+- The workflow must be running (`uv run forge worker`)
