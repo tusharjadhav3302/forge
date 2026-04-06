@@ -135,6 +135,9 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Epic decomposition failed for {ticket_key}: {e}")
+        # Post error notification to Jira
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "decompose_epics")
         return {
             **state,
             "last_error": str(e),

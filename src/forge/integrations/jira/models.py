@@ -2,7 +2,27 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
+
+
+@dataclass
+class JiraUser:
+    """Represents a Jira user."""
+
+    account_id: str
+    display_name: str
+    email: str | None = None
+
+    @classmethod
+    def from_api_response(cls, data: dict[str, Any] | None) -> "JiraUser | None":
+        """Create a JiraUser from an API response field."""
+        if not data:
+            return None
+        return cls(
+            account_id=data.get("accountId", ""),
+            display_name=data.get("displayName", ""),
+            email=data.get("emailAddress"),
+        )
 
 
 @dataclass
@@ -15,11 +35,13 @@ class JiraIssue:
     description: str
     status: str
     issue_type: str
-    parent_key: Optional[str] = None
+    parent_key: str | None = None
     labels: list[str] = field(default_factory=list)
     custom_fields: dict[str, Any] = field(default_factory=dict)
-    created: Optional[datetime] = None
-    updated: Optional[datetime] = None
+    created: datetime | None = None
+    updated: datetime | None = None
+    reporter: JiraUser | None = None
+    assignee: JiraUser | None = None
 
     @property
     def project_key(self) -> str:
@@ -66,6 +88,10 @@ class JiraIssue:
             k: v for k, v in fields.items() if k.startswith("customfield_")
         }
 
+        # Extract reporter and assignee
+        reporter = JiraUser.from_api_response(fields.get("reporter"))
+        assignee = JiraUser.from_api_response(fields.get("assignee"))
+
         return cls(
             key=data.get("key", ""),
             id=data.get("id", ""),
@@ -78,6 +104,8 @@ class JiraIssue:
             custom_fields=custom_fields,
             created=created,
             updated=updated,
+            reporter=reporter,
+            assignee=assignee,
         )
 
     @staticmethod
@@ -117,8 +145,8 @@ class JiraComment:
     body: str
     author_id: str
     author_name: str
-    created: Optional[datetime] = None
-    updated: Optional[datetime] = None
+    created: datetime | None = None
+    updated: datetime | None = None
 
     @classmethod
     def from_api_response(cls, data: dict[str, Any]) -> "JiraComment":

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -25,7 +25,7 @@ class JiraClient:
     for Features, Epics, Tasks, and Comments.
     """
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(self, settings: Settings | None = None):
         """Initialize the Jira client.
 
         Args:
@@ -33,7 +33,7 @@ class JiraClient:
         """
         self.settings = settings or get_settings()
         self.base_url = f"{self.settings.jira_base_url}/rest/api/3"
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client with authentication."""
@@ -201,7 +201,7 @@ class JiraClient:
         summary: str,
         description: str,
         parent_key: str,
-        labels: Optional[list[str]] = None,
+        labels: list[str] | None = None,
     ) -> str:
         """Create a new Epic linked to a parent Feature.
 
@@ -244,7 +244,7 @@ class JiraClient:
         summary: str,
         description: str,
         parent_key: str,
-        labels: Optional[list[str]] = None,
+        labels: list[str] | None = None,
     ) -> str:
         """Create a new Task linked to a parent Epic.
 
@@ -355,6 +355,87 @@ class JiraClient:
         response.raise_for_status()
         data = response.json()
         logger.info(f"Added comment to {issue_key}")
+        return JiraComment.from_api_response(data)
+
+    async def add_error_comment(
+        self,
+        issue_key: str,
+        error_message: str,
+        node_name: str,
+        mention_account_ids: list[str] | None = None,
+    ) -> JiraComment:
+        """Add an error notification comment with user mentions.
+
+        Args:
+            issue_key: The Jira issue key.
+            error_message: The error message to include.
+            node_name: The workflow node that failed.
+            mention_account_ids: List of Jira account IDs to mention.
+
+        Returns:
+            The created JiraComment.
+        """
+        client = await self._get_client()
+
+        # Build ADF content with mentions
+        mention_nodes: list[dict[str, Any]] = []
+        if mention_account_ids:
+            for account_id in mention_account_ids:
+                if account_id:  # Skip empty account IDs
+                    mention_nodes.append({
+                        "type": "mention",
+                        "attrs": {
+                            "id": account_id,
+                            "text": f"@{account_id}",
+                            "accessLevel": "",
+                        },
+                    })
+                    mention_nodes.append({"type": "text", "text": " "})
+
+        # Build the error message content
+        error_paragraph: list[dict[str, Any]] = [
+            {"type": "text", "text": "Workflow failed at ", "marks": []},
+            {
+                "type": "text",
+                "text": node_name,
+                "marks": [{"type": "strong"}],
+            },
+            {"type": "text", "text": f": {error_message}"},
+        ]
+
+        adf_content: dict[str, Any] = {
+            "version": 1,
+            "type": "doc",
+            "content": [
+                # Mentions paragraph
+                {
+                    "type": "paragraph",
+                    "content": mention_nodes + [
+                        {
+                            "type": "text",
+                            "text": "Forge Workflow Error",
+                            "marks": [{"type": "strong"}],
+                        },
+                    ] if mention_nodes else [
+                        {
+                            "type": "text",
+                            "text": "Forge Workflow Error",
+                            "marks": [{"type": "strong"}],
+                        },
+                    ],
+                },
+                # Error details
+                {"type": "paragraph", "content": error_paragraph},
+            ],
+        }
+
+        response = await client.post(
+            f"/issue/{issue_key}/comment",
+            json={"body": adf_content},
+        )
+        response.raise_for_status()
+        data = response.json()
+        logger.info(f"Added error comment to {issue_key} mentioning {mention_account_ids}")
         return JiraComment.from_api_response(data)
 
     async def get_comments(self, issue_key: str) -> list[JiraComment]:
@@ -593,7 +674,6 @@ class JiraClient:
         Returns:
             ADF document structure.
         """
-        import re
 
         # For extremely long texts, use simple paragraph mode to avoid regex issues
         # Threshold set high since PRDs/specs need proper markdown rendering

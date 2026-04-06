@@ -9,7 +9,6 @@ from typing import Any
 
 from forge.config import get_settings
 from forge.models.events import EventSource
-
 from forge.orchestrator.checkpointer import get_checkpointer
 from forge.orchestrator.graph import get_workflow
 from forge.queue.consumer import QueueConsumer
@@ -96,11 +95,23 @@ class OrchestratorWorker:
                 updated_values = await self._handle_resume_event(message, existing_state.values)
                 logger.info(f"Resuming workflow for {ticket_key}")
 
-                # Update the checkpoint state and resume from where we paused
-                await self.workflow.aupdate_state(config, updated_values)
+                # Check if we're retrying from an error state
+                was_errored = (
+                    not existing_state.values.get("is_paused")
+                    and existing_state.values.get("last_error") is not None
+                )
 
-                # Resume the workflow from the checkpoint (pass None to continue)
-                result = await self.workflow.ainvoke(None, config=config)
+                if was_errored:
+                    # For error retry: invoke fresh with updated state
+                    # This allows route_by_ticket_type to route to the correct node
+                    logger.info(
+                        f"Retrying workflow from error at {updated_values.get('current_node')}"
+                    )
+                    result = await self.workflow.ainvoke(updated_values, config=config)
+                else:
+                    # For normal resume (paused at gate): update state and continue
+                    await self.workflow.aupdate_state(config, updated_values)
+                    result = await self.workflow.ainvoke(None, config=config)
             else:
                 # New workflow - build initial state
                 state = self._build_initial_state(message)
@@ -217,21 +228,28 @@ class OrchestratorWorker:
             },
         }
 
+        # Check if workflow was in an error state (not paused, but has error)
+        was_errored = (
+            not current_state.get("is_paused")
+            and current_state.get("last_error") is not None
+        )
+
         if is_approved:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
-            # Only clear errors if workflow was paused at an approval gate
-            # Don't clear errors if node failed (needs retry, not just approval)
-            if current_state.get("is_paused"):
-                updated_state["last_error"] = None
-            else:
-                logger.info(
-                    f"Keeping last_error for {message.ticket_key} - "
-                    "workflow was not paused, may need retry"
-                )
+            updated_state["last_error"] = None
         elif is_rejected and feedback:
             updated_state["revision_requested"] = True
             updated_state["feedback_comment"] = feedback
+        elif was_errored:
+            # Workflow had an error - any new webhook triggers a retry
+            # Clear the error so the node can be re-executed
+            prev_error = current_state.get("last_error", "")
+            logger.info(
+                f"Clearing last_error for {message.ticket_key} to allow retry "
+                f"(was: {prev_error[:100] if prev_error else 'unknown'})"
+            )
+            updated_state["last_error"] = None
 
         return updated_state
 

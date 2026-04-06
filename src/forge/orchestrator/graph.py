@@ -6,6 +6,10 @@ from typing import Literal
 from langgraph.graph import END, StateGraph
 
 from forge.models.workflow import TicketType
+from forge.orchestrator.gates.plan_approval import (
+    plan_approval_gate,
+    route_plan_approval,
+)
 from forge.orchestrator.gates.prd_approval import (
     prd_approval_gate,
     route_prd_approval,
@@ -14,9 +18,35 @@ from forge.orchestrator.gates.spec_approval import (
     route_spec_approval,
     spec_approval_gate,
 )
-from forge.orchestrator.gates.plan_approval import (
-    plan_approval_gate,
-    route_plan_approval,
+from forge.orchestrator.nodes.ai_reviewer import review_code
+from forge.orchestrator.nodes.bug_workflow import (
+    analyze_bug,
+    implement_bug_fix,
+    rca_approval_gate,
+    regenerate_rca,
+    route_rca_approval,
+)
+from forge.orchestrator.nodes.ci_evaluator import (
+    attempt_ci_fix,
+    escalate_to_blocked,
+    evaluate_ci_status,
+)
+from forge.orchestrator.nodes.epic_decomposition import (
+    decompose_epics,
+    regenerate_all_epics,
+    update_single_epic,
+)
+from forge.orchestrator.nodes.human_review import (
+    aggregate_epic_status,
+    aggregate_feature_status,
+    complete_tasks,
+    human_review_gate,
+    route_human_review,
+)
+from forge.orchestrator.nodes.implementation import implement_task
+from forge.orchestrator.nodes.pr_creation import (
+    create_pull_request,
+    teardown_and_route,
 )
 from forge.orchestrator.nodes.prd_generation import (
     generate_prd,
@@ -26,11 +56,6 @@ from forge.orchestrator.nodes.spec_generation import (
     generate_spec,
     regenerate_spec_with_feedback,
 )
-from forge.orchestrator.nodes.epic_decomposition import (
-    decompose_epics,
-    regenerate_all_epics,
-    update_single_epic,
-)
 from forge.orchestrator.nodes.task_generation import generate_tasks
 from forge.orchestrator.nodes.task_router import (
     aggregate_parallel_results,
@@ -39,31 +64,6 @@ from forge.orchestrator.nodes.task_router import (
     should_use_parallel_execution,
 )
 from forge.orchestrator.nodes.workspace_setup import setup_workspace
-from forge.orchestrator.nodes.implementation import implement_task
-from forge.orchestrator.nodes.pr_creation import (
-    create_pull_request,
-    teardown_and_route,
-)
-from forge.orchestrator.nodes.ci_evaluator import (
-    attempt_ci_fix,
-    escalate_to_blocked,
-    evaluate_ci_status,
-)
-from forge.orchestrator.nodes.ai_reviewer import review_code
-from forge.orchestrator.nodes.human_review import (
-    aggregate_epic_status,
-    aggregate_feature_status,
-    complete_tasks,
-    human_review_gate,
-    route_human_review,
-)
-from forge.orchestrator.nodes.bug_workflow import (
-    analyze_bug,
-    implement_bug_fix,
-    rca_approval_gate,
-    regenerate_rca,
-    route_rca_approval,
-)
 from forge.orchestrator.state import WorkflowState
 
 logger = logging.getLogger(__name__)
@@ -71,15 +71,49 @@ logger = logging.getLogger(__name__)
 
 def route_by_ticket_type(
     state: WorkflowState,
-) -> Literal["generate_prd", "analyze_bug", "task_workflow"]:
-    """Route workflow based on ticket type.
+) -> str:
+    """Route workflow based on ticket type or resume from current node.
+
+    If the workflow is being resumed (current_node is set), route to the
+    appropriate node based on where the workflow was. This enables retry
+    from error states.
 
     Args:
         state: Current workflow state.
 
     Returns:
-        Next node name based on ticket type.
+        Next node name based on ticket type or current progress.
     """
+    current_node = state.get("current_node", "")
+
+    # If we have a current_node from a previous run, route based on progress
+    # This enables retry from error states
+    if current_node and current_node not in ("entry", "__end__", ""):
+        logger.info(f"Resuming workflow at node: {current_node}")
+
+        # Map current_node to the appropriate starting point
+        # Feature workflow nodes
+        if current_node in ("generate_prd", "regenerate_prd"):
+            return "generate_prd"
+        elif current_node == "prd_approval_gate":
+            return "prd_approval_gate"
+        elif current_node in ("generate_spec", "regenerate_spec"):
+            return "generate_spec"
+        elif current_node == "spec_approval_gate":
+            return "spec_approval_gate"
+        elif current_node in ("decompose_epics", "regenerate_all_epics", "update_single_epic"):
+            return "decompose_epics"
+        elif current_node == "plan_approval_gate":
+            return "plan_approval_gate"
+        elif current_node == "generate_tasks":
+            return "generate_tasks"
+        # Bug workflow nodes
+        elif current_node in ("analyze_bug", "regenerate_rca"):
+            return "analyze_bug"
+        elif current_node == "rca_approval_gate":
+            return "rca_approval_gate"
+        # Fall through to ticket type routing
+
     ticket_type = state.get("ticket_type")
 
     if ticket_type == TicketType.FEATURE:
@@ -171,14 +205,24 @@ def create_workflow_graph() -> StateGraph:
     # Set entry point
     graph.set_entry_point("route_entry")
 
-    # Route from entry based on ticket type
+    # Route from entry based on ticket type or resume state
     graph.add_conditional_edges(
         "route_entry",
         route_by_ticket_type,
         {
+            # Initial routing by ticket type
             "generate_prd": "generate_prd",
             "analyze_bug": "analyze_bug",
             "task_workflow": "task_workflow",
+            # Resume routing for Feature workflow
+            "prd_approval_gate": "prd_approval_gate",
+            "generate_spec": "generate_spec",
+            "spec_approval_gate": "spec_approval_gate",
+            "decompose_epics": "decompose_epics",
+            "plan_approval_gate": "plan_approval_gate",
+            "generate_tasks": "generate_tasks",
+            # Resume routing for Bug workflow
+            "rca_approval_gate": "rca_approval_gate",
         },
     )
 

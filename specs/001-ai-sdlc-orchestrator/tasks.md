@@ -436,6 +436,18 @@
 - [ ] T161 Implement error threshold escalation (after N retries, post summary to Jira and stop)
 - [ ] T162 Add Slack/webhook notification option for critical failures in src/forge/integrations/notifications/
 
+### MCP Tool Resilience
+
+- [x] T163 Wrap MCP tools with error handling in src/forge/integrations/agents/agent.py (_wrap_tool_with_error_handling)
+- [x] T164 Add include_tools parameter to run_task() for controlling MCP per-operation
+- [x] T165 MCP tool errors now return error messages to agent instead of crashing workflow
+- [ ] T166 Add unit tests for MCP tool error wrapper in tests/test_agent_mcp_resilience.py
+
+### Workflow Error Recovery
+
+- [x] T167 Clear last_error on workflow resume to allow node retry in src/forge/orchestrator/worker.py
+- [ ] T168 Add retry counter to prevent infinite error loops (max retries per node)
+
 **Checkpoint**: Errors visible to users, workflows resilient to transient failures
 
 ---
@@ -528,12 +540,12 @@
 
 ## Summary
 
-- **Total Tasks**: 162 (T001-T162)
-- **Completed**: 134 tasks
-- **Remaining**: 28 tasks
+- **Total Tasks**: 168 (T001-T168)
+- **Completed**: 138 tasks
+- **Remaining**: 30 tasks
 - **New Phases Added** (2026-04-05 via spec sync):
   - Phase 15: US12 Observability (9 tasks) - 9 done
   - Phase 16: US13 Metrics (8 tasks) - 8 done
   - Phase 17: US14 CLI (8 tasks) - 7 done
   - Phase 18: Edge Case Hardening (7 tasks) - 7 done
-  - Phase 19: Error Handling & Resilience (25 tasks) - 0 done
+  - Phase 19: Error Handling & Resilience (31 tasks) - 4 done

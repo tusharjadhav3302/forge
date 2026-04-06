@@ -11,6 +11,7 @@ import os
 import re
 import uuid
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
 from typing import Any
 
@@ -21,9 +22,11 @@ from langgraph.checkpoint.memory import MemorySaver
 
 # Optional MCP support
 try:
+    from langchain_core.tools import StructuredTool
     from langchain_mcp_adapters.client import MultiServerMCPClient
     HAS_MCP = True
 except ImportError:
+    StructuredTool = None  # type: ignore[misc, assignment]
     HAS_MCP = False
 
 from forge.config import Settings, get_settings
@@ -177,6 +180,64 @@ class ForgeAgent:
     # Suffixes that indicate write operations
     WRITE_TOOL_SUFFIXES = ("_write",)
 
+    def _wrap_tool_with_error_handling(self, tool: Any) -> Any:
+        """Wrap a tool to catch errors and return them as messages.
+
+        This prevents MCP tool errors from crashing the entire workflow.
+        Instead, errors are returned to the agent as informative messages
+        so it can try alternative approaches.
+
+        Args:
+            tool: The original tool to wrap.
+
+        Returns:
+            Wrapped tool with error handling.
+        """
+        original_func = tool.func if hasattr(tool, "func") else None
+        original_coroutine = tool.coroutine if hasattr(tool, "coroutine") else None
+        tool_name = tool.name if hasattr(tool, "name") else str(tool)
+
+        if original_coroutine:
+            @wraps(original_coroutine)
+            async def wrapped_async(*args: Any, **kwargs: Any) -> str:
+                try:
+                    return await original_coroutine(*args, **kwargs)
+                except Exception as e:
+                    error_msg = f"Tool '{tool_name}' failed: {e}"
+                    logger.warning(error_msg)
+                    return f"ERROR: {error_msg}. Try a different approach or continue without this information."
+
+            # Create new tool with wrapped coroutine
+            return StructuredTool(
+                name=tool.name,
+                description=tool.description,
+                args_schema=tool.args_schema if hasattr(tool, "args_schema") else None,
+                coroutine=wrapped_async,
+                return_direct=getattr(tool, "return_direct", False),
+            )
+        elif original_func:
+            @wraps(original_func)
+            def wrapped_sync(*args: Any, **kwargs: Any) -> str:
+                try:
+                    return original_func(*args, **kwargs)
+                except Exception as e:
+                    error_msg = f"Tool '{tool_name}' failed: {e}"
+                    logger.warning(error_msg)
+                    return f"ERROR: {error_msg}. Try a different approach or continue without this information."
+
+            # Create new tool with wrapped function
+            return StructuredTool(
+                name=tool.name,
+                description=tool.description,
+                args_schema=tool.args_schema if hasattr(tool, "args_schema") else None,
+                func=wrapped_sync,
+                return_direct=getattr(tool, "return_direct", False),
+            )
+        else:
+            # Can't wrap, return original
+            logger.warning(f"Could not wrap tool {tool_name} - no func or coroutine found")
+            return tool
+
     async def _load_mcp_tools(self) -> list[Any]:
         """Load tools from configured MCP servers.
 
@@ -203,6 +264,10 @@ class ForgeAgent:
             # Filter to read-only tools if configured
             if self.settings.agent_mcp_read_only:
                 tools = self._filter_read_only_tools(tools)
+
+            # Wrap tools with error handling to prevent crashes
+            tools = [self._wrap_tool_with_error_handling(t) for t in tools]
+            logger.debug(f"Wrapped {len(tools)} MCP tools with error handling")
 
             return tools
         except Exception as e:
@@ -294,15 +359,14 @@ class ForgeAgent:
     def _create_agent(
         self,
         system_prompt: str,
-        include_tools: bool = True,
     ) -> Any:
         """Create a Deep Agent instance (sync wrapper).
 
         For MCP tools, use _create_agent_async instead.
+        This sync version does not load MCP tools.
 
         Args:
             system_prompt: System prompt for the agent.
-            include_tools: Whether to include file/search tools.
 
         Returns:
             Configured Deep Agent.
@@ -494,6 +558,7 @@ class ForgeAgent:
         task: str,
         prompt: str,
         context: dict[str, Any] | None = None,
+        include_tools: bool = True,
     ) -> str:
         """Run a task, letting the agent choose the best approach.
 
@@ -504,6 +569,7 @@ class ForgeAgent:
             task: Short task name for logging (e.g., 'generate-prd').
             prompt: The task description and content to process.
             context: Optional context variables for the prompt.
+            include_tools: Whether to include MCP tools. Default True.
 
         Returns:
             Agent response text.
@@ -529,7 +595,7 @@ class ForgeAgent:
         result = await self._run_agent(
             prompt=prompt,
             system_prompt=system_prompt,
-            include_tools=True,
+            include_tools=include_tools,
             session_id=ticket_key,
             trace_name=f"task:{task}",
         )
