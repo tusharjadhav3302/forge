@@ -146,11 +146,11 @@
 
 ### Task Revision (Feature-level and Task-level)
 
-- [ ] T174 [US4] Implement regenerate_tasks_with_feedback in src/forge/orchestrator/nodes/task_generation.py (Feature-level: regenerate all tasks with feedback)
-- [ ] T175 [US4] Implement update_single_task in src/forge/orchestrator/nodes/task_generation.py (Task-level: update only the commented task)
-- [ ] T176 [US4] Update route_task_approval to detect Task-level vs Feature-level feedback
-- [ ] T177 [US4] Wire regenerate_tasks and update_single_task nodes into graph
-- [ ] T178 [US4] Track current_task_key in workflow state when comment is on Task ticket
+- [x] T174 [US4] Implement regenerate_tasks_with_feedback in src/forge/orchestrator/nodes/task_generation.py (Feature-level: regenerate all tasks with feedback)
+- [x] T175 [US4] Implement update_single_task in src/forge/orchestrator/nodes/task_generation.py (Task-level: update only the commented task)
+- [x] T176 [US4] Update route_task_approval to detect Task-level vs Feature-level feedback
+- [x] T177 [US4] Wire regenerate_tasks and update_single_task nodes into graph
+- [x] T178 [US4] Track current_task_key in workflow state when comment is on Task ticket
 
 **Checkpoint**: Task generation workflow functional and testable independently
 
@@ -557,8 +557,8 @@
 ## Summary
 
 - **Total Tasks**: 178 (T001-T178)
-- **Completed**: 143 tasks
-- **Remaining**: 35 tasks
+- **Completed**: 148 tasks
+- **Remaining**: 30 tasks
 - **New Phases Added** (2026-04-05 via spec sync):
   - Phase 15: US12 Observability (9 tasks) - 9 done
   - Phase 16: US13 Metrics (8 tasks) - 8 done
@@ -567,4 +567,4 @@
   - Phase 19: Error Handling & Resilience (31 tasks) - 4 done
 - **New Tasks Added** (2026-04-06):
   - Phase 6: Task Implementation Approval Gate (5 tasks: T169-T173) - 5 done
-  - Phase 6: Task Revision (5 tasks: T174-T178) - 0 done
+  - Phase 6: Task Revision (5 tasks: T174-T178) - 5 done

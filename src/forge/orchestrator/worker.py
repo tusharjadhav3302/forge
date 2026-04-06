@@ -217,6 +217,8 @@ class OrchestratorWorker:
                     )
 
         # Check for rejection comment (contains feedback)
+        # Determine if comment is on a Task (child) vs Feature (parent)
+        comment_ticket_key = None
         if comment:
             comment_body = comment.get("body", "")
             # Extract text from ADF if needed
@@ -227,7 +229,29 @@ class OrchestratorWorker:
                 # Treat any new comment as feedback for rejection
                 is_rejected = True
                 feedback = comment_body
-                logger.info(f"Detected rejection via comment: {feedback[:100]}...")
+
+                # Check if comment is on a Task (single-task update)
+                # The webhook ticket_key is the ticket that was commented on
+                workflow_ticket_key = current_state.get("ticket_key", "")
+                task_keys = current_state.get("task_keys", [])
+
+                if message.ticket_key != workflow_ticket_key:
+                    # Comment is on a child ticket
+                    if message.ticket_key in task_keys:
+                        comment_ticket_key = message.ticket_key
+                        logger.info(
+                            f"Detected Task-level comment on {comment_ticket_key}: "
+                            f"{feedback[:100]}..."
+                        )
+                    else:
+                        logger.info(
+                            f"Detected comment on child ticket {message.ticket_key} "
+                            f"(not in task_keys): {feedback[:100]}..."
+                        )
+                else:
+                    logger.info(
+                        f"Detected Feature-level comment: {feedback[:100]}..."
+                    )
 
         # Build updated state
         updated_state = {
@@ -264,6 +288,11 @@ class OrchestratorWorker:
         elif is_rejected and feedback:
             updated_state["revision_requested"] = True
             updated_state["feedback_comment"] = feedback
+            # Set current_task_key for Task-level updates
+            if comment_ticket_key:
+                updated_state["current_task_key"] = comment_ticket_key
+            else:
+                updated_state["current_task_key"] = None
         elif was_errored:
             # Workflow had an error - any new webhook triggers a retry
             # Clear the error so the node can be re-executed

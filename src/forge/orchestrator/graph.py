@@ -60,7 +60,11 @@ from forge.orchestrator.nodes.spec_generation import (
     generate_spec,
     regenerate_spec_with_feedback,
 )
-from forge.orchestrator.nodes.task_generation import generate_tasks
+from forge.orchestrator.nodes.task_generation import (
+    generate_tasks,
+    regenerate_all_tasks,
+    update_single_task,
+)
 from forge.orchestrator.nodes.task_router import (
     aggregate_parallel_results,
     route_tasks_by_repo,
@@ -192,6 +196,8 @@ def create_workflow_graph() -> StateGraph:
     # Task Generation nodes (US4)
     graph.add_node("generate_tasks", generate_tasks)
     graph.add_node("task_approval_gate", task_approval_gate)
+    graph.add_node("regenerate_all_tasks", regenerate_all_tasks)
+    graph.add_node("update_single_task", update_single_task)
 
     # Parallel Execution aggregation node (US10)
     graph.add_node("aggregate_pr_results", aggregate_parallel_results)
@@ -330,10 +336,13 @@ def create_workflow_graph() -> StateGraph:
         route_task_approval,
         {
             "task_router": "task_router",
-            "generate_tasks": "generate_tasks",  # Regenerate on rejection
+            "regenerate_all_tasks": "regenerate_all_tasks",  # Feature-level rejection
+            "update_single_task": "update_single_task",  # Task-level rejection
             END: END,  # Pause workflow until approval webhook
         },
     )
+    graph.add_edge("regenerate_all_tasks", "task_approval_gate")
+    graph.add_edge("update_single_task", "task_approval_gate")
 
     # Execution flow (US6) with parallel support (US10)
     # The routing function returns either "setup_workspace" or list[Send]

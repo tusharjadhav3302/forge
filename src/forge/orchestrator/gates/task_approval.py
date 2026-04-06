@@ -64,6 +64,12 @@ def task_approval_gate(state: WorkflowState) -> WorkflowState:
 def route_task_approval(state: WorkflowState) -> str:
     """Route based on task approval status.
 
+    Routing logic:
+    - Comment on specific Task ticket -> update_single_task
+    - Comment on Feature ticket -> regenerate_all_tasks
+    - Label changed to approved -> task_router
+    - Still paused -> END (wait for webhook)
+
     Args:
         state: Current workflow state.
 
@@ -75,12 +81,21 @@ def route_task_approval(state: WorkflowState) -> str:
     # Check if revision requested (feedback comment added)
     if state.get("revision_requested"):
         feedback = state.get("feedback_comment", "")
-        if feedback:
+        current_task = state.get("current_task_key")
+
+        if current_task:
+            # Single Task update - comment was on a specific Task
+            logger.info(f"Single Task revision requested for {current_task}")
+            record_revision_requested("task")
+            return "update_single_task"
+        elif feedback:
+            # Feature-level regeneration - comment was on Feature
             logger.info(
-                f"Task regeneration requested for {ticket_key}: {feedback[:100]}..."
+                f"Full Task regeneration requested for {ticket_key}: "
+                f"{feedback[:100]}..."
             )
             record_revision_requested("task")
-            return "generate_tasks"
+            return "regenerate_all_tasks"
 
     # Check if still paused - END and wait for approval webhook
     if state.get("is_paused"):

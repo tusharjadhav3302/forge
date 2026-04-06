@@ -272,3 +272,130 @@ def extract_repo_from_labels(labels: list[str]) -> str:
         if label.startswith("repo:"):
             return label[5:]
     return "unknown"
+
+
+async def regenerate_all_tasks(state: WorkflowState) -> WorkflowState:
+    """Delete all Tasks and regenerate from Epics with feedback.
+
+    This handles Feature-level rejection where the entire Task
+    breakdown needs to be revised.
+
+    Args:
+        state: Current workflow state with feedback_comment set.
+
+    Returns:
+        Updated state with new task_keys.
+    """
+    ticket_key = state["ticket_key"]
+    feedback = state.get("feedback_comment", "")
+    existing_tasks = state.get("task_keys", [])
+
+    logger.info(f"Regenerating all Tasks for {ticket_key} with feedback")
+
+    jira = JiraClient()
+
+    try:
+        # Delete existing Tasks
+        for task_key in existing_tasks:
+            try:
+                await jira.delete_issue(task_key, delete_subtasks=False)
+                logger.info(f"Deleted Task {task_key}")
+            except Exception as e:
+                logger.warning(f"Failed to delete Task {task_key}: {e}")
+
+        # Clear task_keys and set feedback for regeneration
+        updated_state = {
+            **state,
+            "task_keys": [],
+            "tasks_by_repo": {},
+            "feedback_comment": feedback,
+        }
+
+        # Re-run task generation (which will incorporate feedback in context)
+        return await generate_tasks(updated_state)
+
+    except Exception as e:
+        logger.error(f"Task regeneration failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "regenerate_all_tasks")
+        return {
+            **state,
+            "last_error": str(e),
+            "current_node": "regenerate_all_tasks",
+            "retry_count": state.get("retry_count", 0) + 1,
+        }
+    finally:
+        await jira.close()
+
+
+async def update_single_task(state: WorkflowState) -> WorkflowState:
+    """Update a single Task's description based on feedback.
+
+    This handles Task-level feedback where only one Task needs revision.
+
+    Args:
+        state: Workflow state with current_task_key and feedback_comment.
+
+    Returns:
+        Updated state.
+    """
+    ticket_key = state["ticket_key"]
+    task_key = state.get("current_task_key")
+    feedback = state.get("feedback_comment", "")
+
+    if not task_key:
+        logger.warning(
+            f"No current_task_key for single Task update on {ticket_key}"
+        )
+        return state
+
+    logger.info(f"Updating Task {task_key} with feedback")
+
+    jira = JiraClient()
+    agent = ForgeAgent()
+
+    try:
+        # Get current Task description
+        task_issue = await jira.get_issue(task_key)
+        original_description = task_issue.description or ""
+
+        # Regenerate description with feedback
+        new_description = await agent.regenerate_with_feedback(
+            original_content=original_description,
+            feedback=feedback,
+            content_type="task",
+        )
+
+        # Update Task in Jira
+        await jira.update_description(task_key, new_description)
+
+        # Add comment acknowledging revision
+        await jira.add_comment(
+            task_key,
+            "Task has been revised based on feedback. Please review.",
+        )
+
+        logger.info(f"Task {task_key} updated with feedback")
+
+        return update_state_timestamp({
+            **state,
+            "current_task_key": None,
+            "feedback_comment": None,
+            "revision_requested": False,
+            "current_node": "task_approval_gate",
+            "last_error": None,
+        })
+
+    except Exception as e:
+        logger.error(f"Task update failed for {task_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "update_single_task")
+        return {
+            **state,
+            "last_error": str(e),
+            "current_node": "update_single_task",
+            "retry_count": state.get("retry_count", 0) + 1,
+        }
+    finally:
+        await jira.close()
+        await agent.close()
