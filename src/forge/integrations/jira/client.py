@@ -335,6 +335,61 @@ class JiraClient:
             logger.info(f"Added attachment {filename} to {issue_key}")
             return data[0] if data else {}
 
+    async def get_attachments(self, issue_key: str) -> list[dict[str, Any]]:
+        """Get all attachments for a Jira issue.
+
+        Args:
+            issue_key: The Jira issue key.
+
+        Returns:
+            List of attachment metadata dicts with 'id', 'filename', 'size', etc.
+        """
+        client = await self._get_client()
+        response = await client.get(
+            f"/issue/{issue_key}",
+            params={"fields": "attachment"},
+        )
+        response.raise_for_status()
+        data = response.json()
+        attachments = data.get("fields", {}).get("attachment", [])
+        logger.debug(f"Found {len(attachments)} attachments on {issue_key}")
+        return attachments
+
+    async def delete_attachment(self, attachment_id: str) -> None:
+        """Delete an attachment by ID.
+
+        Args:
+            attachment_id: The Jira attachment ID.
+        """
+        client = await self._get_client()
+        response = await client.delete(f"/attachment/{attachment_id}")
+        response.raise_for_status()
+        logger.info(f"Deleted attachment {attachment_id}")
+
+    async def delete_attachments_by_name(
+        self,
+        issue_key: str,
+        filename: str,
+    ) -> int:
+        """Delete all attachments matching a filename.
+
+        Args:
+            issue_key: The Jira issue key.
+            filename: Exact filename to match (e.g., "TEST-123-spec.md").
+
+        Returns:
+            Number of attachments deleted.
+        """
+        attachments = await self.get_attachments(issue_key)
+        deleted = 0
+        for attachment in attachments:
+            if attachment.get("filename") == filename:
+                await self.delete_attachment(attachment["id"])
+                deleted += 1
+        if deleted:
+            logger.info(f"Deleted {deleted} attachment(s) named '{filename}' from {issue_key}")
+        return deleted
+
     async def add_comment(self, issue_key: str, body: str) -> JiraComment:
         """Add a comment to a Jira issue.
 

@@ -153,6 +153,19 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
                 settings.jira_spec_custom_field,
                 new_spec,
             )
+        else:
+            # Default: replace attachment - delete old one first, then add new
+            old_filename = f"{ticket_key}-spec.md"
+            deleted = await jira.delete_attachments_by_name(ticket_key, old_filename)
+            if deleted:
+                logger.info(f"Deleted {deleted} old spec attachment(s) for {ticket_key}")
+
+            await jira.add_attachment(
+                ticket_key,
+                filename=old_filename,
+                content=new_spec,
+                content_type="text/markdown",
+            )
 
         # Add comment acknowledging revision
         await jira.add_comment(
