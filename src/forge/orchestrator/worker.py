@@ -150,7 +150,7 @@ class OrchestratorWorker:
         changelog = payload.get("changelog", {})
         comment = payload.get("comment", {})
 
-        # Check for label changes indicating approval
+        # Check for label changes indicating approval or retry
         label_changes = [
             item for item in changelog.get("items", [])
             if item.get("field") == "labels"
@@ -158,6 +158,7 @@ class OrchestratorWorker:
 
         is_approved = False
         is_rejected = False
+        is_retry = False
         feedback = None
 
         current_node = current_state.get("current_node", "")
@@ -165,6 +166,13 @@ class OrchestratorWorker:
         for change in label_changes:
             to_labels = change.get("toString", "")
             from_labels = change.get("fromString", "")
+
+            # Check for retry label - triggers retry of current stage
+            if "forge:retry" in to_labels.lower() and "forge:retry" not in from_labels.lower():
+                is_retry = True
+                logger.info(
+                    f"Detected retry signal via forge:retry label for {current_node}"
+                )
 
             # Check for approval labels - but only if it matches the current stage
             if "approved" in to_labels.lower() and "pending" in from_labels.lower():
@@ -234,7 +242,18 @@ class OrchestratorWorker:
             and current_state.get("last_error") is not None
         )
 
-        if is_approved:
+        if is_retry:
+            # Explicit retry signal - clear errors and retry current node
+            prev_error = current_state.get("last_error", "")
+            logger.info(
+                f"Retry requested for {message.ticket_key} at {current_node} "
+                f"(clearing error: {prev_error[:100] if prev_error else 'none'})"
+            )
+            updated_state["last_error"] = None
+            updated_state["revision_requested"] = False
+            updated_state["feedback_comment"] = None
+            # Keep current_node so we retry the same stage
+        elif is_approved:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
             updated_state["last_error"] = None

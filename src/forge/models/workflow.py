@@ -123,6 +123,7 @@ class ForgeLabel(str, Enum):
     # General
     FORGE_MANAGED = "forge:managed"
     BLOCKED = "forge:blocked"
+    RETRY = "forge:retry"  # Add to trigger retry of current stage
 
 
 class TicketType(str, Enum):

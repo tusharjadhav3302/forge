@@ -76,7 +76,7 @@ def route_by_ticket_type(
 
     If the workflow is being resumed (current_node is set), route to the
     appropriate node based on where the workflow was. This enables retry
-    from error states.
+    from error states without going backwards.
 
     Args:
         state: Current workflow state.
@@ -87,32 +87,49 @@ def route_by_ticket_type(
     current_node = state.get("current_node", "")
 
     # If we have a current_node from a previous run, route based on progress
-    # This enables retry from error states
+    # This enables retry from error states without going backwards
     if current_node and current_node not in ("entry", "__end__", ""):
         logger.info(f"Resuming workflow at node: {current_node}")
 
         # Map current_node to the appropriate starting point
-        # Feature workflow nodes
+        # PRD stage
         if current_node in ("generate_prd", "regenerate_prd"):
             return "generate_prd"
         elif current_node == "prd_approval_gate":
             return "prd_approval_gate"
+        # Spec stage
         elif current_node in ("generate_spec", "regenerate_spec"):
             return "generate_spec"
         elif current_node == "spec_approval_gate":
             return "spec_approval_gate"
+        # Epic decomposition stage
         elif current_node in ("decompose_epics", "regenerate_all_epics", "update_single_epic"):
             return "decompose_epics"
         elif current_node == "plan_approval_gate":
             return "plan_approval_gate"
+        # Task generation stage
         elif current_node == "generate_tasks":
             return "generate_tasks"
+        # Execution stages (implementation, PR, CI, review) - route to task_router
+        elif current_node in (
+            "task_router",
+            "setup_workspace", "implement_task", "implementation",
+            "create_pr", "teardown_workspace",
+            "ci_evaluator", "attempt_ci_fix",
+            "ai_review", "human_review_gate",
+            "blocked", "escalate_blocked",
+        ):
+            return "task_router"
         # Bug workflow nodes
         elif current_node in ("analyze_bug", "regenerate_rca"):
             return "analyze_bug"
         elif current_node == "rca_approval_gate":
             return "rca_approval_gate"
-        # Fall through to ticket type routing
+        elif current_node == "implement_bug_fix":
+            return "implement_bug_fix"
+        # If we don't recognize the node, log and fall through
+        else:
+            logger.warning(f"Unrecognized current_node '{current_node}', using ticket type routing")
 
     ticket_type = state.get("ticket_type")
 
@@ -214,15 +231,18 @@ def create_workflow_graph() -> StateGraph:
             "generate_prd": "generate_prd",
             "analyze_bug": "analyze_bug",
             "task_workflow": "task_workflow",
-            # Resume routing for Feature workflow
+            # Resume routing for Feature workflow - planning stages
             "prd_approval_gate": "prd_approval_gate",
             "generate_spec": "generate_spec",
             "spec_approval_gate": "spec_approval_gate",
             "decompose_epics": "decompose_epics",
             "plan_approval_gate": "plan_approval_gate",
             "generate_tasks": "generate_tasks",
+            # Resume routing for Feature workflow - execution stages
+            "task_router": "task_router",
             # Resume routing for Bug workflow
             "rca_approval_gate": "rca_approval_gate",
+            "implement_bug_fix": "implement_bug_fix",
         },
     )
 
