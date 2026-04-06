@@ -136,6 +136,14 @@
 - [x] T048 [US4] Wire task generation nodes into main graph in src/forge/orchestrator/graph.py
 - [x] T049 [US4] Implement Task detail generation prompts (steps, acceptance criteria)
 
+### Task Implementation Approval Gate
+
+- [ ] T169 [US4] Add TASK_PENDING and TASK_APPROVED labels to ForgeLabel enum in src/forge/models/workflow.py
+- [ ] T170 [US4] Implement task approval gate in src/forge/orchestrator/gates/task_approval.py (pause for human review before implementation)
+- [ ] T171 [US4] Update task generation node to set forge:task-pending label after task creation
+- [ ] T172 [US4] Wire task approval gate into main graph between generate_tasks and task_router
+- [ ] T173 [US4] Add task approval routing logic (approve → task_router, reject → regenerate tasks)
+
 **Checkpoint**: Task generation workflow functional and testable independently
 
 ---
@@ -540,12 +548,14 @@
 
 ## Summary
 
-- **Total Tasks**: 168 (T001-T168)
+- **Total Tasks**: 173 (T001-T173)
 - **Completed**: 138 tasks
-- **Remaining**: 30 tasks
+- **Remaining**: 35 tasks
 - **New Phases Added** (2026-04-05 via spec sync):
   - Phase 15: US12 Observability (9 tasks) - 9 done
   - Phase 16: US13 Metrics (8 tasks) - 8 done
   - Phase 17: US14 CLI (8 tasks) - 7 done
   - Phase 18: Edge Case Hardening (7 tasks) - 7 done
   - Phase 19: Error Handling & Resilience (31 tasks) - 4 done
+- **New Tasks Added** (2026-04-06):
+  - Phase 6: Task Implementation Approval Gate (5 tasks: T169-T173) - 0 done

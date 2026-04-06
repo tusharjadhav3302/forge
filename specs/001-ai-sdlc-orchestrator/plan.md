@@ -97,6 +97,7 @@ forge/
 │       │       ├── prd_approval.py
 │       │       ├── spec_approval.py
 │       │       ├── plan_approval.py
+│       │       ├── task_approval.py
 │       │       └── rca_approval.py
 │       │
 │       ├── integrations/              # External service clients

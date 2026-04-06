@@ -59,7 +59,7 @@ Once the spec is approved, the system decomposes the Feature into logical Epics 
 
 ### User Story 4 - Task Generation (Priority: P2)
 
-For each approved Epic, the system generates detailed implementation Tasks. Each Task includes implementation steps, acceptance criteria, and target repository assignment. Tasks are created in Jira and linked to their parent Epic.
+For each approved Epic, the system generates detailed implementation Tasks. Each Task includes implementation steps, acceptance criteria, and target repository assignment. Tasks are created in Jira and linked to their parent Epic. The workflow pauses after task generation to allow human review before implementation begins.
 
 **Why this priority**: Tasks are the unit of execution. This story enables the transition from planning to implementation but depends on Epic approval.
 
@@ -70,6 +70,8 @@ For each approved Epic, the system generates detailed implementation Tasks. Each
 1. **Given** an approved Epic, **When** Feature transitions to "Ready for Breakdown", **Then** the system generates Tasks with implementation steps, acceptance criteria, and target repository labels.
 2. **Given** generated Tasks, **When** a user views a Task, **Then** the Task description contains sufficient detail to implement without referring back to the Epic.
 3. **Given** Tasks spanning multiple repositories, **When** Tasks are generated, **Then** each Task is labeled with exactly one target repository.
+4. **Given** Tasks generated, **When** tasks are ready for implementation, **Then** the system sets `forge:task-pending` and pauses until `forge:task-approved` is set by a human reviewer.
+5. **Given** Tasks pending implementation approval, **When** the reviewer approves by setting `forge:task-approved`, **Then** the system proceeds to implementation.
 
 ---
 
