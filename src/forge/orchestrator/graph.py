@@ -309,7 +309,14 @@ def create_workflow_graph() -> StateGraph:
     graph.add_edge("update_single_epic", "plan_approval_gate")
 
     # Task generation flow (US4)
-    graph.add_edge("generate_tasks", "task_router")
+    graph.add_conditional_edges(
+        "generate_tasks",
+        _route_after_task_generation,
+        {
+            "task_router": "task_router",
+            END: END,
+        },
+    )
 
     # Execution flow (US6) with parallel support (US10)
     # The routing function returns either "setup_workspace" or list[Send]
@@ -458,6 +465,26 @@ def _route_after_epic_decomposition(
         return END
 
     return "plan_approval_gate"
+
+
+def _route_after_task_generation(
+    state: WorkflowState,
+) -> str:
+    """Route based on task generation success.
+
+    If task generation failed (has error and no tasks), don't advance to task_router.
+
+    Returns:
+        "task_router" on success, END on failure.
+    """
+    last_error = state.get("last_error")
+    task_keys = state.get("task_keys", [])
+
+    if last_error and not task_keys:
+        logger.error(f"Task generation failed, workflow paused: {last_error}")
+        return END
+
+    return "task_router"
 
 
 def _route_after_workspace_setup(
