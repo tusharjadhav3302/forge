@@ -72,6 +72,8 @@ For each approved Epic, the system generates detailed implementation Tasks. Each
 3. **Given** Tasks spanning multiple repositories, **When** Tasks are generated, **Then** each Task is labeled with exactly one target repository.
 4. **Given** Tasks generated, **When** tasks are ready for implementation, **Then** the system sets `forge:task-pending` and pauses until `forge:task-approved` is set by a human reviewer.
 5. **Given** Tasks pending implementation approval, **When** the reviewer approves by setting `forge:task-approved`, **Then** the system proceeds to implementation.
+6. **Given** Tasks pending approval, **When** the reviewer comments on the Feature ticket with feedback, **Then** the system regenerates all tasks incorporating the feedback.
+7. **Given** Tasks pending approval, **When** the reviewer comments on a specific Task ticket with feedback, **Then** the system updates only that Task while leaving others unchanged.
 
 ---
 
