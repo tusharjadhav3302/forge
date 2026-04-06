@@ -48,6 +48,25 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 | Spec | `forge:spec-pending` | `forge:spec-approved` |
 | Plan | `forge:plan-pending` | `forge:plan-approved` |
 
+### Control Labels
+
+| Label | Purpose |
+|-------|---------|
+| `forge:managed` | Indicates ticket is managed by Forge |
+| `forge:blocked` | Workflow blocked due to unrecoverable error |
+| `forge:retry` | **Add to retry current stage** - clears errors and re-runs |
+
+### Retrying Failed Workflows
+
+When a workflow fails (e.g., clone timeout, API error), it will:
+1. Post a comment tagging the reporter and assignee
+2. Set the `forge:blocked` label
+
+To retry:
+1. Add the `forge:retry` label to the ticket
+2. Forge will clear the error and retry from the current stage
+3. The workflow will NOT go back to earlier stages (e.g., won't re-generate PRD)
+
 ## Notes
 
 - Set `JIRA_WEBHOOK_SECRET=` (empty) in `.env` to skip signature validation during testing
