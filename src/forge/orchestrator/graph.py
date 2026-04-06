@@ -18,6 +18,10 @@ from forge.orchestrator.gates.spec_approval import (
     route_spec_approval,
     spec_approval_gate,
 )
+from forge.orchestrator.gates.task_approval import (
+    route_task_approval,
+    task_approval_gate,
+)
 from forge.orchestrator.nodes.ai_reviewer import review_code
 from forge.orchestrator.nodes.bug_workflow import (
     analyze_bug,
@@ -110,6 +114,8 @@ def route_by_ticket_type(
         # Task generation stage
         elif current_node == "generate_tasks":
             return "generate_tasks"
+        elif current_node == "task_approval_gate":
+            return "task_approval_gate"
         # Execution stages (implementation, PR, CI, review) - route to task_router
         elif current_node in (
             "task_router",
@@ -185,6 +191,7 @@ def create_workflow_graph() -> StateGraph:
 
     # Task Generation nodes (US4)
     graph.add_node("generate_tasks", generate_tasks)
+    graph.add_node("task_approval_gate", task_approval_gate)
 
     # Parallel Execution aggregation node (US10)
     graph.add_node("aggregate_pr_results", aggregate_parallel_results)
@@ -238,6 +245,7 @@ def create_workflow_graph() -> StateGraph:
             "decompose_epics": "decompose_epics",
             "plan_approval_gate": "plan_approval_gate",
             "generate_tasks": "generate_tasks",
+            "task_approval_gate": "task_approval_gate",
             # Resume routing for Feature workflow - execution stages
             "task_router": "task_router",
             # Resume routing for Bug workflow
@@ -313,8 +321,17 @@ def create_workflow_graph() -> StateGraph:
         "generate_tasks",
         _route_after_task_generation,
         {
-            "task_router": "task_router",
+            "task_approval_gate": "task_approval_gate",
             END: END,
+        },
+    )
+    graph.add_conditional_edges(
+        "task_approval_gate",
+        route_task_approval,
+        {
+            "task_router": "task_router",
+            "generate_tasks": "generate_tasks",  # Regenerate on rejection
+            END: END,  # Pause workflow until approval webhook
         },
     )
 
@@ -472,10 +489,10 @@ def _route_after_task_generation(
 ) -> str:
     """Route based on task generation success.
 
-    If task generation failed (has error and no tasks), don't advance to task_router.
+    If task generation failed (has error and no tasks), don't advance.
 
     Returns:
-        "task_router" on success, END on failure.
+        "task_approval_gate" on success, END on failure.
     """
     last_error = state.get("last_error")
     task_keys = state.get("task_keys", [])
@@ -484,7 +501,7 @@ def _route_after_task_generation(
         logger.error(f"Task generation failed, workflow paused: {last_error}")
         return END
 
-    return "task_router"
+    return "task_approval_gate"
 
 
 def _route_after_workspace_setup(

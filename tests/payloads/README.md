@@ -47,6 +47,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 | PRD | `forge:prd-pending` | `forge:prd-approved` |
 | Spec | `forge:spec-pending` | `forge:spec-approved` |
 | Plan | `forge:plan-pending` | `forge:plan-approved` |
+| Task | `forge:task-pending` | `forge:task-approved` |
 
 ### Control Labels
 

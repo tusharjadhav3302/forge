@@ -128,16 +128,19 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
                 logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
 
-        # Set workflow label to indicate tasks are generated
-        await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_GENERATED)
+        # Set workflow label to indicate tasks are pending approval
+        await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_PENDING)
 
-        logger.info(f"Created {len(all_task_keys)} Tasks for {ticket_key}")
+        logger.info(
+            f"Created {len(all_task_keys)} Tasks for {ticket_key}, "
+            "awaiting implementation approval"
+        )
 
         return update_state_timestamp({
             **state,
             "task_keys": all_task_keys,
             "tasks_by_repo": tasks_by_repo,
-            "current_node": "task_router",
+            "current_node": "task_approval_gate",
             "last_error": None,
         })
 

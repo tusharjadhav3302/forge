@@ -184,6 +184,8 @@ class OrchestratorWorker:
                     approval_stage = "spec"
                 elif "plan-approved" in to_labels.lower():
                     approval_stage = "plan"
+                elif "task-approved" in to_labels.lower():
+                    approval_stage = "task"
 
                 # Map current node to expected approval stage
                 node_to_stage = {
@@ -197,6 +199,8 @@ class OrchestratorWorker:
                     "decompose_epics": "plan",
                     "regenerate_all_epics": "plan",
                     "update_single_epic": "plan",
+                    "task_approval_gate": "task",
+                    "generate_tasks": "task",
                 }
                 expected_stage = node_to_stage.get(current_node)
 

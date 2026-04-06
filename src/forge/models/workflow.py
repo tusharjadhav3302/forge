@@ -108,6 +108,8 @@ class ForgeLabel(str, Enum):
 
     # Task workflow
     TASK_GENERATED = "forge:task-generated"
+    TASK_PENDING = "forge:task-pending"  # Awaiting approval to start implementation
+    TASK_APPROVED = "forge:task-approved"  # Approved for implementation
     TASK_IMPLEMENTING = "forge:implementing"
     TASK_PR_CREATED = "forge:pr-created"
     TASK_CI_PENDING = "forge:ci-pending"
@@ -174,6 +176,8 @@ def get_workflow_phase(labels: list[str]) -> str | None:
         (ForgeLabel.PLAN_PENDING.value, "plan_approval"),
         (ForgeLabel.PLAN_APPROVED.value, "task_generation"),
         (ForgeLabel.TASK_GENERATED.value, "task_routing"),
+        (ForgeLabel.TASK_PENDING.value, "task_approval"),
+        (ForgeLabel.TASK_APPROVED.value, "task_execution"),
         (ForgeLabel.TASK_IMPLEMENTING.value, "implementation"),
         (ForgeLabel.TASK_PR_CREATED.value, "pr_created"),
         (ForgeLabel.TASK_CI_PENDING.value, "ci_evaluation"),
