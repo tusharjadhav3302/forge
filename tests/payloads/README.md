@@ -26,6 +26,16 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 curl -X POST http://localhost:8000/api/v1/webhooks/jira \
   -H "Content-Type: application/json" \
   -d @tests/payloads/03-prd-approved.json
+
+# Request task revision (after plan approval)
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/08-task-revision-requested.json
+
+# Approve tasks to start implementation
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/09-task-approved.json
 ```
 
 ## Workflow Sequence
@@ -38,7 +48,9 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 | 4 | `04-spec-revision-requested.json` | Comment with feedback | Spec regenerated |
 | 5 | `05-spec-approved.json` | Label change | Epics decomposed, `forge:plan-pending` |
 | 6 | `06-plan-revision-requested.json` | Comment with feedback | Epics regenerated |
-| 7 | `07-plan-approved.json` | Label change | Tasks generated, execution starts |
+| 7 | `07-plan-approved.json` | Label change | Tasks generated, `forge:task-pending` |
+| 8 | `08-task-revision-requested.json` | Comment with feedback | Tasks regenerated |
+| 9 | `09-task-approved.json` | Label change | Implementation starts |
 
 ## Label Reference
 

@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for revision flow",
+      "labels": ["forge:managed", "forge:task-pending"]
+    }
+  },
+  "comment": {
+    "body": "Task 3 should include unit tests. Also split task 5 into separate frontend and backend tasks.",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Tech Lead"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Tech Lead"
+  }
+}
