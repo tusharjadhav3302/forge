@@ -167,6 +167,10 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = Field(
         default="INFO", description="Logging level"
     )
+    log_file: str = Field(
+        default="",
+        description="Path to log file (empty = stdout only)",
+    )
     ci_fix_max_retries: int = Field(
         default=5, description="Maximum retry attempts for autonomous CI fixes"
     )

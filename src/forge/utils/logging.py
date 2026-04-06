@@ -4,6 +4,8 @@ import json
 import logging
 import sys
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import Any
 
 from forge.config import get_settings
@@ -104,15 +106,18 @@ class ContextLogger(logging.LoggerAdapter):
 def setup_logging(
     level: str | None = None,
     json_format: bool = True,
+    log_file: str | None = None,
 ) -> None:
     """Configure application logging.
 
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR).
         json_format: Use JSON structured format.
+        log_file: Path to log file (overrides settings).
     """
     settings = get_settings()
     log_level = level or settings.log_level
+    file_path = log_file or settings.log_file
 
     # Get root logger
     root_logger = logging.getLogger()
@@ -121,20 +126,35 @@ def setup_logging(
     # Clear existing handlers
     root_logger.handlers.clear()
 
+    # Create formatter
+    if json_format:
+        formatter = StructuredFormatter()
+    else:
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+
     # Create console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, log_level.upper()))
-
-    if json_format:
-        console_handler.setFormatter(StructuredFormatter())
-    else:
-        console_handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-            )
-        )
-
+    console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
+
+    # Create file handler if configured
+    if file_path:
+        # Ensure parent directory exists
+        Path(file_path).parent.mkdir(parents=True, exist_ok=True)
+
+        file_handler = RotatingFileHandler(
+            file_path,
+            maxBytes=10 * 1024 * 1024,  # 10MB
+            backupCount=5,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(getattr(logging, log_level.upper()))
+        file_handler.setFormatter(formatter)
+        root_logger.addHandler(file_handler)
+        root_logger.info(f"Logging to file: {file_path}")
 
     # Set levels for noisy libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
