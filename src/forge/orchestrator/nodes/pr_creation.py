@@ -7,7 +7,7 @@ from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
-from forge.workspace.git_ops import GitError, GitOperations
+from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
 logger = logging.getLogger(__name__)
@@ -127,9 +127,9 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
             await jira.add_comment(
                 ticket_key,
-                f"**Merge Conflicts Detected**\n\n"
-                f"Cannot create PR due to merge conflicts with main branch.\n\n"
-                f"**Conflicting files:**\n"
+                "**Merge Conflicts Detected**\n\n"
+                "Cannot create PR due to merge conflicts with main branch.\n\n"
+                "**Conflicting files:**\n"
                 + "\n".join(f"- `{f}`" for f in conflicting_files)
                 + "\n\n*Human intervention required to resolve conflicts.*"
             )
@@ -188,6 +188,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"PR creation failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "create_pr")
         return {
             **state,
             "last_error": str(e),

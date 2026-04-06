@@ -95,6 +95,8 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Spec generation failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "generate_spec")
         return {
             **state,
             "last_error": str(e),
@@ -171,6 +173,8 @@ async def regenerate_spec_with_feedback(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Spec regeneration failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "regenerate_spec")
         return {
             **state,
             "last_error": str(e),

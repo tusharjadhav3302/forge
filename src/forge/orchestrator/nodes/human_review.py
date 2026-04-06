@@ -1,7 +1,6 @@
 """Human review handling node for processing review feedback and merges."""
 
 import logging
-from typing import Literal
 
 from langgraph.graph import END
 

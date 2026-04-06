@@ -5,7 +5,7 @@ LangGraph's Send API for concurrent workspace spawning.
 """
 
 import logging
-from typing import Literal, Sequence
+from typing import Literal
 
 from langgraph.types import Send
 

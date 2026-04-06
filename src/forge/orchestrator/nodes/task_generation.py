@@ -6,10 +6,10 @@ from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
-from forge.prompts import load_prompt
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +143,8 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Task generation failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "generate_tasks")
         return {
             **state,
             "last_error": str(e),

@@ -3,7 +3,6 @@
 import logging
 from typing import Any
 
-from forge.integrations.jira.client import JiraClient
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.guardrails import GuardrailsLoader
@@ -74,19 +73,21 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
 
     try:
         # Create workspace
+        logger.info(f"Creating workspace directory for {current_repo}...")
         workspace = manager.create_workspace(
             repo_name=current_repo,
             ticket_key=ticket_key,
         )
+        logger.info(f"Workspace directory created: {workspace.path}")
 
         # Initialize git operations
-        logger.debug(f"Initializing git operations for {workspace}")
+        logger.info(f"Initializing git operations for {workspace}")
         git = GitOperations(workspace)
 
-        # Clone repository
-        logger.info(f"Starting clone of {current_repo}...")
+        # Clone repository (600s timeout)
+        logger.info(f"Starting clone of {current_repo} (this may take several minutes for large repos)...")
         git.clone()
-        logger.info(f"Clone completed for {current_repo}")
+        logger.info(f"Clone completed successfully for {current_repo}")
 
         # Create feature branch
         git.create_branch()
@@ -114,6 +115,9 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Workspace setup failed for {ticket_key}: {e}")
+        # Post error notification to Jira
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "setup_workspace")
         return {
             **state,
             "last_error": str(e),

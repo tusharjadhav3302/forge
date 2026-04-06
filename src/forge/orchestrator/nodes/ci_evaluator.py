@@ -6,10 +6,10 @@ from typing import Any
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
-from forge.prompts import load_prompt
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,8 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"CI evaluation failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "ci_evaluator")
         return {
             **state,
             "last_error": str(e),
@@ -190,6 +192,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
         # Apply fix and commit
         from pathlib import Path
+
         from forge.orchestrator.nodes.implementation import _apply_code_changes
         from forge.workspace.git_ops import GitOperations
         from forge.workspace.manager import Workspace
@@ -220,6 +223,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"CI fix failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "attempt_ci_fix")
         return {
             **state,
             "last_error": str(e),
@@ -254,35 +259,28 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
     jira = JiraClient()
 
     try:
-        # Build escalation comment based on failure type
+        # Build escalation error message based on failure type
         if failed_checks:
             # CI failure scenario
             check_names = [c.get("name", "Unknown") for c in failed_checks]
-            comment = (
-                f"CI fixes exhausted after {ci_fix_attempts} attempts.\n\n"
-                f"Failed checks: {', '.join(check_names)}\n\n"
+            error_msg = (
+                f"CI fixes exhausted after {ci_fix_attempts} attempts. "
+                f"Failed checks: {', '.join(check_names)}. "
                 "Manual intervention required."
             )
         elif "repository" in last_error.lower() or "workspace" in last_error.lower():
             # Workspace/repository setup failure
-            comment = (
-                f"Workflow blocked due to repository configuration error.\n\n"
-                f"Error: {last_error}\n\n"
-                "Please ensure:\n"
-                "- Tasks have valid repository assignments (owner/repo format)\n"
-                "- GITHUB_DEFAULT_REPO is set in environment if repos aren't specified\n"
-                "- The repository exists and is accessible"
+            error_msg = (
+                f"Repository configuration error: {last_error}. "
+                "Ensure tasks have valid repo assignments (owner/repo format)."
             )
         else:
             # Generic failure
-            comment = (
-                f"Workflow blocked due to unrecoverable error.\n\n"
-                f"Error: {last_error}\n"
-                f"Failed at: {current_node}\n\n"
-                "Manual intervention required."
-            )
+            error_msg = f"{last_error}. Manual intervention required."
 
-        await jira.add_comment(ticket_key, comment)
+        # Post error with @mentions for reporter and assignee
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, error_msg, f"escalate_blocked ({current_node})")
         # Set blocked label instead of transitioning to custom status
         await jira.set_workflow_label(ticket_key, ForgeLabel.BLOCKED)
 

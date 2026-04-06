@@ -2,13 +2,12 @@
 
 import logging
 from pathlib import Path
-from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
-from forge.prompts import load_prompt
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.prompts import load_prompt
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
 
@@ -134,6 +133,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "implement_task")
         return {
             **state,
             "last_error": str(e),

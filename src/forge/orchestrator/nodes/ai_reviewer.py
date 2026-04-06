@@ -1,13 +1,12 @@
 """AI code reviewer node for quality, security, and spec alignment."""
 
 import logging
-from typing import Any
 
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
-from forge.prompts import load_prompt
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 

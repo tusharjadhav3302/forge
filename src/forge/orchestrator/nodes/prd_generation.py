@@ -86,6 +86,8 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"PRD generation failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "generate_prd")
         return {
             **state,
             "last_error": str(e),
@@ -155,6 +157,8 @@ async def regenerate_prd_with_feedback(state: WorkflowState) -> WorkflowState:
 
     except Exception as e:
         logger.error(f"PRD regeneration failed for {ticket_key}: {e}")
+        from forge.orchestrator.nodes.error_handler import notify_error
+        await notify_error(state, str(e), "regenerate_prd")
         return {
             **state,
             "last_error": str(e),

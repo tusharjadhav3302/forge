@@ -3,7 +3,6 @@
 import logging
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from forge.config import get_settings
 from forge.workspace.manager import Workspace
@@ -63,14 +62,14 @@ class GitOperations:
 
     def clone(
         self,
-        repo_url: Optional[str] = None,
-        timeout: int = 300,
+        repo_url: str | None = None,
+        timeout: int = 600,
     ) -> None:
         """Clone the repository into the workspace.
 
         Args:
             repo_url: Repository URL. Constructs from settings if None.
-            timeout: Timeout in seconds for the clone operation.
+            timeout: Timeout in seconds for the clone operation (default 600s).
         """
         if repo_url is None:
             token = self.settings.github_token.get_secret_value()
@@ -82,23 +81,44 @@ class GitOperations:
         # Build clone command (single-branch for faster clone)
         cmd = ["git", "clone", "--single-branch", repo_url, str(self.repo_path)]
 
-        logger.info(f"Cloning {self.workspace.repo_name}...")
+        logger.info(
+            f"Cloning {self.workspace.repo_name} to {self.repo_path} "
+            f"(timeout: {timeout}s)"
+        )
+        logger.debug(f"Clone command: git clone --single-branch [REDACTED] {self.repo_path}")
 
         # Clone with timeout
+        import time
+        start_time = time.time()
         try:
-            subprocess.run(
+            result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 check=True,
                 timeout=timeout,
             )
+            elapsed = time.time() - start_time
+            logger.info(
+                f"Clone completed for {self.workspace.repo_name} "
+                f"in {elapsed:.1f}s"
+            )
+            if result.stderr:
+                logger.debug(f"Clone stderr: {result.stderr[:500]}")
         except subprocess.TimeoutExpired:
+            elapsed = time.time() - start_time
+            logger.error(
+                f"Clone timed out after {elapsed:.1f}s for {self.workspace.repo_name}. "
+                f"Target path: {self.repo_path}"
+            )
             raise GitError(
                 f"Clone timed out after {timeout}s for {self.workspace.repo_name}"
             )
-
-        logger.info(f"Cloned {self.workspace.repo_name} to {self.repo_path}")
+        except subprocess.CalledProcessError as e:
+            logger.error(
+                f"Clone failed for {self.workspace.repo_name}: {e.stderr[:500] if e.stderr else 'no stderr'}"
+            )
+            raise
 
     def create_branch(self, base_branch: str = "main") -> None:
         """Create and checkout a new branch.
@@ -119,7 +139,7 @@ class GitOperations:
             f"from {base_branch}"
         )
 
-    def checkout_branch(self, branch_name: Optional[str] = None) -> None:
+    def checkout_branch(self, branch_name: str | None = None) -> None:
         """Checkout an existing branch.
 
         Args:

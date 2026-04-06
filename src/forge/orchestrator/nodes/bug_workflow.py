@@ -3,14 +3,14 @@
 import logging
 from typing import Any
 
+from langgraph.graph import END
+
 from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
-from forge.prompts import load_prompt
-from langgraph.graph import END
-
 from forge.models.workflow import ForgeLabel
 from forge.orchestrator.state import WorkflowState, set_paused, update_state_timestamp
+from forge.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +182,7 @@ async def implement_bug_fix(state: WorkflowState) -> WorkflowState:
 
         # Apply changes
         from pathlib import Path
+
         from forge.orchestrator.nodes.implementation import _apply_code_changes
         from forge.workspace.git_ops import GitOperations
         from forge.workspace.manager import Workspace
