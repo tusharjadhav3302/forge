@@ -154,11 +154,11 @@
 
 ### Child Ticket Webhook Routing (FR-029)
 
-- [ ] T179 [US4] Add forge:managed and forge:parent:{feature_key} labels to Epics in epic_decomposition.py
-- [ ] T180 [US4] Add forge:managed and forge:parent:{feature_key} labels to Tasks in task_generation.py
-- [ ] T181 [US5] Update Jira webhook handler to detect Epic/Task issue types
-- [ ] T182 [US5] Implement parent Feature lookup from forge:parent label or Jira parent field
-- [ ] T183 [US5] Route child ticket webhooks to parent Feature workflow with source_ticket_key
+- [x] T179 [US4] Add forge:managed and forge:parent:{feature_key} labels to Epics in epic_decomposition.py
+- [x] T180 [US4] Add forge:managed and forge:parent:{feature_key} labels to Tasks in task_generation.py
+- [x] T181 [US5] Update Jira webhook handler to detect Epic/Task issue types
+- [x] T182 [US5] Implement parent Feature lookup from forge:parent label or Jira parent field
+- [x] T183 [US5] Route child ticket webhooks to parent Feature workflow with source_ticket_key
 
 **Checkpoint**: Task generation workflow functional and testable independently
 
@@ -565,8 +565,8 @@
 ## Summary
 
 - **Total Tasks**: 183 (T001-T183)
-- **Completed**: 148 tasks
-- **Remaining**: 35 tasks
+- **Completed**: 153 tasks
+- **Remaining**: 30 tasks
 - **New Phases Added** (2026-04-05 via spec sync):
   - Phase 15: US12 Observability (9 tasks) - 9 done
   - Phase 16: US13 Metrics (8 tasks) - 8 done
@@ -576,4 +576,4 @@
 - **New Tasks Added** (2026-04-06):
   - Phase 6: Task Implementation Approval Gate (5 tasks: T169-T173) - 5 done
   - Phase 6: Task Revision (5 tasks: T174-T178) - 5 done
-  - Phase 6: Child Ticket Webhook Routing (5 tasks: T179-T183) - 0 done
+  - Phase 6: Child Ticket Webhook Routing (5 tasks: T179-T183) - 5 done

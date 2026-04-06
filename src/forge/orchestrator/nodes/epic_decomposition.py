@@ -97,7 +97,11 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             repo = epic.get("repo", "")
 
             # Build labels for the Epic
-            labels = []
+            # Include forge:managed for webhook routing and forge:parent for lookup
+            labels = [
+                ForgeLabel.FORGE_MANAGED.value,
+                f"forge:parent:{ticket_key}",
+            ]
             if repo and "/" in repo:
                 labels.append(f"repo:{repo}")
                 # Track which epics go to which repo

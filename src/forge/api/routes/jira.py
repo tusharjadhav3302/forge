@@ -127,7 +127,38 @@ async def receive_jira_webhook(
                 "reason": "missing forge:managed label",
             }
 
+        # Check if this is a child ticket (Epic/Task) - route to parent Feature
+        issue_type = (
+            payload.get("issue", {})
+            .get("fields", {})
+            .get("issuetype", {})
+            .get("name", "")
+        )
+        routing_ticket_key = webhook_data.ticket_key
+        source_ticket_key = None
+
+        if issue_type in ("Epic", "Task", "Sub-task"):
+            # Look for forge:parent label to find parent Feature
+            parent_feature_key = _extract_parent_from_labels(issue_labels)
+            if parent_feature_key:
+                source_ticket_key = webhook_data.ticket_key
+                routing_ticket_key = parent_feature_key
+                span.set_attribute("forge.source_ticket_key", source_ticket_key)
+                span.set_attribute("forge.routing_ticket_key", routing_ticket_key)
+                logger.info(
+                    f"Routing {issue_type} {source_ticket_key} webhook "
+                    f"to parent Feature {routing_ticket_key}"
+                )
+
         webhook_event = create_webhook_event(webhook_data)
+
+        # Add source_ticket_key to payload if routing to parent
+        event_payload = webhook_event.payload
+        if source_ticket_key:
+            event_payload = {
+                **event_payload,
+                "source_ticket_key": source_ticket_key,
+            }
 
         # Queue for async processing
         producer = QueueProducer()
@@ -135,8 +166,8 @@ async def receive_jira_webhook(
             event_id=webhook_event.event_id,
             source=EventSource.JIRA,
             event_type=webhook_event.event_type,
-            ticket_key=webhook_event.ticket_key,
-            payload=webhook_event.payload,
+            ticket_key=routing_ticket_key,  # Route to parent Feature if child
+            payload=event_payload,
         )
 
         span.set_attribute("forge.queued", True)
@@ -205,3 +236,18 @@ def _generate_event_id(payload: dict[str, Any]) -> str:
     import json
     content = json.dumps(payload, sort_keys=True)
     return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
+def _extract_parent_from_labels(labels: list[str]) -> str | None:
+    """Extract parent Feature key from forge:parent label.
+
+    Args:
+        labels: List of Jira labels.
+
+    Returns:
+        Parent Feature key (e.g., "PROJ-123") or None if not found.
+    """
+    for label in labels:
+        if label.startswith("forge:parent:"):
+            return label[13:]  # len("forge:parent:") == 13
+    return None

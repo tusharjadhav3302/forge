@@ -108,8 +108,13 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                     )
                     repo = "unknown"
 
-                # Add repository as label
-                labels = [f"repo:{repo}"] if repo and repo != "unknown" else []
+                # Add labels: forge:managed for webhook routing, forge:parent for lookup, repo
+                labels = [
+                    ForgeLabel.FORGE_MANAGED.value,
+                    f"forge:parent:{ticket_key}",  # Parent Feature key
+                ]
+                if repo and repo != "unknown":
+                    labels.append(f"repo:{repo}")
 
                 task_key = await jira.create_task(
                     project_key=project_key,
