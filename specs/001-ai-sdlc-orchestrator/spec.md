@@ -290,6 +290,7 @@ Operators can manage the system via a CLI tool, including starting workflows man
 - **FR-015**: System MUST escalate to human intervention when retry limits are exceeded
 - **FR-016**: System MUST perform AI code review checking quality, security, spec alignment, and constitution compliance
 - **FR-017**: System MUST track workflow progress using forge: labels on Jira tickets. Labels indicate current phase (e.g., forge:prd-pending, forge:spec-approved). This approach enables workflow visibility without requiring custom Jira workflow configurations in each target project.
+- **FR-029**: System MUST add `forge:managed` label to all child tickets (Epics, Tasks) created during workflow execution, enabling webhook routing from child tickets to parent Feature workflows.
 - **FR-018**: System MUST support modular workflow routing based on Jira Issue Type (Feature, Bug, Tech Debt)
 - **FR-019**: System MUST support concurrent execution across multiple repositories, with a default limit of 5 concurrent repository workspaces to manage resource consumption. This limit is configurable.
 - **FR-020**: System MUST persist workflow state to survive orchestrator restarts
