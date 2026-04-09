@@ -364,6 +364,7 @@ def create_workflow_graph() -> StateGraph:
         {
             "implement_task": "implement_task",
             "create_pr": "create_pr",
+            "escalate_blocked": "escalate_blocked",
         },
     )
     graph.add_edge("create_pr", "teardown_workspace")
@@ -529,8 +530,25 @@ def _route_after_workspace_setup(
 
 def _route_implementation(
     state: WorkflowState,
-) -> Literal["implement_task", "create_pr"]:
-    """Route based on task implementation status."""
+) -> Literal["implement_task", "create_pr", "escalate_blocked"]:
+    """Route based on task implementation status.
+
+    Checks for:
+    - All tasks completed -> create_pr
+    - Retry limit exceeded -> escalate_blocked
+    - Tasks remaining -> implement_task
+    """
+    # Check retry limit to prevent infinite loops
+    retry_count = state.get("retry_count", 0)
+    max_retries = 3  # Max retries per task
+    last_error = state.get("last_error")
+
+    if last_error and retry_count >= max_retries:
+        logger.error(
+            f"Implementation retry limit ({max_retries}) exceeded: {last_error}"
+        )
+        return "escalate_blocked"
+
     current_repo = state.get("current_repo", "")
     repo_tasks = state.get("tasks_by_repo", {}).get(current_repo, [])
     implemented = state.get("implemented_tasks", [])
