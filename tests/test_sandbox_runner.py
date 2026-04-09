@@ -64,7 +64,7 @@ class TestContainerRunner:
         """Test ContainerConfig has sensible defaults."""
         config = ContainerConfig()
         assert config.image == "forge-dev:latest"
-        assert config.timeout_seconds == 1800
+        assert config.timeout_seconds == 7200  # 2 hours
         assert config.memory_limit == "4g"
         assert config.cpu_limit == "2"
         assert config.skip_tests is False

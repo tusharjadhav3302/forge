@@ -56,7 +56,7 @@ class ContainerConfig:
     """Configuration for container execution."""
 
     image: str = DEFAULT_IMAGE
-    timeout_seconds: int = 1800  # 30 minutes default
+    timeout_seconds: int = 7200  # 2 hours default
     memory_limit: str = "4g"
     cpu_limit: str = "2"
     network_mode: str = "slirp4netns"  # Rootless networking
