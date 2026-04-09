@@ -33,9 +33,6 @@ from forge.config import Settings, get_settings
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.prompts import load_prompt, set_default_version
 
-# Separate logger for agent tool traces (can write to file)
-agent_trace_logger = logging.getLogger("forge.agent.trace")
-
 # Optional Vertex AI support
 try:
     from langchain_google_vertexai.model_garden import ChatAnthropicVertex
@@ -84,31 +81,6 @@ class ForgeAgent:
 
         # Set prompt version from config
         set_default_version(self.settings.prompt_version)
-
-        # Set up file logging for agent traces if configured
-        self._setup_agent_logging()
-
-    def _setup_agent_logging(self) -> None:
-        """Set up file logging for agent traces if configured."""
-        if not self.settings.agent_log_file:
-            return
-
-        # Check if handler already exists to avoid duplicates
-        for handler in agent_trace_logger.handlers:
-            if isinstance(handler, logging.FileHandler):
-                return
-
-        log_path = Path(self.settings.agent_log_file)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        file_handler = logging.FileHandler(log_path, mode="a")
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
-        agent_trace_logger.addHandler(file_handler)
-        agent_trace_logger.setLevel(logging.DEBUG)
-        logger.info(f"Agent trace logging enabled: {log_path}")
 
     def _ensure_api_key(self) -> None:
         """Ensure Anthropic API key is available."""
@@ -215,13 +187,11 @@ class ForgeAgent:
         Instead, errors are returned to the agent as informative messages
         so it can try alternative approaches.
 
-        Also logs tool calls to agent_trace_logger for debugging.
-
         Args:
             tool: The original tool to wrap.
 
         Returns:
-            Wrapped tool with error handling and logging.
+            Wrapped tool with error handling.
         """
         original_func = tool.func if hasattr(tool, "func") else None
         original_coroutine = tool.coroutine if hasattr(tool, "coroutine") else None
@@ -230,18 +200,10 @@ class ForgeAgent:
         if original_coroutine:
             @wraps(original_coroutine)
             async def wrapped_async(*args: Any, **kwargs: Any) -> str:
-                # Log tool call input
-                input_str = json.dumps(kwargs, default=str)[:500]
-                agent_trace_logger.debug(f"TOOL CALL: {tool_name} | INPUT: {input_str}")
                 try:
-                    result = await original_coroutine(*args, **kwargs)
-                    # Log tool call output (truncated)
-                    result_str = str(result)[:500] if result else "(empty)"
-                    agent_trace_logger.debug(f"TOOL RESULT: {tool_name} | OUTPUT: {result_str}")
-                    return result
+                    return await original_coroutine(*args, **kwargs)
                 except Exception as e:
                     error_msg = f"Tool '{tool_name}' failed: {e}"
-                    agent_trace_logger.error(f"TOOL ERROR: {tool_name} | INPUT: {input_str} | ERROR: {e}")
                     logger.warning(error_msg)
                     return f"ERROR: {error_msg}. Try a different approach or continue without this information."
 
@@ -256,18 +218,10 @@ class ForgeAgent:
         elif original_func:
             @wraps(original_func)
             def wrapped_sync(*args: Any, **kwargs: Any) -> str:
-                # Log tool call input
-                input_str = json.dumps(kwargs, default=str)[:500]
-                agent_trace_logger.debug(f"TOOL CALL: {tool_name} | INPUT: {input_str}")
                 try:
-                    result = original_func(*args, **kwargs)
-                    # Log tool call output (truncated)
-                    result_str = str(result)[:500] if result else "(empty)"
-                    agent_trace_logger.debug(f"TOOL RESULT: {tool_name} | OUTPUT: {result_str}")
-                    return result
+                    return original_func(*args, **kwargs)
                 except Exception as e:
                     error_msg = f"Tool '{tool_name}' failed: {e}"
-                    agent_trace_logger.error(f"TOOL ERROR: {tool_name} | INPUT: {input_str} | ERROR: {e}")
                     logger.warning(error_msg)
                     return f"ERROR: {error_msg}. Try a different approach or continue without this information."
 
@@ -307,11 +261,9 @@ class ForgeAgent:
             tools = await client.get_tools()
             logger.info(f"Loaded {len(tools)} tools from MCP servers")
 
-            # Filter to read-only tools if configured (skip in dev mode)
-            if self.settings.agent_mcp_read_only and not self.settings.agent_dev_mode:
+            # Filter to read-only tools if configured
+            if self.settings.agent_mcp_read_only:
                 tools = self._filter_read_only_tools(tools)
-            elif self.settings.agent_dev_mode:
-                logger.info("Dev mode enabled: all MCP tools allowed (no read-only filter)")
 
             # Wrap tools with error handling to prevent crashes
             tools = [self._wrap_tool_with_error_handling(t) for t in tools]
