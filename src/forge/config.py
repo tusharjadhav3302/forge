@@ -156,6 +156,14 @@ class Settings(BaseSettings):
         default="filesystem",
         description="Deep Agents backend type: filesystem, state, or store",
     )
+    agent_log_file: str = Field(
+        default="",
+        description="Path to agent trace log file for debugging (empty = no file logging)",
+    )
+    agent_dev_mode: bool = Field(
+        default=False,
+        description="Development mode: allow all tools (bash, write) without restrictions",
+    )
 
     # Prompt Configuration
     prompt_version: str = Field(
