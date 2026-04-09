@@ -1,19 +1,15 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: N/A → 1.0.0 (initial ratification)
-Modified principles: N/A (initial creation)
+Version change: 1.0.0 → 1.1.0 (container sandbox principle)
+Modified principles:
+  - VII. Ephemeral Workspaces → VII. Ephemeral Workspaces with Container Isolation
 Added sections:
-  - Core Principles (8 principles derived from LLD ADRs)
-  - Technology Stack & Architecture
-  - Development Workflow & Quality Gates
-  - Governance
+  - VII-A. Separation of Concerns: Agent vs Orchestrator
 Removed sections: N/A
-Templates requiring updates:
-  - .specify/templates/plan-template.md ✅ (Constitution Check section already present)
-  - .specify/templates/spec-template.md ✅ (user scenarios aligned with SDD principle)
-  - .specify/templates/tasks-template.md ✅ (phase structure aligned with workflow)
-Follow-up TODOs: None
+Templates requiring updates: None
+Follow-up TODOs:
+  - Implement container sandbox (Phase 8 tasks T184-T195)
 -->
 
 # Forge Constitution
@@ -98,17 +94,43 @@ Parallel execution MUST be grouped by repository, not by individual task.
 **Rationale:** Prevents competing PRs and merge conflict chaos that would result from
 parallel task-level execution within the same codebase.
 
-### VII. Ephemeral Workspaces
+### VII. Ephemeral Workspaces with Container Isolation
 
-Execution environments MUST be pristine and short-lived.
+Execution environments MUST be pristine, short-lived, and security-isolated.
 
 - Workspaces are generated on-the-fly for each repository/ticket combination
-- Workspaces MUST be destroyed after the PR is opened
+- AI agent execution MUST occur inside a container sandbox (podman)
+- Containers MUST only have access to the mounted workspace, not host filesystem
+- Containers MUST NOT receive cloud credentials, API tokens, or network access to internal systems
+- Containers MUST be destroyed after execution completes (success or failure)
 - No leftover build artifacts, uncommitted files, or state from previous runs
-- Git tokens and API secrets exposure window MUST be minimized
+- Git push and PR creation MUST occur from the orchestrator (outside container), not from inside
 
-**Rationale:** Prevents "state rot" from persistent clones and minimizes security exposure.
-Guarantees reproducible execution regardless of prior activity.
+**Rationale:** Prevents "state rot" from persistent clones and provides security isolation.
+Container sandboxing enables "lights-out factory" autonomy (full tool access including bash)
+while preventing accidental or malicious access to production systems.
+
+### VII-A. Separation of Concerns: Agent vs Orchestrator
+
+Clear boundaries MUST exist between what the AI agent controls and what the orchestrator controls.
+
+**Agent (inside container) owns:**
+- Code implementation (read, write, edit files)
+- Running tests and build commands
+- Git commits within the workspace
+- Iterating on failures (fix → test → fix loop)
+
+**Orchestrator (outside container) owns:**
+- Cloning repositories with credentials
+- Spawning and destroying containers
+- Git push to remote
+- PR creation and management
+- Jira status updates
+- Workflow state transitions
+
+**Rationale:** The agent operates autonomously within its sandbox, but the orchestrator
+maintains control over actions that affect external systems. This enables full agent
+autonomy while preserving safety and auditability.
 
 ### VIII. Modular Workflow Routing
 
@@ -195,4 +217,4 @@ frustrates teams. Issue type determines appropriate rigor.
 - Violations MUST be flagged and justified in Complexity Tracking
 - Runtime guidance in `agents.md` supplements but MUST NOT contradict this constitution
 
-**Version**: 1.0.0 | **Ratified**: 2026-03-30 | **Last Amended**: 2026-03-30
+**Version**: 1.1.0 | **Ratified**: 2026-03-30 | **Last Amended**: 2026-04-09

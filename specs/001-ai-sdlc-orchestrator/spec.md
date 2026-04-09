@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-ai-sdlc-orchestrator`
 **Created**: 2026-03-30
-**Last Modified**: 2026-04-05
+**Last Modified**: 2026-04-09
 **Status**: Updated (sync-applied)
 **Input**: AI-Integrated SDLC Orchestrator implementation based on LLD
 
@@ -96,18 +96,30 @@ The system receives webhook events from Jira and GitHub, acknowledges them insta
 
 ### User Story 6 - Single Repository Code Execution (Priority: P2)
 
-The system creates an ephemeral workspace, clones the target repository, implements assigned Tasks following repository guardrails (constitution.md/agents.md), runs tests, and opens a Pull Request.
+The system creates an isolated container sandbox, clones the target repository, implements assigned Tasks using an autonomous AI agent with full tool access (file operations, bash, tests), runs local tests to validate, and signals completion. The orchestrator (outside the container) handles git push and PR creation programmatically.
 
-**Why this priority**: This enables the first end-to-end automated implementation. Single-repo execution proves the AI can write code that meets specifications.
+**Why this priority**: This enables the first end-to-end automated implementation. Container isolation provides security (no host system access) while enabling "lights-out factory" autonomy inside the sandbox.
 
-**Independent Test**: Can be tested by assigning Tasks to a test repository and verifying that a PR is opened with commits addressing each Task.
+**Independent Test**: Can be tested by assigning Tasks to a test repository and verifying that a PR is opened with commits addressing each Task, and that the container was destroyed after completion.
 
 **Acceptance Scenarios**:
 
-1. **Given** Tasks assigned to a repository, **When** execution begins, **Then** the system creates an isolated workspace and clones the repository.
-2. **Given** a cloned workspace, **When** the AI implements code, **Then** it reads constitution.md/agents.md before making changes.
-3. **Given** implementation complete, **When** the AI pushes code, **Then** a single PR is opened containing commits for all assigned Tasks.
-4. **Given** execution complete, **When** the PR is opened, **Then** the ephemeral workspace is destroyed.
+1. **Given** Tasks assigned to a repository, **When** execution begins, **Then** the system clones the repository to a temp directory and spawns a podman container with the repo mounted.
+2. **Given** a running container, **When** the AI agent executes, **Then** it has full tool access (read, write, edit, bash/execute, glob, grep) within the mounted workspace only.
+3. **Given** a cloned workspace inside the container, **When** the AI implements code, **Then** it reads constitution.md/agents.md before making changes.
+4. **Given** implementation complete inside container, **When** the AI commits changes, **Then** the container exits with success status and commit details.
+5. **Given** container exit with success, **When** the orchestrator resumes, **Then** it pushes the branch and opens a PR programmatically (outside container).
+6. **Given** local tests configured in the repository, **When** the AI completes implementation, **Then** it runs local tests (unit tests) and only signals success if tests pass.
+7. **Given** local tests fail inside container, **When** the AI detects failure, **Then** it attempts to fix the code and re-run tests (up to configurable retry limit).
+8. **Given** execution complete (success or max retries), **When** the container exits, **Then** the container is destroyed and only the git changes persist in the mounted workspace.
+
+**Functional Requirements**:
+- **FR-030**: System MUST execute AI agent inside a podman container (based on devcontainers/universal image) with the workspace mounted at /workspace
+- **FR-031**: System MUST NOT pass cloud credentials, API keys, or host filesystem access to the container beyond the mounted workspace
+- **FR-032**: System MUST allow all Deep Agents tools (write_file, edit_file, execute/bash, glob, grep) inside the container without approval gates
+- **FR-033**: System MUST run local tests (following repo-defined test commands) before signaling implementation complete
+- **FR-034**: System MUST perform git push and PR creation from the orchestrator (host), not from inside the container
+- **FR-035**: System MUST destroy the container after execution regardless of success/failure
 
 ---
 
@@ -294,6 +306,15 @@ Operators can manage the system via a CLI tool, including starting workflows man
 - **FR-018**: System MUST support modular workflow routing based on Jira Issue Type (Feature, Bug, Tech Debt)
 - **FR-019**: System MUST support concurrent execution across multiple repositories, with a default limit of 5 concurrent repository workspaces to manage resource consumption. This limit is configurable.
 - **FR-020**: System MUST persist workflow state to survive orchestrator restarts
+
+### Container Sandbox Requirements (Code Execution)
+
+- **FR-030**: System MUST execute AI agent inside a podman container (based on devcontainers/universal image) with the workspace mounted at /workspace
+- **FR-031**: System MUST NOT pass cloud credentials, API keys, or host filesystem access to the container beyond the mounted workspace
+- **FR-032**: System MUST allow all Deep Agents tools (write_file, edit_file, execute/bash, glob, grep) inside the container without approval gates
+- **FR-033**: System MUST run local tests (following repo-defined test commands) before signaling implementation complete
+- **FR-034**: System MUST perform git push and PR creation from the orchestrator (host), not from inside the container
+- **FR-035**: System MUST destroy the container after execution regardless of success/failure
 
 ### Key Entities
 

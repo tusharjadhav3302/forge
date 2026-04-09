@@ -187,11 +187,11 @@
 
 ## Phase 8: User Story 6 - Single Repository Code Execution (Priority: P2)
 
-**Goal**: Create ephemeral workspace, implement Tasks, open PR
+**Goal**: Create ephemeral workspace, implement Tasks in container sandbox, open PR
 
 **Independent Test**: Assign Tasks to test repo, verify PR opened with commits for each Task
 
-### Implementation for User Story 6
+### Implementation for User Story 6 (Legacy - Text Extraction)
 
 - [x] T058 [P] [US6] Implement workspace manager in src/forge/workspace/manager.py (create tempdir, cleanup)
 - [x] T059 [P] [US6] Implement git operations in src/forge/workspace/git_ops.py (clone, branch, commit, push)
@@ -203,7 +203,33 @@
 - [x] T065 [US6] Wire execution nodes into main graph in src/forge/orchestrator/graph.py
 - [x] T066 [US6] Implement workspace destruction on PR creation
 
-**Checkpoint**: Single-repo execution functional and testable independently
+### Container Sandbox Phase 1: MVP with Devcontainers Universal (FR-030 to FR-035)
+
+- [ ] T184 [US6] Create Containerfile based on mcr.microsoft.com/devcontainers/universal:linux (add Deep Agents, Anthropic SDK, entrypoint)
+- [ ] T185 [US6] Implement container runner in src/forge/sandbox/runner.py (podman spawn, mount workspace, wait for exit)
+- [ ] T186 [US6] Implement container entrypoint script in containers/entrypoint.py (run Deep Agents with task)
+- [ ] T187 [US6] Update implementation node to use container runner instead of direct agent invocation
+- [ ] T188 [US6] Implement test runner detection in src/forge/sandbox/test_runner.py (detect pytest, go test, make test)
+- [ ] T189 [US6] Add local test execution inside container before signaling success
+- [ ] T190 [US6] Implement container exit status handling (success, test failure, max retries)
+- [ ] T191 [US6] Move git push from implementation node to post-container orchestrator step
+- [ ] T192 [US6] Add container cleanup on failure (destroy container, preserve workspace for debugging if configured)
+- [ ] T193 [US6] Implement container resource limits (CPU, memory, timeout) via podman flags
+- [ ] T194 [P] [US6] Add container network restrictions (allow only LLM API, block internal systems)
+- [ ] T195 [P] [US6] Create integration test for container sandbox (spawn, run simple task, verify git commit)
+
+**Checkpoint**: Single-repo execution functional with container isolation (devcontainers universal)
+
+### Container Sandbox Phase 2: Leverage Devcontainer Ecosystem (Future)
+
+> **Note**: Phase 2 tasks to be added after Phase 1 is validated. Will include:
+> - Detect and use `.devcontainer/devcontainer.json` if present in repo
+> - Build repo-specific images using devcontainer CLI or features
+> - Repo-level override via `.forge/container.yaml` for custom needs
+> - Fallback to Phase 1 universal image for repos without config
+> - Benefit: repos configured for VS Code/Codespaces work automatically
+
+**Checkpoint**: Repos with devcontainer.json use their own environment
 
 ---
 
@@ -564,9 +590,9 @@
 
 ## Summary
 
-- **Total Tasks**: 183 (T001-T183)
+- **Total Tasks**: 195 (T001-T195)
 - **Completed**: 153 tasks
-- **Remaining**: 30 tasks
+- **Remaining**: 42 tasks
 - **New Phases Added** (2026-04-05 via spec sync):
   - Phase 15: US12 Observability (9 tasks) - 9 done
   - Phase 16: US13 Metrics (8 tasks) - 8 done
@@ -577,3 +603,5 @@
   - Phase 6: Task Implementation Approval Gate (5 tasks: T169-T173) - 5 done
   - Phase 6: Task Revision (5 tasks: T174-T178) - 5 done
   - Phase 6: Child Ticket Webhook Routing (5 tasks: T179-T183) - 5 done
+- **New Tasks Added** (2026-04-09):
+  - Phase 8: Container Sandbox Implementation (12 tasks: T184-T195) - 0 done

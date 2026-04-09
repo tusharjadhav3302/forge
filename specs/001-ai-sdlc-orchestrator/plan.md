@@ -1,6 +1,6 @@
 # Implementation Plan: AI-Integrated SDLC Orchestrator
 
-**Branch**: `001-ai-sdlc-orchestrator` | **Date**: 2026-03-30 | **Spec**: [spec.md](spec.md)
+**Branch**: `001-ai-sdlc-orchestrator` | **Date**: 2026-04-09 | **Spec**: [spec.md](spec.md)
 **Input**: Feature specification from `/specs/001-ai-sdlc-orchestrator/spec.md`
 
 ## Summary
@@ -10,7 +10,8 @@ Build an AI-driven SDLC orchestrator that automates the software development lif
 ## Technical Context
 
 **Language/Version**: Python 3.11+
-**Primary Dependencies**: LangGraph, FastAPI, Redis, Anthropic SDK, GitPython, httpx
+**Primary Dependencies**: LangGraph, FastAPI, Redis, Anthropic SDK, GitPython, httpx, Deep Agents
+**Container Runtime**: Podman (for sandbox isolation during code execution)
 **Storage**: Redis (workflow state via LangGraph Checkpointer), Jira (artifacts/source of truth)
 **Testing**: pytest, pytest-asyncio, httpx (for API testing)
 **Target Platform**: Linux server (containerized deployment)
@@ -18,6 +19,62 @@ Build an AI-driven SDLC orchestrator that automates the software development lif
 **Performance Goals**: Webhook acknowledgment <500ms, 99% of events; PRD/Spec generation <5min
 **Constraints**: Must respect Jira/GitHub/LLM API rate limits; FIFO ordering per ticket
 **Scale/Scope**: Initial pilot: single repository; Phase 4: multi-repo concurrent execution
+
+### Container Sandbox Architecture
+
+The development phase uses podman containers to provide security isolation while enabling
+full AI agent autonomy ("lights-out factory"):
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Forge Orchestrator (host)                                         │
+│    1. Clone repo to /tmp/forge-{ticket}/                           │
+│    2. Spawn podman container with repo mounted at /workspace       │
+│    3. Wait for container completion                                │
+│    4. Git push from host (credentials never enter container)       │
+│    5. Create PR programmatically via GitHub API                    │
+│    6. Destroy container and cleanup temp directory                 │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ podman run --rm -v /tmp/forge-{ticket}:/workspace
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Development Sandbox Container (forge-dev image)                   │
+│    Environment:                                                    │
+│    - Deep Agents with FilesystemBackend(root_dir="/workspace")     │
+│    - ALL tools enabled: write_file, edit_file, execute, glob, grep │
+│    - Read-only MCP for external research (docs, search)            │
+│    - No host filesystem access beyond /workspace                   │
+│    - No cloud credentials, API tokens, or SSH keys                 │
+│    - Network: limited to LLM API + read-only external docs         │
+│                                                                    │
+│    Workflow:                                                       │
+│    1. Read constitution.md/agents.md from workspace                │
+│    2. Implement Tasks using full tool autonomy                     │
+│    3. Run local tests (repo-defined: make test, pytest, go test)   │
+│    4. Fix failures and re-test (up to N retries)                   │
+│    5. Git commit (within workspace)                                │
+│    6. Exit with status code (success/failure)                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Container Image Requirements**:
+
+Phase 1 (MVP): Based on devcontainers universal image
+- Base: `mcr.microsoft.com/devcontainers/universal:linux`
+- Pre-installed: Python, Node, Go, Java, C++, Ruby, .NET, PHP, Rust
+- Add: Deep Agents with FilesystemBackend, Anthropic SDK
+- Add: Forge-specific entrypoint script
+- Git included (for commits, not push)
+- Common build tools included (make, gcc, cmake, etc.)
+- No pre-installed credentials or secrets
+- Image size: ~10GB (devcontainers universal limit, pre-pull on workers)
+- Reference: https://github.com/devcontainers/images/tree/main/src/universal
+
+Phase 2 (Optimization): Leverage devcontainer ecosystem
+- If repo has `.devcontainer/devcontainer.json` → build/use that image
+- If repo has `.forge/container.yaml` → use Forge-specific override
+- Fallback to Phase 1 fat image for repos without config
+- Benefit: repos already configured for VS Code/Codespaces "just work"
 
 ## Constitution Check
 
@@ -56,6 +113,9 @@ specs/001-ai-sdlc-orchestrator/
 
 ```text
 forge/
+├── containers/
+│   ├── Containerfile             # Podman image definition for sandbox
+│   └── entrypoint.py             # Container entrypoint (runs Deep Agent)
 ├── src/
 │   └── forge/
 │       ├── __init__.py
@@ -123,6 +183,12 @@ forge/
 │       │   ├── manager.py             # Workspace lifecycle
 │       │   ├── git_ops.py             # GitPython operations
 │       │   └── guardrails.py          # Constitution/agents.md loading
+│       │
+│       ├── sandbox/                   # Container sandbox for code execution
+│       │   ├── __init__.py
+│       │   ├── runner.py              # Podman container orchestration
+│       │   ├── test_runner.py         # Detect and run repo test commands
+│       │   └── config.py              # Container resource limits, network
 │       │
 │       ├── queue/                     # Message broker integration
 │       │   ├── __init__.py
