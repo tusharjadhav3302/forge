@@ -34,6 +34,8 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
 
     jira = JiraClient()
     agent = ForgeAgent()
+    spec_content = None
+    jira_error = None
 
     try:
         # If PRD not in state, fetch from Jira
@@ -54,35 +56,42 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
             "ticket_key": ticket_key,
         }
 
-        # Generate specification using Claude
+        # Generate specification using Claude - primary operation
         spec_content = await agent.generate_spec(prd_content, context)
 
-        # Store spec in Jira (attachment by default, or custom field/comment if configured)
-        settings = get_settings()
-        if settings.jira_store_in_comments:
-            await jira.add_structured_comment(
-                ticket_key,
-                "Technical Specification",
-                spec_content,
-                comment_type="spec",
-            )
-        elif settings.jira_spec_custom_field:
-            await jira.update_custom_field(
-                ticket_key,
-                settings.jira_spec_custom_field,
-                spec_content,
-            )
-        else:
-            # Default: store as markdown attachment
-            await jira.add_attachment(
-                ticket_key,
-                filename=f"{ticket_key}-spec.md",
-                content=spec_content,
-                content_type="text/markdown",
-            )
+        # Store spec in Jira - secondary operation
+        try:
+            settings = get_settings()
+            if settings.jira_store_in_comments:
+                await jira.add_structured_comment(
+                    ticket_key,
+                    "Technical Specification",
+                    spec_content,
+                    comment_type="spec",
+                )
+            elif settings.jira_spec_custom_field:
+                await jira.update_custom_field(
+                    ticket_key,
+                    settings.jira_spec_custom_field,
+                    spec_content,
+                )
+            else:
+                # Default: store as markdown attachment
+                await jira.add_attachment(
+                    ticket_key,
+                    filename=f"{ticket_key}-spec.md",
+                    content=spec_content,
+                    content_type="text/markdown",
+                )
 
-        # Set workflow label (instead of custom status transition)
-        await jira.set_workflow_label(ticket_key, ForgeLabel.SPEC_PENDING)
+            # Set workflow label (instead of custom status transition)
+            await jira.set_workflow_label(ticket_key, ForgeLabel.SPEC_PENDING)
+        except Exception as e:
+            # Jira update failed but we have content - log and continue
+            jira_error = str(e)
+            logger.warning(
+                f"Jira update failed for {ticket_key}, but spec was generated: {e}"
+            )
 
         logger.info(f"Spec generated for {ticket_key} ({len(spec_content)} chars)")
 
@@ -90,19 +99,23 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
             **state,
             "spec_content": spec_content,
             "current_node": "spec_approval_gate",
-            "last_error": None,
+            "last_error": f"Jira update pending: {jira_error}" if jira_error else None,
         })
 
     except Exception as e:
         logger.error(f"Spec generation failed for {ticket_key}: {e}")
         from forge.orchestrator.nodes.error_handler import notify_error
         await notify_error(state, str(e), "generate_spec")
-        return {
+        # If we have partial content, save it even on failure
+        result_state = {
             **state,
             "last_error": str(e),
             "current_node": "generate_spec",
             "retry_count": state.get("retry_count", 0) + 1,
         }
+        if spec_content:
+            result_state["spec_content"] = spec_content
+        return result_state
     finally:
         await jira.close()
         await agent.close()

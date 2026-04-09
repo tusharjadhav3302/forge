@@ -137,6 +137,11 @@ def route_by_ticket_type(
             return "rca_approval_gate"
         elif current_node == "implement_bug_fix":
             return "implement_bug_fix"
+        # Terminal states - workflow is complete, route to END
+        # (retry cases are handled by worker setting current_node to task_router)
+        elif current_node in ("complete", "complete_tasks", "aggregate_feature_status"):
+            logger.info(f"Workflow at terminal state '{current_node}', returning END")
+            return END
         # If we don't recognize the node, log and fall through
         else:
             logger.warning(f"Unrecognized current_node '{current_node}', using ticket type routing")

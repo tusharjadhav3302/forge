@@ -217,8 +217,10 @@ class OrchestratorWorker:
                     )
 
         # Check for rejection comment (contains feedback)
-        # Determine if comment is on a Task (child) vs Feature (parent)
+        # Determine if comment is on Epic/Task (child) vs Feature (parent)
+        # based on current workflow phase
         comment_ticket_key = None
+        comment_ticket_type = None  # "epic" or "task"
         if comment:
             comment_body = comment.get("body", "")
             # Extract text from ADF if needed
@@ -230,23 +232,56 @@ class OrchestratorWorker:
                 is_rejected = True
                 feedback = comment_body
 
-                # Check if comment is on a Task (single-task update)
-                # The webhook ticket_key is the ticket that was commented on
+                # Determine workflow phase from current_node
                 workflow_ticket_key = current_state.get("ticket_key", "")
+                epic_keys = current_state.get("epic_keys", [])
                 task_keys = current_state.get("task_keys", [])
 
+                # Determine which phase we're in based on current_node
+                plan_phase_nodes = (
+                    "plan_approval_gate", "decompose_epics",
+                    "regenerate_all_epics", "update_single_epic",
+                )
+                task_phase_nodes = (
+                    "task_approval_gate", "generate_tasks",
+                    "regenerate_all_tasks", "update_single_task",
+                )
+
                 if message.ticket_key != workflow_ticket_key:
-                    # Comment is on a child ticket
-                    if message.ticket_key in task_keys:
-                        comment_ticket_key = message.ticket_key
-                        logger.info(
-                            f"Detected Task-level comment on {comment_ticket_key}: "
-                            f"{feedback[:100]}..."
-                        )
+                    # Comment is on a child ticket - determine type by phase
+                    if current_node in plan_phase_nodes:
+                        # In plan phase - check if it's an Epic
+                        if message.ticket_key in epic_keys:
+                            comment_ticket_key = message.ticket_key
+                            comment_ticket_type = "epic"
+                            logger.info(
+                                f"Detected Epic-level comment on {comment_ticket_key}: "
+                                f"{feedback[:100]}..."
+                            )
+                        else:
+                            logger.info(
+                                f"Detected comment on child ticket {message.ticket_key} "
+                                f"(not in epic_keys): {feedback[:100]}..."
+                            )
+                    elif current_node in task_phase_nodes:
+                        # In task phase - check if it's a Task
+                        if message.ticket_key in task_keys:
+                            comment_ticket_key = message.ticket_key
+                            comment_ticket_type = "task"
+                            logger.info(
+                                f"Detected Task-level comment on {comment_ticket_key}: "
+                                f"{feedback[:100]}..."
+                            )
+                        else:
+                            logger.info(
+                                f"Detected comment on child ticket {message.ticket_key} "
+                                f"(not in task_keys): {feedback[:100]}..."
+                            )
                     else:
+                        # Not in a phase that handles child comments
                         logger.info(
                             f"Detected comment on child ticket {message.ticket_key} "
-                            f"(not in task_keys): {feedback[:100]}..."
+                            f"at unexpected node {current_node}: {feedback[:100]}..."
                         )
                 else:
                     logger.info(
@@ -270,9 +305,19 @@ class OrchestratorWorker:
             and current_state.get("last_error") is not None
         )
 
+        # Check if workflow is at a terminal state (complete)
+        terminal_states = ("complete", "complete_tasks", "aggregate_feature_status")
+        is_terminal = current_node in terminal_states
+
         if is_retry:
-            # Explicit retry signal - clear errors and retry current node
-            prev_error = current_state.get("last_error", "")
+            # Explicit retry signal - but only if there's an error to retry from
+            prev_error = current_state.get("last_error")
+            if not prev_error and not was_errored:
+                logger.info(
+                    f"Ignoring forge:retry for {message.ticket_key} - no error to retry from"
+                )
+                return current_state
+
             logger.info(
                 f"Retry requested for {message.ticket_key} at {current_node} "
                 f"(clearing error: {prev_error[:100] if prev_error else 'none'})"
@@ -280,7 +325,14 @@ class OrchestratorWorker:
             updated_state["last_error"] = None
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
-            # Keep current_node so we retry the same stage
+            updated_state["terminal_error_notified"] = False  # Reset for next potential error
+            # For terminal states, route back to task_router to retry implementation
+            if is_terminal:
+                logger.info(
+                    f"Terminal state retry: resetting {current_node} -> task_router"
+                )
+                updated_state["current_node"] = "task_router"
+            # Otherwise keep current_node so we retry the same stage
         elif is_approved:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
@@ -288,20 +340,43 @@ class OrchestratorWorker:
         elif is_rejected and feedback:
             updated_state["revision_requested"] = True
             updated_state["feedback_comment"] = feedback
-            # Set current_task_key for Task-level updates
-            if comment_ticket_key:
-                updated_state["current_task_key"] = comment_ticket_key
-            else:
+            # Set current_epic_key or current_task_key based on comment type
+            if comment_ticket_key and comment_ticket_type == "epic":
+                updated_state["current_epic_key"] = comment_ticket_key
                 updated_state["current_task_key"] = None
+            elif comment_ticket_key and comment_ticket_type == "task":
+                updated_state["current_task_key"] = comment_ticket_key
+                updated_state["current_epic_key"] = None
+            else:
+                # Feature-level comment - clear both
+                updated_state["current_task_key"] = None
+                updated_state["current_epic_key"] = None
         elif was_errored:
-            # Workflow had an error - any new webhook triggers a retry
-            # Clear the error so the node can be re-executed
-            prev_error = current_state.get("last_error", "")
-            logger.info(
-                f"Clearing last_error for {message.ticket_key} to allow retry "
-                f"(was: {prev_error[:100] if prev_error else 'unknown'})"
-            )
-            updated_state["last_error"] = None
+            # Workflow had an error - check if we should retry
+            if is_terminal and not is_retry:
+                # Terminal state without explicit retry - don't restart
+                last_error = current_state.get("last_error", "Unknown error")
+                logger.info(
+                    f"Workflow for {message.ticket_key} is at terminal state '{current_node}' "
+                    f"with error, ignoring event (use forge:retry label to restart)"
+                )
+                # Post a comment to Jira explaining how to retry (only once)
+                if not current_state.get("terminal_error_notified"):
+                    await self._post_terminal_error_comment(
+                        message.ticket_key, last_error
+                    )
+                    # Mark as notified so we don't post again
+                    return {**current_state, "terminal_error_notified": True}
+                # Return current state as-is (no changes)
+                return current_state
+            else:
+                # Non-terminal state, or explicit retry requested - clear error
+                prev_error = current_state.get("last_error", "")
+                logger.info(
+                    f"Clearing last_error for {message.ticket_key} to allow retry "
+                    f"(was: {prev_error[:100] if prev_error else 'unknown'})"
+                )
+                updated_state["last_error"] = None
 
         return updated_state
 
@@ -318,6 +393,31 @@ class OrchestratorWorker:
                     if child.get("type") == "text":
                         texts.append(child.get("text", ""))
         return " ".join(texts)
+
+    async def _post_terminal_error_comment(
+        self, ticket_key: str, error: str
+    ) -> None:
+        """Post a comment explaining how to retry a terminal error.
+
+        Args:
+            ticket_key: The Jira ticket key.
+            error: The error message.
+        """
+        from forge.integrations.jira.client import JiraClient
+
+        try:
+            jira = JiraClient()
+            error_preview = error[:200] if error else "Unknown error"
+            comment = (
+                f"*Forge workflow stopped with error:*\n\n"
+                f"{{code}}{error_preview}{{code}}\n\n"
+                f"To retry the workflow, add the label `forge:retry` to this ticket."
+            )
+            await jira.add_comment(ticket_key, comment)
+            await jira.close()
+            logger.info(f"Posted terminal error comment to {ticket_key}")
+        except Exception as e:
+            logger.warning(f"Failed to post terminal error comment to {ticket_key}: {e}")
 
     def _build_initial_state(self, message: QueueMessage) -> dict[str, Any]:
         """Build initial workflow state from queue message.

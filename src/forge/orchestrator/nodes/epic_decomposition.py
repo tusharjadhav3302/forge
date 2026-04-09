@@ -34,6 +34,8 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
 
     jira = JiraClient()
     agent = ForgeAgent()
+    epic_keys: list[str] = []
+    jira_error = None
 
     try:
         # If spec not in state, this is an error
@@ -76,7 +78,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             "available_repos": available_repos,
         }
 
-        # Generate Epic breakdown using Claude
+        # Generate Epic breakdown using Claude - primary operation
         epics_data = await agent.generate_epics(spec_content, context)
 
         if not epics_data:
@@ -87,8 +89,7 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
                 "current_node": "decompose_epics",
             }
 
-        # Create Epics in Jira
-        epic_keys: list[str] = []
+        # Create Epics in Jira - secondary operation
         epics_by_repo: dict[str, list[str]] = {}
 
         for epic in epics_data:
@@ -108,46 +109,71 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
                 if repo not in epics_by_repo:
                     epics_by_repo[repo] = []
 
-            epic_key = await jira.create_epic(
-                project_key=project_key,
-                summary=summary,
-                description=plan,
-                parent_key=ticket_key,
-                labels=labels,
-            )
-            epic_keys.append(epic_key)
+            try:
+                epic_key = await jira.create_epic(
+                    project_key=project_key,
+                    summary=summary,
+                    description=plan,
+                    parent_key=ticket_key,
+                    labels=labels,
+                )
+                epic_keys.append(epic_key)
 
-            if repo:
-                epics_by_repo[repo].append(epic_key)
+                if repo:
+                    epics_by_repo[repo].append(epic_key)
 
-            logger.info(
-                f"Created Epic {epic_key}: {summary}"
-                + (f" (repo: {repo})" if repo else "")
-            )
+                logger.info(
+                    f"Created Epic {epic_key}: {summary}"
+                    + (f" (repo: {repo})" if repo else "")
+                )
+            except Exception as e:
+                # Log but continue creating remaining Epics
+                jira_error = str(e)
+                logger.warning(
+                    f"Failed to create Epic '{summary}' for {ticket_key}: {e}"
+                )
 
-        # Set workflow label to indicate plan is pending approval
-        await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
+        # Try to set workflow label
+        try:
+            await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
+        except Exception as e:
+            jira_error = str(e)
+            logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
 
         logger.info(f"Created {len(epic_keys)} Epics for {ticket_key}")
 
-        return update_state_timestamp({
-            **state,
-            "epic_keys": epic_keys,
-            "current_node": "plan_approval_gate",
-            "last_error": None,
-        })
+        # If we created some Epics, advance even with partial failures
+        if epic_keys:
+            return update_state_timestamp({
+                **state,
+                "epic_keys": epic_keys,
+                "current_node": "plan_approval_gate",
+                "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
+            })
+        else:
+            # No Epics created at all - this is a failure
+            return {
+                **state,
+                "last_error": jira_error or "Failed to create any Epics in Jira",
+                "current_node": "decompose_epics",
+                "retry_count": state.get("retry_count", 0) + 1,
+            }
 
     except Exception as e:
         logger.error(f"Epic decomposition failed for {ticket_key}: {e}")
         # Post error notification to Jira
         from forge.orchestrator.nodes.error_handler import notify_error
         await notify_error(state, str(e), "decompose_epics")
-        return {
+        # Save any Epics we managed to create
+        result_state = {
             **state,
             "last_error": str(e),
             "current_node": "decompose_epics",
             "retry_count": state.get("retry_count", 0) + 1,
         }
+        if epic_keys:
+            result_state["epic_keys"] = epic_keys
+        return result_state
     finally:
         await jira.close()
         await agent.close()

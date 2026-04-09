@@ -48,6 +48,7 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     all_task_keys: list[str] = []
     tasks_by_repo: dict[str, list[str]] = {}
+    jira_error = None
 
     try:
         # Get project key from parent Feature
@@ -83,12 +84,12 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 "epic_repo": epic_repo,
             }
 
-            # Generate Tasks using Deep Agents
+            # Generate Tasks using Deep Agents - primary operation
             tasks_data = await _generate_tasks_for_epic(
                 agent, epic_plan, epic_summary, context
             )
 
-            # Create Tasks in Jira
+            # Create Tasks in Jira - secondary operation
             for task in tasks_data:
                 summary = task.get("summary", "Untitled Task")
                 description = task.get("description", "")
@@ -116,49 +117,75 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 if repo and repo != "unknown":
                     labels.append(f"repo:{repo}")
 
-                task_key = await jira.create_task(
-                    project_key=project_key,
-                    summary=summary,
-                    description=description,
-                    parent_key=epic_key,
-                    labels=labels,
-                )
+                try:
+                    task_key = await jira.create_task(
+                        project_key=project_key,
+                        summary=summary,
+                        description=description,
+                        parent_key=epic_key,
+                        labels=labels,
+                    )
 
-                all_task_keys.append(task_key)
+                    all_task_keys.append(task_key)
 
-                # Track by repository
-                if repo not in tasks_by_repo:
-                    tasks_by_repo[repo] = []
-                tasks_by_repo[repo].append(task_key)
+                    # Track by repository
+                    if repo not in tasks_by_repo:
+                        tasks_by_repo[repo] = []
+                    tasks_by_repo[repo].append(task_key)
 
-                logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
+                    logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
+                except Exception as e:
+                    # Log but continue creating remaining Tasks
+                    jira_error = str(e)
+                    logger.warning(
+                        f"Failed to create Task '{summary}' for {ticket_key}: {e}"
+                    )
 
-        # Set workflow label to indicate tasks are pending approval
-        await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_PENDING)
+        # Try to set workflow label
+        try:
+            await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_PENDING)
+        except Exception as e:
+            jira_error = str(e)
+            logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
 
         logger.info(
             f"Created {len(all_task_keys)} Tasks for {ticket_key}, "
             "awaiting implementation approval"
         )
 
-        return update_state_timestamp({
-            **state,
-            "task_keys": all_task_keys,
-            "tasks_by_repo": tasks_by_repo,
-            "current_node": "task_approval_gate",
-            "last_error": None,
-        })
+        # If we created some Tasks, advance even with partial failures
+        if all_task_keys:
+            return update_state_timestamp({
+                **state,
+                "task_keys": all_task_keys,
+                "tasks_by_repo": tasks_by_repo,
+                "current_node": "task_approval_gate",
+                "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
+            })
+        else:
+            # No Tasks created at all - this is a failure
+            return {
+                **state,
+                "last_error": jira_error or "Failed to create any Tasks in Jira",
+                "current_node": "generate_tasks",
+                "retry_count": state.get("retry_count", 0) + 1,
+            }
 
     except Exception as e:
         logger.error(f"Task generation failed for {ticket_key}: {e}")
         from forge.orchestrator.nodes.error_handler import notify_error
         await notify_error(state, str(e), "generate_tasks")
-        return {
+        # Save any Tasks we managed to create
+        result_state = {
             **state,
             "last_error": str(e),
             "current_node": "generate_tasks",
             "retry_count": state.get("retry_count", 0) + 1,
         }
+        if all_task_keys:
+            result_state["task_keys"] = all_task_keys
+            result_state["tasks_by_repo"] = tasks_by_repo
+        return result_state
     finally:
         await jira.close()
 

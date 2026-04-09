@@ -137,6 +137,8 @@ async def complete_tasks(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(e),
+            "current_node": "complete_tasks",
+            "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:
         await jira.close()
@@ -190,6 +192,8 @@ async def aggregate_epic_status(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(e),
+            "current_node": "aggregate_epic_status",
+            "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:
         await jira.close()
@@ -232,6 +236,8 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(e),
+            "current_node": "aggregate_feature_status",
+            "retry_count": state.get("retry_count", 0) + 1,
         }
     finally:
         await jira.close()

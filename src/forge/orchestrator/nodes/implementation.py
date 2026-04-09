@@ -120,27 +120,15 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
                 "implemented_tasks": implemented,
                 "current_node": "implement_task",  # Loop back for next task
                 "last_error": None,
+                "retry_count": 0,  # Reset retry count on success
             })
         else:
-            # Container failed - check if tests failed or task failed
+            # Container failed - treat all failures the same
+            # The container agent is responsible for running tests and only
+            # committing when they pass. If we get here, implementation failed.
             error_msg = result.error_message or "Unknown container error"
-
-            if result.tests_failed:
-                logger.warning(f"Tests failed for {current_task}: {error_msg}")
-                # Still continue - tests failed but code was committed
-                implemented = state.get("implemented_tasks", [])
-                implemented.append(current_task)
-
-                return update_state_timestamp({
-                    **state,
-                    "current_task_key": None,
-                    "implemented_tasks": implemented,
-                    "current_node": "implement_task",
-                    "last_error": f"Tests failed: {error_msg}",
-                })
-            else:
-                logger.error(f"Implementation failed for {current_task}: {error_msg}")
-                raise RuntimeError(error_msg)
+            logger.error(f"Implementation failed for {current_task}: {error_msg}")
+            raise RuntimeError(error_msg)
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")

@@ -32,6 +32,8 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
 
     jira = JiraClient()
     agent = ForgeAgent()
+    prd_content = None
+    jira_error = None
 
     try:
         # Fetch current issue to get raw requirements
@@ -53,47 +55,59 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
             "project_key": issue.project_key,
         }
 
-        # Generate PRD using Claude
+        # Generate PRD using Claude - primary operation
         prd_content = await agent.generate_prd(raw_requirements, context)
 
-        # Update Jira with generated PRD
-        settings = get_settings()
-        if settings.jira_store_in_comments:
-            # Store PRD in a structured comment
-            await jira.add_structured_comment(
-                ticket_key,
-                "Product Requirements Document (PRD)",
-                prd_content,
-                comment_type="prd",
-            )
-        else:
-            # Update description directly
-            await jira.update_description(ticket_key, prd_content)
+        # Update Jira with generated PRD - secondary operation
+        try:
+            settings = get_settings()
+            if settings.jira_store_in_comments:
+                # Store PRD in a structured comment
+                await jira.add_structured_comment(
+                    ticket_key,
+                    "Product Requirements Document (PRD)",
+                    prd_content,
+                    comment_type="prd",
+                )
+            else:
+                # Update description directly
+                await jira.update_description(ticket_key, prd_content)
 
-        # Set workflow label (instead of custom status transition)
-        await jira.set_workflow_label(ticket_key, ForgeLabel.PRD_PENDING)
+            # Set workflow label (instead of custom status transition)
+            await jira.set_workflow_label(ticket_key, ForgeLabel.PRD_PENDING)
+        except Exception as e:
+            # Jira update failed but we have content - log and continue
+            jira_error = str(e)
+            logger.warning(
+                f"Jira update failed for {ticket_key}, but PRD was generated: {e}"
+            )
 
         logger.info(
             f"PRD generated for {ticket_key} ({len(prd_content)} chars)"
         )
 
+        # If Jira failed, set a warning but still advance (content exists)
         return update_state_timestamp({
             **state,
             "prd_content": prd_content,
             "current_node": "prd_approval_gate",
-            "last_error": None,
+            "last_error": f"Jira update pending: {jira_error}" if jira_error else None,
         })
 
     except Exception as e:
         logger.error(f"PRD generation failed for {ticket_key}: {e}")
         from forge.orchestrator.nodes.error_handler import notify_error
         await notify_error(state, str(e), "generate_prd")
-        return {
+        # If we have partial content, save it even on failure
+        result_state = {
             **state,
             "last_error": str(e),
             "current_node": "generate_prd",
             "retry_count": state.get("retry_count", 0) + 1,
         }
+        if prd_content:
+            result_state["prd_content"] = prd_content
+        return result_state
     finally:
         await jira.close()
         await agent.close()

@@ -423,6 +423,61 @@ class ForgeAgent:
         )
         return any(indicator in error_str for indicator in rate_limit_indicators)
 
+    def _is_transient_error(self, error: Exception) -> bool:
+        """Check if an error is transient and worth retrying.
+
+        Covers rate limits, network errors, timeouts, and temporary failures.
+
+        Args:
+            error: The exception that occurred.
+
+        Returns:
+            True if this is a transient error worth retrying.
+        """
+        # Check rate limits first
+        if self._is_rate_limit_error(error):
+            return True
+
+        error_str = str(error).lower()
+        error_type = type(error).__name__.lower()
+
+        # Network and connection errors
+        transient_indicators = (
+            "timeout",
+            "timed out",
+            "connection reset",
+            "connection refused",
+            "connection error",
+            "connectionerror",
+            "network error",
+            "temporary failure",
+            "service unavailable",
+            "503",
+            "502",
+            "504",
+            "bad gateway",
+            "gateway timeout",
+            "server error",
+            "internal server error",
+            "500",
+            "overloaded",
+            "try again",
+        )
+
+        # Check error message
+        if any(indicator in error_str for indicator in transient_indicators):
+            return True
+
+        # Check exception type names
+        transient_types = (
+            "timeout",
+            "connectionerror",
+            "connecttimeout",
+            "readtimeout",
+            "networkerror",
+        )
+        return any(t in error_type for t in transient_types)
+
     def _extract_retry_delay(self, error: Exception) -> int | None:
         """Extract retry delay from rate limit error message.
 
@@ -493,7 +548,7 @@ class ForgeAgent:
         else:
             langfuse_ctx_params = {}
 
-        # Invoke the agent with retry logic for rate limits
+        # Invoke the agent with retry logic for transient errors
         # Use async Langfuse context for session tracking (v3+ API)
         async with get_langfuse_context(
             session_id=langfuse_ctx_params.get("session_id"),
@@ -512,7 +567,7 @@ class ForgeAgent:
                     break  # Success, exit retry loop
                 except Exception as e:
                     last_error = e
-                    if self._is_rate_limit_error(e) and attempt < self.MAX_RETRIES - 1:
+                    if self._is_transient_error(e) and attempt < self.MAX_RETRIES - 1:
                         # Calculate backoff delay
                         explicit_delay = self._extract_retry_delay(e)
                         if explicit_delay:
@@ -521,7 +576,7 @@ class ForgeAgent:
                             delay = self.INITIAL_BACKOFF_SECONDS * (2 ** attempt)
 
                         logger.warning(
-                            f"Rate limit hit (attempt {attempt + 1}/{self.MAX_RETRIES}), "
+                            f"Transient error (attempt {attempt + 1}/{self.MAX_RETRIES}), "
                             f"retrying in {delay}s: {e}"
                         )
                         await asyncio.sleep(delay)
