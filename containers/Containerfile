@@ -1,0 +1,45 @@
+# Forge Development Sandbox Container
+# Based on devcontainers/universal for multi-language support
+#
+# Pre-installed: Python, Node, Go, Java, C++, Ruby, .NET, PHP, Rust
+# Added: Deep Agents, Anthropic SDK, Forge entrypoint
+#
+# Build: podman build -t forge-dev:latest -f Containerfile .
+# Run:   podman run --rm -v /path/to/workspace:/workspace forge-dev:latest
+
+FROM mcr.microsoft.com/devcontainers/universal:linux
+
+LABEL org.opencontainers.image.title="Forge Development Sandbox"
+LABEL org.opencontainers.image.description="AI-powered development environment for Forge SDLC orchestrator"
+LABEL org.opencontainers.image.source="https://github.com/your-org/forge"
+
+# Install Deep Agents and dependencies
+# Using pip as the universal image has Python pre-installed
+RUN pip install --no-cache-dir \
+    deepagents \
+    anthropic \
+    langchain-anthropic \
+    langchain-google-vertexai \
+    httpx \
+    pydantic \
+    pydantic-settings
+
+# Create workspace directory (will be mounted at runtime)
+RUN mkdir -p /workspace && chmod 777 /workspace
+
+# Copy entrypoint script
+COPY entrypoint.py /usr/local/bin/forge-entrypoint.py
+RUN chmod +x /usr/local/bin/forge-entrypoint.py
+
+# Set working directory
+WORKDIR /workspace
+
+# Environment variables for Deep Agents
+ENV DEEPAGENTS_ROOT_DIR=/workspace
+ENV DEEPAGENTS_BACKEND=filesystem
+
+# Default entrypoint runs the Forge agent task
+ENTRYPOINT ["python", "/usr/local/bin/forge-entrypoint.py"]
+
+# Default command (can be overridden)
+CMD ["--help"]

@@ -1,27 +1,37 @@
-"""Implementation node for executing Tasks using Deep Agents."""
+"""Implementation node for executing Tasks using container sandbox.
+
+This node runs AI-powered code implementation inside a podman container
+for security isolation. The agent has full tool access (read, write, bash)
+within the container but cannot access host systems.
+
+Architecture:
+- Container runs Deep Agents with FilesystemBackend
+- Workspace is mounted at /workspace
+- Agent commits changes locally
+- Orchestrator (this node) handles git push after container exits
+"""
 
 import logging
 from pathlib import Path
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
-from forge.prompts import load_prompt
-from forge.workspace.git_ops import GitOperations
-from forge.workspace.manager import Workspace
+from forge.sandbox import ContainerRunner
+from forge.sandbox.runner import ContainerConfig
 
 logger = logging.getLogger(__name__)
 
 
 async def implement_task(state: WorkflowState) -> WorkflowState:
-    """Implement a single Task using Claude.
+    """Implement a single Task using container sandbox.
 
     This node:
     1. Gets the current Task to implement
-    2. Invokes Claude with Task details and guardrails
-    3. Applies code changes to the workspace
-    4. Commits changes
+    2. Spawns a container with the workspace mounted
+    3. Container runs Deep Agents with full tool access
+    4. Container runs local tests and commits changes
+    5. Orchestrator (here) handles git push after success
 
     Args:
         state: Current workflow state.
@@ -66,7 +76,6 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     settings = get_settings()
     jira = JiraClient(settings)
-    agent = ForgeAgent(settings)
 
     try:
         # Get Task details from Jira
@@ -77,59 +86,61 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         # Get guardrails context
         guardrails = state.get("context", {}).get("guardrails", "")
 
-        # Build implementation prompt
-        user_prompt = _build_implementation_prompt(
+        # Build full task description with context
+        full_description = _build_task_description(
             task_summary=task_summary,
             task_description=task_description,
             guardrails=guardrails,
-            workspace_path=workspace_path,
         )
 
-        # Invoke Deep Agents for implementation
-        result = await agent.run_task(
-            task="implement-task",
-            prompt=user_prompt,
-            context={
-                "task_key": current_task,
-                "task_summary": task_summary,
-                "workspace_path": workspace_path,
-            },
+        # Run implementation in container sandbox
+        runner = ContainerRunner(settings)
+        config = ContainerConfig(
+            timeout_seconds=1800,  # 30 minutes
+            max_retries=settings.ci_fix_max_retries,
         )
 
-        # Parse and apply code changes
-        changes_applied = _apply_code_changes(
-            result, Path(workspace_path)
+        result = await runner.run(
+            workspace_path=Path(workspace_path),
+            task_summary=task_summary,
+            task_description=full_description,
+            config=config,
         )
 
-        # Commit changes
-        workspace = Workspace(
-            path=Path(workspace_path),
-            repo_name=state.get("current_repo", ""),
-            branch_name=state.get("context", {}).get("branch_name", ""),
-            ticket_key=ticket_key,
-        )
-        git = GitOperations(workspace)
-        git.stage_all()
+        if result.success:
+            logger.info(f"Container completed successfully for {current_task}")
 
-        commit_msg = f"[{current_task}] {task_summary}"
-        committed = git.commit(commit_msg)
+            # Track implemented tasks
+            implemented = state.get("implemented_tasks", [])
+            implemented.append(current_task)
 
-        if committed:
-            logger.info(f"Committed changes for {current_task}")
+            return update_state_timestamp({
+                **state,
+                "current_task_key": None,
+                "implemented_tasks": implemented,
+                "current_node": "implement_task",  # Loop back for next task
+                "last_error": None,
+            })
         else:
-            logger.warning(f"No changes to commit for {current_task}")
+            # Container failed - check if tests failed or task failed
+            error_msg = result.error_message or "Unknown container error"
 
-        # Track implemented tasks
-        implemented = state.get("implemented_tasks", [])
-        implemented.append(current_task)
+            if result.tests_failed:
+                logger.warning(f"Tests failed for {current_task}: {error_msg}")
+                # Still continue - tests failed but code was committed
+                implemented = state.get("implemented_tasks", [])
+                implemented.append(current_task)
 
-        return update_state_timestamp({
-            **state,
-            "current_task_key": None,
-            "implemented_tasks": implemented,
-            "current_node": "implement_task",  # Loop back for next task
-            "last_error": None,
-        })
+                return update_state_timestamp({
+                    **state,
+                    "current_task_key": None,
+                    "implemented_tasks": implemented,
+                    "current_node": "implement_task",
+                    "last_error": f"Tests failed: {error_msg}",
+                })
+            else:
+                logger.error(f"Implementation failed for {current_task}: {error_msg}")
+                raise RuntimeError(error_msg)
 
     except Exception as e:
         logger.error(f"Implementation failed for {current_task}: {e}")
@@ -145,78 +156,43 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         await jira.close()
 
 
-def _build_implementation_prompt(
+def _build_task_description(
     task_summary: str,
     task_description: str,
     guardrails: str,
-    workspace_path: str,
 ) -> str:
-    """Build the implementation prompt for Claude.
+    """Build the full task description for the container.
 
     Args:
         task_summary: Task title.
         task_description: Task details.
         guardrails: Project guardrails context.
-        workspace_path: Path to workspace.
 
     Returns:
-        Formatted prompt.
+        Full task description with all context.
     """
-    guardrails_section = ""
+    parts = [
+        f"# Task: {task_summary}",
+        "",
+        "## Description",
+        task_description,
+    ]
+
     if guardrails:
-        guardrails_section = f"## Project Guidelines\n{guardrails}\n"
+        parts.extend([
+            "",
+            "## Project Guidelines",
+            guardrails,
+        ])
 
-    return load_prompt(
-        "implement-task",
-        task_summary=task_summary,
-        task_description=task_description,
-        guardrails_section=guardrails_section,
-        workspace_path=workspace_path,
-    )
+    parts.extend([
+        "",
+        "## Instructions",
+        "1. Read and understand the existing codebase",
+        "2. Implement the task following the repository's coding standards",
+        "3. Write clean, well-documented code",
+        "4. Run tests to verify your changes work",
+        "5. Commit your changes with a descriptive message",
+    ])
 
-
-def _apply_code_changes(
-    response: str,
-    workspace_path: Path,
-) -> int:
-    """Apply code changes from Claude's response.
-
-    Args:
-        response: Claude's response with code blocks.
-        workspace_path: Path to apply changes.
-
-    Returns:
-        Number of files modified.
-    """
-    import re
-
-    # Parse code blocks with file paths
-    pattern = r"```([^\n]+)\n(.*?)```"
-    matches = re.findall(pattern, response, re.DOTALL)
-
-    files_modified = 0
-
-    for file_path, content in matches:
-        file_path = file_path.strip()
-
-        # Skip non-file code blocks
-        if file_path in ("", "python", "javascript", "bash", "shell"):
-            continue
-        if not file_path or "/" not in file_path:
-            continue
-
-        target_path = workspace_path / file_path
-
-        try:
-            # Ensure parent directory exists
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Write file content
-            target_path.write_text(content.strip() + "\n")
-            logger.info(f"Applied changes to {file_path}")
-            files_modified += 1
-
-        except Exception as e:
-            logger.warning(f"Failed to apply changes to {file_path}: {e}")
-
-    return files_modified
+    return "\n".join(parts)
