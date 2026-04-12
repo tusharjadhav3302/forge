@@ -130,12 +130,26 @@ class ContainerRunner:
         workspace_path: Path,
         task_file: Path,
         config: ContainerConfig,
+        ticket_key: str | None = None,
+        repo_name: str | None = None,
     ) -> list[str]:
         """Build the podman run command."""
+        # Build container name with ticket key and repo for easier identification
+        # Format: forge-{ticket}-{repo}-{pid} e.g., forge-AISOS-189-installer-12345
+        name_parts = ["forge"]
+        if ticket_key:
+            name_parts.append(ticket_key)
+        if repo_name:
+            # Extract just the repo name from "owner/repo" format
+            short_repo = repo_name.split("/")[-1] if "/" in repo_name else repo_name
+            name_parts.append(short_repo)
+        name_parts.append(str(os.getpid()))
+        container_name = "-".join(name_parts)
+
         cmd = [
             "podman", "run",
             "--rm",  # Remove container after exit
-            "--name", f"forge-{os.getpid()}-{id(self)}",
+            "--name", container_name,
             # Mount workspace
             "-v", f"{workspace_path}:/workspace:Z",
             # Mount task file
@@ -185,6 +199,8 @@ class ContainerRunner:
         task_summary: str,
         task_description: str,
         config: ContainerConfig | None = None,
+        ticket_key: str | None = None,
+        repo_name: str | None = None,
     ) -> ContainerResult:
         """Run a task in a container sandbox.
 
@@ -193,6 +209,8 @@ class ContainerRunner:
             task_summary: Short task summary.
             task_description: Detailed task description.
             config: Container configuration. Uses defaults if not provided.
+            ticket_key: Jira ticket key for container naming.
+            repo_name: Repository name (e.g., "owner/repo") for container naming.
 
         Returns:
             ContainerResult with execution status and logs.
@@ -209,7 +227,9 @@ class ContainerRunner:
 
         try:
             # Build command
-            cmd = self._build_podman_command(workspace_path, task_file, config)
+            cmd = self._build_podman_command(
+                workspace_path, task_file, config, ticket_key, repo_name
+            )
 
             logger.info(f"Starting container for task: {task_summary}")
             logger.debug(f"Command: {' '.join(cmd)}")

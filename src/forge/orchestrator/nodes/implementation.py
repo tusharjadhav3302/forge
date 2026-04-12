@@ -96,15 +96,17 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         # Run implementation in container sandbox
         runner = ContainerRunner(settings)
         config = ContainerConfig(
-            timeout_seconds=1800,  # 30 minutes
             max_retries=settings.ci_fix_max_retries,
         )
 
+        current_repo = state.get("current_repo", "")
         result = await runner.run(
             workspace_path=Path(workspace_path),
             task_summary=task_summary,
             task_description=full_description,
             config=config,
+            ticket_key=ticket_key,
+            repo_name=current_repo,
         )
 
         if result.success:
