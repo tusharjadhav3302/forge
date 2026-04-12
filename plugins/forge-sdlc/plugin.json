@@ -13,7 +13,6 @@
     "skills/fix-ci",
     "skills/analyze-bug"
   ],
-  "prompts": "prompts/",
   "templates": "templates/",
   "mcp_servers": "../../../mcp-servers.json"
 }
