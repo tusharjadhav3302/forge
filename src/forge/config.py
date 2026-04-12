@@ -178,6 +178,24 @@ class Settings(BaseSettings):
         default=0.5, description="Webhook acknowledgment timeout in seconds"
     )
 
+    # Container Configuration
+    container_image: str = Field(
+        default="forge-dev:latest",
+        description="Container image for task execution (local or registry URL)",
+    )
+    container_timeout: int = Field(
+        default=7200,
+        description="Container execution timeout in seconds (default: 2 hours)",
+    )
+    container_memory: str = Field(
+        default="4g",
+        description="Container memory limit",
+    )
+    container_cpus: str = Field(
+        default="2",
+        description="Container CPU limit",
+    )
+
     # OpenTelemetry Configuration
     otlp_endpoint: str = Field(
         default="",

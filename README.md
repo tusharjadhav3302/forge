@@ -69,6 +69,16 @@ cp .env.example .env
 pip install -e .
 ```
 
+### Build Container Image (Development)
+
+For local development, build the sandbox container:
+
+```bash
+podman build -t forge-dev:latest -f containers/Containerfile containers/
+```
+
+For production, configure `CONTAINER_IMAGE` to pull from your registry. See `containers/README.md` for details.
+
 ## Configuration
 
 Create a `.env` file with the following variables (see `.env.example` for full list):

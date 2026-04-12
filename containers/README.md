@@ -40,11 +40,42 @@ Additional packages installed:
 - `anthropic`, `langchain-anthropic` - Claude API access
 - `langchain-google-vertexai` - Vertex AI support
 
-## Building
+## Image Configuration
+
+The container image is configurable via the `CONTAINER_IMAGE` environment variable:
+
+```bash
+# Local development (default)
+CONTAINER_IMAGE=forge-dev:latest
+
+# Production (from registry)
+CONTAINER_IMAGE=your-registry.com/forge:v1.0.0
+```
+
+## Building (Development)
+
+For local development, build the image manually:
 
 ```bash
 podman build -t forge-dev:latest -f containers/Containerfile containers/
 ```
+
+## Production Deployment
+
+For production, push to a container registry and configure `CONTAINER_IMAGE`:
+
+```bash
+# Build and tag for registry
+podman build -t your-registry.com/forge:v1.0.0 -f containers/Containerfile containers/
+
+# Push to registry
+podman push your-registry.com/forge:v1.0.0
+
+# Configure in .env
+CONTAINER_IMAGE=your-registry.com/forge:v1.0.0
+```
+
+The orchestrator will pull the image from the registry on first task execution.
 
 ## Configuration
 

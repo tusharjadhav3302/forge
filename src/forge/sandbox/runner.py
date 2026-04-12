@@ -25,7 +25,7 @@ from forge.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
-# Default container image
+# Default container image (can be overridden via CONTAINER_IMAGE env var)
 DEFAULT_IMAGE = "forge-dev:latest"
 
 # Exit codes from entrypoint.py
@@ -92,6 +92,15 @@ class ContainerRunner:
         """Verify podman is available."""
         if not shutil.which("podman"):
             raise RuntimeError("podman not found in PATH")
+
+    def _default_config(self) -> ContainerConfig:
+        """Create default config from settings."""
+        return ContainerConfig(
+            image=self.settings.container_image,
+            timeout_seconds=self.settings.container_timeout,
+            memory_limit=self.settings.container_memory,
+            cpu_limit=self.settings.container_cpus,
+        )
 
     def _build_env_vars(self, config: ContainerConfig) -> dict[str, str]:
         """Build environment variables to pass to container.
@@ -224,7 +233,7 @@ class ContainerRunner:
         Returns:
             ContainerResult with execution status and logs.
         """
-        config = config or ContainerConfig()
+        config = config or self._default_config()
 
         # Create task file
         task_file = workspace_path / ".forge-task.json"

@@ -230,27 +230,31 @@ def run_agent_task(
         vertex_project = os.environ.get("ANTHROPIC_VERTEX_PROJECT_ID")
 
         if not api_key and not vertex_project:
-            logger.error("No API credentials found (ANTHROPIC_API_KEY or ANTHROPIC_VERTEX_PROJECT_ID)")
+            logger.error(
+                "No API credentials found (ANTHROPIC_API_KEY or ANTHROPIC_VERTEX_PROJECT_ID)")
             return False
 
         # Create the agent with filesystem backend
         backend = FilesystemBackend(root_dir=str(workspace))
 
         # Build system prompt from template
-        system_prompt = build_system_prompt(workspace, task_summary, task_description, guardrails)
+        system_prompt = build_system_prompt(
+            workspace, task_summary, task_description, guardrails)
 
         # Determine model based on available credentials
         if vertex_project:
             from langchain_google_vertexai.model_garden import ChatAnthropicVertex
             model = ChatAnthropicVertex(
-                model_name=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
+                model_name=os.environ.get(
+                    "CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
                 project=vertex_project,
                 location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
             )
         else:
             from langchain_anthropic import ChatAnthropic
             model = ChatAnthropic(
-                model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
+                model=os.environ.get(
+                    "CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
                 api_key=api_key,
             )
 
@@ -303,8 +307,10 @@ def main():
         help="Workspace directory (default: /workspace)",
     )
     # Kept for backwards compatibility but no longer used
-    parser.add_argument("--skip-tests", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--max-retries", type=int, default=3, help=argparse.SUPPRESS)
+    parser.add_argument("--skip-tests", action="store_true",
+                        help=argparse.SUPPRESS)
+    parser.add_argument("--max-retries", type=int,
+                        default=3, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
 
@@ -321,7 +327,8 @@ def main():
         task_summary = args.task_summary
         task_description = args.task_description
     else:
-        logger.error("Task details required: use --task-file or --task-summary + --task-description")
+        logger.error(
+            "Task details required: use --task-file or --task-summary + --task-description")
         sys.exit(EXIT_CONFIG_ERROR)
 
     workspace = args.workspace
