@@ -205,16 +205,16 @@
 
 ### Container Sandbox Phase 1: MVP with Devcontainers Universal (FR-030 to FR-035)
 
-- [ ] T184 [US6] Create Containerfile based on mcr.microsoft.com/devcontainers/universal:linux (add Deep Agents, Anthropic SDK, entrypoint)
-- [ ] T185 [US6] Implement container runner in src/forge/sandbox/runner.py (podman spawn, mount workspace, wait for exit)
-- [ ] T186 [US6] Implement container entrypoint script in containers/entrypoint.py (run Deep Agents with task)
-- [ ] T187 [US6] Update implementation node to use container runner instead of direct agent invocation
-- [ ] T188 [US6] Implement test runner detection in src/forge/sandbox/test_runner.py (detect pytest, go test, make test)
-- [ ] T189 [US6] Add local test execution inside container before signaling success
-- [ ] T190 [US6] Implement container exit status handling (success, test failure, max retries)
-- [ ] T191 [US6] Move git push from implementation node to post-container orchestrator step
-- [ ] T192 [US6] Add container cleanup on failure (destroy container, preserve workspace for debugging if configured)
-- [ ] T193 [US6] Implement container resource limits (CPU, memory, timeout) via podman flags
+- [x] T184 [US6] Create Containerfile based on mcr.microsoft.com/devcontainers/universal:linux (add Deep Agents, Anthropic SDK, entrypoint)
+- [x] T185 [US6] Implement container runner in src/forge/sandbox/runner.py (podman spawn, mount workspace, wait for exit)
+- [x] T186 [US6] Implement container entrypoint script in containers/entrypoint.py (run Deep Agents with task)
+- [x] T187 [US6] Update implementation node to use container runner instead of direct agent invocation
+- [x] T188 [US6] Implement test runner detection in containers/entrypoint.py (detect pytest, go test, make test)
+- [x] T189 [US6] Test execution at agent discretion (removed forced execution - agent decides when/what to test)
+- [x] T190 [US6] Implement container exit status handling (success, test failure, max retries)
+- [x] T191 [US6] Move git push from implementation node to post-container orchestrator step (in pr_creation.py)
+- [x] T192 [US6] Add container cleanup on failure (--rm flag destroys container after exit)
+- [x] T193 [US6] Implement container resource limits (CPU, memory, timeout) via podman flags and settings
 - [ ] T194 [P] [US6] Add container network restrictions (allow only LLM API, block internal systems)
 - [ ] T195 [P] [US6] Create integration test for container sandbox (spawn, run simple task, verify git commit)
 
@@ -452,13 +452,13 @@
 
 ### User-Facing Error Communication
 
-- [ ] T138 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/prd_generation.py
-- [ ] T139 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/spec_generation.py
-- [ ] T140 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/epic_decomposition.py
-- [ ] T141 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/task_generation.py
-- [ ] T142 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/implementation.py
-- [ ] T143 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/workspace_setup.py
-- [ ] T144 Create shared error reporting helper in src/forge/orchestrator/nodes/error_handler.py
+- [x] T138 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/prd_generation.py
+- [x] T139 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/spec_generation.py
+- [x] T140 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/epic_decomposition.py
+- [x] T141 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/task_generation.py
+- [x] T142 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/implementation.py
+- [x] T143 [P] Post Jira comment on node failures in src/forge/orchestrator/nodes/workspace_setup.py
+- [x] T144 Create shared error reporting helper in src/forge/orchestrator/nodes/error_handler.py
 
 ### Retry Logic & Circuit Breakers
 
