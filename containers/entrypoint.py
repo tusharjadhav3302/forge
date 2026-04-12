@@ -271,22 +271,14 @@ def main():
         help="Detailed task description",
     )
     parser.add_argument(
-        "--skip-tests",
-        action="store_true",
-        help="Skip running tests after implementation",
-    )
-    parser.add_argument(
         "--workspace",
         type=Path,
         default=Path("/workspace"),
         help="Workspace directory (default: /workspace)",
     )
-    parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=3,
-        help="Maximum test fix attempts (default: 3)",
-    )
+    # Kept for backwards compatibility but no longer used
+    parser.add_argument("--skip-tests", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--max-retries", type=int, default=3, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
 
@@ -317,39 +309,18 @@ def main():
     # Load guardrails
     guardrails = load_guardrails(workspace)
 
-    # Detect test command
-    test_command = detect_test_command(workspace) if not args.skip_tests else None
-
-    # Implementation loop with test retries
-    for attempt in range(args.max_retries + 1):
-        if attempt > 0:
-            logger.info(f"Retry attempt {attempt}/{args.max_retries}")
-
-        # Run agent to implement task
-        if not run_agent_task(workspace, task_summary, task_description, guardrails):
-            logger.error("Task implementation failed")
-            sys.exit(EXIT_TASK_FAILED)
-
-        # Run tests if configured
-        if test_command:
-            if run_tests(workspace, test_command):
-                break
-            elif attempt < args.max_retries:
-                # Update task description with test failure context
-                task_description += "\n\n## Previous Attempt Failed\nTests failed. Please fix the issues and try again."
-                continue
-            else:
-                logger.error("Tests failed after max retries")
-                # Still commit what we have, but exit with failure
-                git_commit(workspace, f"[WIP] {task_summary} (tests failing)")
-                sys.exit(EXIT_TESTS_FAILED)
-        else:
-            break
-
-    # Commit changes
-    if not git_commit(workspace, f"[forge] {task_summary}"):
-        logger.error("Failed to commit changes")
+    # Run agent to implement task
+    # The agent has full tool access (bash, file ops) and is responsible for:
+    # - Reading/understanding the codebase
+    # - Implementing the changes
+    # - Running relevant tests as it sees fit
+    # - Committing changes when ready
+    if not run_agent_task(workspace, task_summary, task_description, guardrails):
+        logger.error("Task implementation failed")
         sys.exit(EXIT_TASK_FAILED)
+
+    # Ensure changes are committed (agent should have done this, but as fallback)
+    git_commit(workspace, f"[forge] {task_summary}")
 
     logger.info("Task completed successfully")
     sys.exit(EXIT_SUCCESS)
