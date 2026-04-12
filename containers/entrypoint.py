@@ -191,6 +191,7 @@ def git_commit(workspace: Path, message: str) -> bool:
 
 def build_system_prompt(
     workspace: Path,
+    task_key: str,
     task_summary: str,
     task_description: str,
     guardrails: str,
@@ -203,6 +204,7 @@ def build_system_prompt(
 
     Args:
         workspace: Path to the workspace directory.
+        task_key: Jira task key being implemented.
         task_summary: Short task summary.
         task_description: Detailed task description.
         guardrails: Repository guidelines.
@@ -267,6 +269,7 @@ Use the available tools to read, write, and edit files as needed.
     # Interpolate template variables
     return template.format(
         workspace_path=str(workspace),
+        task_key=task_key,
         task_summary=task_summary,
         task_description=task_description,
         guardrails=guardrails if guardrails else "No specific guidelines provided.",
@@ -276,6 +279,7 @@ Use the available tools to read, write, and edit files as needed.
 
 def run_agent_task(
     workspace: Path,
+    task_key: str,
     task_summary: str,
     task_description: str,
     guardrails: str,
@@ -285,6 +289,7 @@ def run_agent_task(
 
     Args:
         workspace: Path to the workspace directory.
+        task_key: Jira task key being implemented.
         task_summary: Short task summary.
         task_description: Detailed task description.
         guardrails: Repository guidelines.
@@ -310,7 +315,7 @@ def run_agent_task(
 
         # Build system prompt from template
         system_prompt = build_system_prompt(
-            workspace, task_summary, task_description, guardrails, previous_task_keys)
+            workspace, task_key, task_summary, task_description, guardrails, previous_task_keys)
 
         # Determine model based on available credentials
         if vertex_project:
@@ -387,12 +392,14 @@ def main():
 
     # Load task details
     previous_task_keys: list[str] = []
+    task_key: str = "UNKNOWN"
     if args.task_file:
         if not args.task_file.exists():
             logger.error(f"Task file not found: {args.task_file}")
             sys.exit(EXIT_CONFIG_ERROR)
 
         task_data = json.loads(args.task_file.read_text())
+        task_key = task_data.get("task_key", "UNKNOWN")
         task_summary = task_data.get("summary", "")
         task_description = task_data.get("description", "")
         previous_task_keys = task_data.get("previous_task_keys", [])
@@ -430,7 +437,7 @@ def main():
     # - Implementing the changes
     # - Running relevant tests as it sees fit
     # - Committing changes when ready
-    if not run_agent_task(workspace, task_summary, task_description, guardrails, previous_task_keys):
+    if not run_agent_task(workspace, task_key, task_summary, task_description, guardrails, previous_task_keys):
         logger.error("Task implementation failed")
         sys.exit(EXIT_TASK_FAILED)
 

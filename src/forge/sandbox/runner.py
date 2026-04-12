@@ -218,6 +218,7 @@ class ContainerRunner:
         task_description: str,
         config: ContainerConfig | None = None,
         ticket_key: str | None = None,
+        task_key: str | None = None,
         repo_name: str | None = None,
         previous_task_keys: list[str] | None = None,
     ) -> ContainerResult:
@@ -228,7 +229,8 @@ class ContainerRunner:
             task_summary: Short task summary.
             task_description: Detailed task description.
             config: Container configuration. Uses defaults if not provided.
-            ticket_key: Jira ticket key for container naming.
+            ticket_key: Jira ticket key for container naming (the Feature/Epic).
+            task_key: Jira task key being implemented.
             repo_name: Repository name (e.g., "owner/repo") for container naming.
             previous_task_keys: List of previously implemented task keys for handoff context.
 
@@ -240,6 +242,7 @@ class ContainerRunner:
         # Create task file
         task_file = workspace_path / ".forge-task.json"
         task_data = {
+            "task_key": task_key or "UNKNOWN",
             "summary": task_summary,
             "description": task_description,
             "previous_task_keys": previous_task_keys or [],
@@ -284,6 +287,13 @@ class ContainerRunner:
             stderr_str = stderr.decode("utf-8", errors="replace")
 
             logger.info(f"Container exited with code {exit_code}")
+
+            # Log output on failure for debugging
+            if exit_code != EXIT_SUCCESS:
+                if stdout_str:
+                    logger.error(f"Container stdout: {stdout_str[:2000]}")
+                if stderr_str:
+                    logger.warning(f"Container stderr: {stderr_str[:2000]}")
 
             # Determine result
             if exit_code == EXIT_SUCCESS:

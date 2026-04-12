@@ -18,7 +18,6 @@ from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
 from forge.orchestrator.state import WorkflowState, update_state_timestamp
 from forge.sandbox import ContainerRunner
-from forge.sandbox.runner import ContainerConfig
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +94,6 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
         # Run implementation in container sandbox
         runner = ContainerRunner(settings)
-        config = ContainerConfig(
-            max_retries=settings.ci_fix_max_retries,
-        )
 
         current_repo = state.get("current_repo", "")
         # Copy list to avoid mutation after passing to runner
@@ -106,8 +102,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             workspace_path=Path(workspace_path),
             task_summary=task_summary,
             task_description=full_description,
-            config=config,
             ticket_key=ticket_key,
+            task_key=current_task,
             repo_name=current_repo,
             previous_task_keys=implemented_tasks,
         )
