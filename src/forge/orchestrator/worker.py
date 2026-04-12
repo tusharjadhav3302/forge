@@ -326,6 +326,7 @@ class OrchestratorWorker:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
             updated_state["terminal_error_notified"] = False  # Reset for next potential error
+            updated_state["retry_count"] = 0  # Reset retry counter for fresh start
             # For terminal states, route back to task_router to retry implementation
             if is_terminal:
                 logger.info(
