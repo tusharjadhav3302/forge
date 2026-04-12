@@ -7,4 +7,21 @@ Additional context:
 - Project: {project_key}
 {repo_instruction}
 
-Generate the Epic breakdown following the instructions provided.
+## Output Format
+
+You MUST use this exact format for each Epic. The parser depends on these exact prefixes:
+
+```
+EPIC: [Concise epic title - max 100 chars]
+REPO: [owner/repo from the available repositories]
+PLAN:
+[Detailed implementation plan with:]
+- Technical approach and architecture decisions
+- Key components/files to create or modify
+- Dependencies and integration points
+- Testing strategy
+- Estimated complexity (S/M/L)
+---
+```
+
+Separate each Epic with `---` on its own line. Include 2-5 Epics total.
