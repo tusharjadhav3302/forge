@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     )
     jira_domain: str = Field(
         default="",
-        description="Jira domain for MCP (e.g., company.atlassian.net, derived from base URL if empty)"
+        description="Jira domain for MCP (e.g., company.atlassian.net, derived from base URL if empty)",
     )
 
     @property
@@ -39,6 +39,7 @@ class Settings(BaseSettings):
             return self.jira_domain
         # Extract domain from base URL (e.g., https://company.atlassian.net -> company.atlassian.net)
         from urllib.parse import urlparse
+
         parsed = urlparse(self.jira_base_url)
         return parsed.netloc or self.jira_base_url
 
@@ -66,6 +67,7 @@ class Settings(BaseSettings):
     def atlassian_auth_base64(self) -> str:
         """Generate base64-encoded auth string for Atlassian MCP (email:api_token)."""
         import base64
+
         credentials = f"{self.jira_user_email}:{self.jira_api_token.get_secret_value()}"
         return base64.b64encode(credentials.encode()).decode()
 
@@ -108,7 +110,7 @@ class Settings(BaseSettings):
         default=SecretStr(""),
         description="Anthropic API key for Claude (leave empty for Vertex AI)",
     )
-    # Option 2: Google Vertex AI
+    # Option 2: Google Vertex AI (supports Claude and Gemini)
     anthropic_vertex_project_id: str = Field(
         default="",
         description="Google Cloud project ID for Vertex AI",
@@ -117,16 +119,45 @@ class Settings(BaseSettings):
         default="us-east5",
         description="Google Cloud region for Vertex AI (e.g., us-east5)",
     )
-    claude_model: str = Field(
-        default="claude-3-5-sonnet-v2@20241022",
-        description="Claude model to use (e.g., claude-3-5-sonnet-v2@20241022 for Vertex AI)",
+    # Model configuration (supports Claude and Gemini on Vertex AI)
+    # Claude models: claude-opus-4-5@20251101, claude-sonnet-4-5@20250929, etc.
+    # Gemini models: gemini-2.5-pro, gemini-2.5-flash, gemini-3.1-pro-preview, etc.
+    llm_model: str = Field(
+        default="claude-sonnet-4-5@20250929",
+        description="Model for orchestrator (Claude or Gemini on Vertex AI)",
     )
+    container_llm_model: str = Field(
+        default="",
+        description="Model for container tasks (empty = use llm_model)",
+    )
+
+    @property
+    def container_model(self) -> str:
+        """Get model for container execution, falling back to default model."""
+        return self.container_llm_model or self.llm_model
+
+    # Backwards compatibility aliases
+    @property
+    def claude_model(self) -> str:
+        """Alias for llm_model (backwards compatibility)."""
+        return self.llm_model
+
+    @staticmethod
+    def detect_model_provider(model_name: str) -> str:
+        """Detect model provider from model name.
+
+        Returns:
+            'anthropic' for Claude models, 'google' for Gemini models.
+        """
+        model_lower = model_name.lower()
+        if model_lower.startswith(("gemini", "models/gemini")):
+            return "google"
+        # Default to anthropic for claude-* or unknown models
+        return "anthropic"
 
     # Langfuse Configuration
     langfuse_public_key: str = Field(default="", description="Langfuse public key")
-    langfuse_secret_key: SecretStr = Field(
-        default=SecretStr(""), description="Langfuse secret key"
-    )
+    langfuse_secret_key: SecretStr = Field(default=SecretStr(""), description="Langfuse secret key")
     langfuse_host: str = Field(
         default="https://cloud.langfuse.com", description="Langfuse host URL"
     )
@@ -225,17 +256,13 @@ class Settings(BaseSettings):
     @property
     def langfuse_enabled(self) -> bool:
         """Check if Langfuse tracing is configured."""
-        return bool(
-            self.langfuse_public_key
-            and self.langfuse_secret_key.get_secret_value()
-        )
+        return bool(self.langfuse_public_key and self.langfuse_secret_key.get_secret_value())
 
     @property
     def use_vertex_ai(self) -> bool:
         """Check if using Vertex AI instead of direct Anthropic API."""
         return bool(
-            self.anthropic_vertex_project_id
-            and not self.anthropic_api_key.get_secret_value()
+            self.anthropic_vertex_project_id and not self.anthropic_api_key.get_secret_value()
         )
 
 

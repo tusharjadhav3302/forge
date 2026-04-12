@@ -253,7 +253,10 @@ def run_agent_task(
         guardrails: Repository guidelines.
         previous_task_keys: List of previously implemented task keys for handoff context.
     """
+    # Support both new (LLM_MODEL) and legacy (CLAUDE_MODEL) env var names
+    model_name = os.environ.get("LLM_MODEL") or os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5@20250929")
     logger.info(f"Implementing task: {task_summary}")
+    logger.info(f"Model: {model_name}")
 
     try:
         from deepagents import create_deep_agent
@@ -270,27 +273,48 @@ def run_agent_task(
             return False
 
         # Create the agent with local shell backend (enables git commands)
-        backend = LocalShellBackend(root_dir=str(workspace), inherit_env=True)
+        # virtual_mode=False: we want real filesystem access, not virtual paths
+        backend = LocalShellBackend(root_dir=str(workspace), inherit_env=True, virtual_mode=False)
 
         # Build system prompt from template
         system_prompt = build_system_prompt(
             workspace, task_key, task_summary, task_description, guardrails, previous_task_keys
         )
 
-        # Determine model based on available credentials
-        if vertex_project:
-            from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+        # Determine model type (Gemini vs Claude)
+        is_gemini = model_name.lower().startswith(("gemini", "models/gemini"))
 
-            model = ChatAnthropicVertex(
-                model_name=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
-                project=vertex_project,
-                location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
-            )
+        if vertex_project:
+            if is_gemini:
+                # Gemini models via ChatGoogleGenerativeAI with Vertex AI backend
+                from langchain_google_genai import ChatGoogleGenerativeAI
+
+                logger.info(f"Using Gemini model: {model_name}")
+                model = ChatGoogleGenerativeAI(
+                    model=model_name,
+                    project=vertex_project,
+                    location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
+                    vertexai=True,
+                )
+            else:
+                # Claude models via ChatAnthropicVertex
+                from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
+                logger.info(f"Using Claude model: {model_name}")
+                model = ChatAnthropicVertex(
+                    model_name=model_name,
+                    project=vertex_project,
+                    location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
+                )
         else:
+            if is_gemini:
+                logger.error(f"Gemini model '{model_name}' requires Vertex AI credentials")
+                return False
+
             from langchain_anthropic import ChatAnthropic
 
             model = ChatAnthropic(
-                model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
+                model=model_name,
                 api_key=api_key,
             )
 

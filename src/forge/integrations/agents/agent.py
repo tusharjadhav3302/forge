@@ -24,6 +24,7 @@ from langgraph.checkpoint.memory import MemorySaver
 try:
     from langchain_core.tools import StructuredTool
     from langchain_mcp_adapters.client import MultiServerMCPClient
+
     HAS_MCP = True
 except ImportError:
     StructuredTool = None  # type: ignore[misc, assignment]
@@ -33,11 +34,14 @@ from forge.config import Settings, get_settings
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
 from forge.prompts import load_prompt, set_default_version
 
-# Optional Vertex AI support
+# Optional Vertex AI support (Claude and Gemini)
 try:
+    from langchain_google_genai import ChatGoogleGenerativeAI
     from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
     HAS_VERTEX = True
 except ImportError:
+    ChatGoogleGenerativeAI = None  # type: ignore[misc, assignment]
     HAS_VERTEX = False
 
 # Project root directory
@@ -51,8 +55,6 @@ MCP_CONFIG_PATHS = [
 ]
 
 logger = logging.getLogger(__name__)
-
-
 
 
 def get_weather(city: str) -> str:
@@ -91,31 +93,57 @@ class ForgeAgent:
             if api_key:
                 os.environ["ANTHROPIC_API_KEY"] = api_key
 
-    def _create_model(self) -> Any:
+    def _create_model(self, model_name: str | None = None) -> Any:
         """Create the appropriate chat model based on configuration.
 
+        Args:
+            model_name: Optional model name override. Uses settings if not provided.
+
         Returns:
-            A LangChain ChatModel instance (ChatAnthropic or ChatAnthropicVertex).
+            A LangChain ChatModel instance (ChatAnthropic, ChatAnthropicVertex, or ChatVertexAI).
         """
+        model = model_name or self.settings.claude_model
+        provider = Settings.detect_model_provider(model)
+
         if self.settings.use_vertex_ai:
             if not HAS_VERTEX:
                 raise ImportError(
                     "langchain-google-vertexai is required for Vertex AI. "
                     "Install with: pip install langchain-google-vertexai"
                 )
-            logger.info(
-                f"Creating ChatAnthropicVertex model: {self.settings.claude_model} "
-                f"in {self.settings.anthropic_vertex_region}"
-            )
-            return ChatAnthropicVertex(
-                model_name=self.settings.claude_model,
-                project=self.settings.anthropic_vertex_project_id,
-                location=self.settings.anthropic_vertex_region,
-            )
+
+            if provider == "google":
+                # Gemini models via ChatGoogleGenerativeAI with Vertex AI backend
+                logger.info(
+                    f"Creating ChatGoogleGenerativeAI (Gemini) model: {model} "
+                    f"in {self.settings.anthropic_vertex_region}"
+                )
+                return ChatGoogleGenerativeAI(
+                    model=model,
+                    project=self.settings.anthropic_vertex_project_id,
+                    location=self.settings.anthropic_vertex_region,
+                    vertexai=True,
+                )
+            else:
+                # Claude models via ChatAnthropicVertex
+                logger.info(
+                    f"Creating ChatAnthropicVertex model: {model} "
+                    f"in {self.settings.anthropic_vertex_region}"
+                )
+                return ChatAnthropicVertex(
+                    model_name=model,
+                    project=self.settings.anthropic_vertex_project_id,
+                    location=self.settings.anthropic_vertex_region,
+                )
         else:
-            logger.info(f"Creating ChatAnthropic model: {self.settings.claude_model}")
+            if provider == "google":
+                raise ValueError(
+                    f"Gemini model '{model}' requires Vertex AI. "
+                    "Set ANTHROPIC_VERTEX_PROJECT_ID or use a Claude model."
+                )
+            logger.info(f"Creating ChatAnthropic model: {model}")
             return ChatAnthropic(
-                model=self.settings.claude_model,
+                model=model,
                 api_key=self.settings.anthropic_api_key.get_secret_value(),
             )
 
@@ -173,9 +201,25 @@ class ForgeAgent:
     # Write operation patterns to filter out in read-only mode
     WRITE_TOOL_PATTERNS = (
         # Prefixes
-        "create", "add", "update", "delete", "remove", "push", "merge",
-        "fork", "assign", "edit", "transition", "close", "reopen",
-        "comment", "reply", "approve", "reject", "request", "run",
+        "create",
+        "add",
+        "update",
+        "delete",
+        "remove",
+        "push",
+        "merge",
+        "fork",
+        "assign",
+        "edit",
+        "transition",
+        "close",
+        "reopen",
+        "comment",
+        "reply",
+        "approve",
+        "reject",
+        "request",
+        "run",
     )
     # Suffixes that indicate write operations
     WRITE_TOOL_SUFFIXES = ("_write",)
@@ -198,6 +242,7 @@ class ForgeAgent:
         tool_name = tool.name if hasattr(tool, "name") else str(tool)
 
         if original_coroutine:
+
             @wraps(original_coroutine)
             async def wrapped_async(*args: Any, **kwargs: Any) -> str:
                 try:
@@ -216,6 +261,7 @@ class ForgeAgent:
                 return_direct=getattr(tool, "return_direct", False),
             )
         elif original_func:
+
             @wraps(original_func)
             def wrapped_sync(*args: Any, **kwargs: Any) -> str:
                 try:
@@ -490,6 +536,7 @@ class ForgeAgent:
         error_str = str(error)
         # Look for patterns like "rate reset in 30s" or "retry after 60 seconds"
         import re
+
         patterns = [
             r"reset in (\d+)s",
             r"retry.{0,10}(\d+)\s*second",
@@ -573,7 +620,7 @@ class ForgeAgent:
                         if explicit_delay:
                             delay = explicit_delay + 1  # Add 1s buffer
                         else:
-                            delay = self.INITIAL_BACKOFF_SECONDS * (2 ** attempt)
+                            delay = self.INITIAL_BACKOFF_SECONDS * (2**attempt)
 
                         logger.warning(
                             f"Transient error (attempt {attempt + 1}/{self.MAX_RETRIES}), "
@@ -696,9 +743,7 @@ class ForgeAgent:
         # Filter to only enabled servers
         enabled_list = [s.strip() for s in enabled_setting.split(",") if s.strip()]
         filtered_servers = {
-            name: config
-            for name, config in all_servers.items()
-            if name in enabled_list
+            name: config for name, config in all_servers.items() if name in enabled_list
         }
 
         logger.info(f"MCP enabled with servers: {list(filtered_servers.keys())}")
@@ -768,12 +813,8 @@ class ForgeAgent:
             "JIRA_BASE_URL": lambda: self.settings.jira_base_url,
             "JIRA_DOMAIN": lambda: self.settings.jira_domain_resolved,
             "ATLASSIAN_AUTH_BASE64": lambda: self.settings.atlassian_auth_base64,
-            "AGENT_WORKING_DIRECTORY": lambda: (
-                self.settings.agent_working_directory or os.getcwd()
-            ),
-            "ANTHROPIC_API_KEY": lambda: (
-                self.settings.anthropic_api_key.get_secret_value()
-            ),
+            "AGENT_WORKING_DIRECTORY": lambda: self.settings.agent_working_directory or os.getcwd(),
+            "ANTHROPIC_API_KEY": lambda: self.settings.anthropic_api_key.get_secret_value(),
         }
 
         if var_name in var_mapping:
@@ -891,7 +932,9 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         prompt = load_prompt(
             "decompose-epics",
             spec_content=spec_content,
-            feature_summary=context.get("feature_summary", "Not provided") if context else "Not provided",
+            feature_summary=context.get("feature_summary", "Not provided")
+            if context
+            else "Not provided",
             project_key=context.get("project_key", "Not provided") if context else "Not provided",
             repo_instruction=repo_instruction,
         )
@@ -987,7 +1030,7 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
                 # Extract repo (owner/name format)
                 repo = stripped[5:].strip()
                 # Clean up any extra text
-                repo = re.sub(r'[^a-zA-Z0-9/_-]', '', repo)
+                repo = re.sub(r"[^a-zA-Z0-9/_-]", "", repo)
                 if "/" in repo:
                     current_epic["repo"] = repo
             elif stripped.startswith("PLAN:"):

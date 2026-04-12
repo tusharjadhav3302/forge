@@ -123,7 +123,8 @@ class ContainerRunner:
             )
 
         # Pass model configuration
-        env["CLAUDE_MODEL"] = self.settings.claude_model
+        # Use container-specific model if configured, otherwise fall back to default
+        env["LLM_MODEL"] = self.settings.container_model
 
         # Pass git configuration for commits
         env["GIT_USER_NAME"] = self.settings.git_user_name

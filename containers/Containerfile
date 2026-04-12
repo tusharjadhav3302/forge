@@ -19,6 +19,7 @@ RUN pip install --no-cache-dir \
     deepagents \
     anthropic \
     langchain-anthropic \
+    langchain-google-genai \
     langchain-google-vertexai \
     langfuse \
     httpx \
