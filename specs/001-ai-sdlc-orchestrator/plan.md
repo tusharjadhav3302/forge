@@ -28,12 +28,14 @@ full AI agent autonomy ("lights-out factory"):
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Forge Orchestrator (host)                                         │
-│    1. Clone repo to /tmp/forge-{ticket}/                           │
-│    2. Spawn podman container with repo mounted at /workspace       │
-│    3. Wait for container completion                                │
-│    4. Git push from host (credentials never enter container)       │
-│    5. Create PR programmatically via GitHub API                    │
-│    6. Destroy container and cleanup temp directory                 │
+│    1. Ensure fork exists (create if needed)                        │
+│    2. Clone upstream repo to /tmp/forge-{ticket}/                  │
+│    3. Add fork as remote, fetch to sync                            │
+│    4. Spawn podman container with repo mounted at /workspace       │
+│    5. Wait for container completion                                │
+│    6. Push to fork from host (credentials never enter container)   │
+│    7. Create PR from fork to upstream via GitHub API               │
+│    8. Destroy container and cleanup temp directory                 │
 └──────────────────────────┬──────────────────────────────────────────┘
                            │ podman run --rm -v /tmp/forge-{ticket}:/workspace
                            ▼
@@ -108,6 +110,57 @@ Phase 2 (Optimization): Leverage devcontainer ecosystem
 - If repo has `.forge/container.yaml` → use Forge-specific override
 - Fallback to Phase 1 fat image for repos without config
 - Benefit: repos already configured for VS Code/Codespaces "just work"
+
+### Fork-Based Workflow
+
+The Forge service account uses a fork-based workflow to avoid requiring write access to
+upstream repositories. This provides security isolation and works with any repository
+the account can read.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  Upstream Repository (org/repo)                                    │
+│    - Forge has READ access only                                    │
+│    - PRs target this repo's default branch                         │
+└─────────────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ PR: forge-account:feature-branch → main
+                              │
+┌─────────────────────────────────────────────────────────────────────┐
+│  Fork Repository (forge-account/repo)                              │
+│    - Created automatically if not exists                           │
+│    - Synced with upstream before each task                         │
+│    - Feature branches pushed here                                  │
+│    - Forge has WRITE access                                        │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Workflow Steps**:
+
+1. **Fork Management** (workspace_setup or pr_creation node):
+   - Check if fork exists via GitHub API (`GET /repos/{forge-account}/{repo}`)
+   - If not, create fork (`POST /repos/{owner}/{repo}/forks`)
+   - Wait for fork to be ready (async operation)
+
+2. **Workspace Setup**:
+   - Clone upstream repository (ensures latest code)
+   - Add fork as remote: `git remote add fork https://github.com/{forge-account}/{repo}`
+   - Fetch fork to get any existing branches
+
+3. **PR Creation**:
+   - Push feature branch to fork: `git push fork feature-branch`
+   - Create PR via GitHub API with `head: "{forge-account}:feature-branch"`
+   - PR targets upstream's default branch
+
+**Configuration**:
+- `GITHUB_FORK_OWNER`: The GitHub account/org where forks are created (defaults to authenticated user)
+- Fork naming: Same as upstream repo name (GitHub enforces this)
+
+**Benefits**:
+- Forge never needs write access to upstream repositories
+- Works with any public or readable private repository
+- Clear audit trail - all Forge changes come from fork
+- No risk of accidental pushes to protected branches
 
 ## Constitution Check
 

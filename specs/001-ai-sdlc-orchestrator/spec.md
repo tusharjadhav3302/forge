@@ -108,7 +108,7 @@ The system creates an isolated container sandbox, clones the target repository, 
 2. **Given** a running container, **When** the AI agent executes, **Then** it has full tool access (read, write, edit, bash/execute, glob, grep) within the mounted workspace only.
 3. **Given** a cloned workspace inside the container, **When** the AI implements code, **Then** it reads constitution.md/agents.md before making changes.
 4. **Given** implementation complete inside container, **When** the AI commits changes, **Then** the container exits with success status and commit details.
-5. **Given** container exit with success, **When** the orchestrator resumes, **Then** it pushes the branch and opens a PR programmatically (outside container).
+5. **Given** container exit with success, **When** the orchestrator resumes, **Then** it pushes the branch to the Forge fork and opens a PR from fork to upstream (outside container).
 6. **Given** local tests configured in the repository, **When** the AI completes implementation, **Then** it runs local tests (unit tests) and only signals success if tests pass.
 7. **Given** local tests fail inside container, **When** the AI detects failure, **Then** it attempts to fix the code and re-run tests (up to configurable retry limit).
 8. **Given** execution complete (success or max retries), **When** the container exits, **Then** the container is destroyed and only the git changes persist in the mounted workspace.
@@ -116,6 +116,9 @@ The system creates an isolated container sandbox, clones the target repository, 
 10. **Given** a subsequent Task starting, **When** the agent initializes, **Then** it reads `.forge/handoff.md` to understand previous implementation context before proceeding.
 11. **Given** an agent needs more context about a previous Task, **When** the handoff summary is insufficient, **Then** the agent can read the full conversation history from `.forge/history/{task_key}.json`.
 12. **Given** Task context files exist, **When** execution fails and is retried, **Then** the context from previous successful Tasks is preserved and available to the retry attempt.
+13. **Given** a target repository, **When** execution begins, **Then** the system creates a fork under the Forge service account if one does not already exist.
+14. **Given** an existing fork, **When** execution begins, **Then** the system fetches upstream changes to ensure the fork's default branch is current before branching.
+15. **Given** implementation complete, **When** PR creation begins, **Then** the system pushes to the fork and creates a PR with head `forge-account:branch` targeting upstream's default branch.
 
 **Functional Requirements**:
 - **FR-030**: System MUST execute AI agent inside a podman container (based on devcontainers/universal image) with the workspace mounted at /workspace
@@ -128,6 +131,10 @@ The system creates an isolated container sandbox, clones the target repository, 
 - **FR-037**: System MUST persist full agent conversation history to `.forge/history/{task_key}.json` after each Task implementation
 - **FR-038**: System MUST instruct the agent to read `.forge/handoff.md` before implementing subsequent Tasks
 - **FR-039**: System MUST make historical conversation files available for agent reference when deeper context is needed
+- **FR-040**: System MUST use a fork-based workflow for all repositories - creating a fork under the Forge service account if one does not exist
+- **FR-041**: System MUST sync the fork's default branch with upstream before creating feature branches to avoid stale base commits
+- **FR-042**: System MUST push implementation branches to the fork, not to the upstream repository
+- **FR-043**: System MUST create PRs with the fork branch as head (e.g., `forge-account:feature-branch`) targeting upstream's default branch
 
 ---
 
@@ -354,7 +361,8 @@ Operators can manage the system via a CLI tool, including starting workflows man
 ## Assumptions
 
 - Jira is already configured with the required Issue Types (Feature, Epic, Task, Bug) and workflow statuses
-- GitHub/GitLab repositories have appropriate access tokens configured for the orchestrator
+- The Forge service account has a GitHub token with permissions to: create forks, push to forks, create PRs, read repository contents
+- The Forge service account does NOT require write access to upstream repositories (fork-based workflow)
 - Target repositories contain constitution.md or agents.md defining coding standards and constraints
 - Teams have agreed to use Jira as the single source of truth for all SDLC artifacts
 - External webhook endpoints are reachable and configured in Jira and GitHub

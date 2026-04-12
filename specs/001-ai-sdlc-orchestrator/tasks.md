@@ -228,7 +228,18 @@
 - [x] T201 [P] [US6] Create integration test for task handoff (implement 2 tasks, verify handoff.md created and read)
 - [x] T202 [P] [US6] Create integration test for history persistence (verify .forge/history/{task}.json created)
 
-**Checkpoint**: Single-repo execution functional with container isolation and task context handoff (devcontainers universal)
+### Fork-Based Workflow (FR-040 to FR-043)
+
+- [ ] T203 [US6] Add GITHUB_FORK_OWNER setting to src/forge/config.py (defaults to authenticated user)
+- [ ] T204 [US6] Implement get_or_create_fork() in src/forge/integrations/github/client.py (check exists, create if needed, wait for ready)
+- [ ] T205 [US6] Implement sync_fork_with_upstream() in src/forge/integrations/github/client.py (fetch upstream, update fork default branch)
+- [ ] T206 [US6] Update workspace setup to clone upstream and add fork as remote in src/forge/workspace/git_ops.py
+- [ ] T207 [US6] Update PR creation to push to fork remote in src/forge/orchestrator/nodes/pr_creation.py
+- [ ] T208 [US6] Update PR creation to use fork head format (forge-account:branch) in src/forge/integrations/github/client.py
+- [ ] T209 [P] [US6] Create integration test for fork creation (mock GitHub API, verify fork created)
+- [ ] T210 [P] [US6] Create integration test for PR from fork (verify head format is correct)
+
+**Checkpoint**: Single-repo execution functional with container isolation, task context handoff, and fork-based PRs
 
 ### Container Sandbox Phase 2: Leverage Devcontainer Ecosystem (Future)
 
