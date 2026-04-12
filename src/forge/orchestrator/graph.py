@@ -148,13 +148,21 @@ def route_by_ticket_type(
 
     ticket_type = state.get("ticket_type")
 
-    if ticket_type == TicketType.FEATURE:
+    if ticket_type in (TicketType.FEATURE, TicketType.STORY):
         return "generate_prd"
     elif ticket_type == TicketType.BUG:
         return "analyze_bug"
-    else:
-        # Tasks and Epics go directly to task workflow
+    elif ticket_type in (TicketType.EPIC, TicketType.TASK):
+        # Epics/Tasks should only be processed via parent Feature workflow
+        # If they reach here directly, route to task_workflow (implementation)
+        logger.warning(
+            f"Ticket type '{ticket_type}' received directly - should be routed via parent"
+        )
         return "task_workflow"
+    else:
+        # Unknown or invalid ticket type - end workflow
+        logger.error(f"Invalid ticket type '{ticket_type}' - cannot process")
+        return END
 
 
 def create_workflow_graph() -> StateGraph:

@@ -149,6 +149,20 @@ async def receive_jira_webhook(
                     f"Routing {issue_type} {source_ticket_key} webhook "
                     f"to parent Feature {routing_ticket_key}"
                 )
+            else:
+                # Epics/Tasks without forge:parent are invalid - reject
+                span.set_attribute("forge.skipped", True)
+                span.set_attribute("forge.skip_reason", f"{issue_type} missing forge:parent label")
+                logger.warning(
+                    f"Skipping {webhook_data.ticket_key}: {issue_type} must have "
+                    "forge:parent label to be processed"
+                )
+                return {
+                    "status": "skipped",
+                    "event_id": event_id,
+                    "ticket_key": webhook_data.ticket_key,
+                    "reason": f"{issue_type} must have forge:parent label",
+                }
 
         webhook_event = create_webhook_event(webhook_data)
 

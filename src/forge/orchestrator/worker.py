@@ -430,12 +430,20 @@ class OrchestratorWorker:
             Initial state dictionary.
         """
         # Extract ticket type from payload
-        ticket_type = "Feature"  # default
+        ticket_type = "Unknown"  # Require explicit type, don't default to Feature
         if message.source == EventSource.JIRA:
             issue_data = message.payload.get("issue", {})
             fields = issue_data.get("fields", {})
             issue_type = fields.get("issuetype", {})
-            ticket_type = issue_type.get("name", "Feature")
+            ticket_type = issue_type.get("name", "Unknown")
+
+        # Validate ticket type - only Features and Bugs can start workflows directly
+        valid_top_level_types = ("Feature", "Bug", "Story")
+        if ticket_type not in valid_top_level_types:
+            logger.warning(
+                f"Ticket {message.ticket_key} has type '{ticket_type}' which cannot "
+                f"start a workflow directly. Valid types: {valid_top_level_types}"
+            )
 
         return {
             "ticket_key": message.ticket_key,
