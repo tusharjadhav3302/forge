@@ -141,13 +141,6 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                         f"Failed to create Task '{summary}' for {ticket_key}: {e}"
                     )
 
-        # Try to set workflow label
-        try:
-            await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_PENDING)
-        except Exception as e:
-            jira_error = str(e)
-            logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
-
         logger.info(
             f"Created {len(all_task_keys)} Tasks for {ticket_key}, "
             "awaiting implementation approval"
@@ -155,6 +148,12 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
         # If we created some Tasks, advance even with partial failures
         if all_task_keys:
+            # Only set workflow label after confirming tasks were created
+            try:
+                await jira.set_workflow_label(ticket_key, ForgeLabel.TASK_PENDING)
+            except Exception as e:
+                jira_error = str(e)
+                logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
             return update_state_timestamp({
                 **state,
                 "task_keys": all_task_keys,

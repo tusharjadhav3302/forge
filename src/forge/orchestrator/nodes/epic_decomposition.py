@@ -133,17 +133,16 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
                     f"Failed to create Epic '{summary}' for {ticket_key}: {e}"
                 )
 
-        # Try to set workflow label
-        try:
-            await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
-        except Exception as e:
-            jira_error = str(e)
-            logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
-
         logger.info(f"Created {len(epic_keys)} Epics for {ticket_key}")
 
         # If we created some Epics, advance even with partial failures
         if epic_keys:
+            # Only set workflow label after confirming epics were created
+            try:
+                await jira.set_workflow_label(ticket_key, ForgeLabel.PLAN_PENDING)
+            except Exception as e:
+                jira_error = str(e)
+                logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
             return update_state_timestamp({
                 **state,
                 "epic_keys": epic_keys,
