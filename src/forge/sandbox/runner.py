@@ -128,12 +128,9 @@ class ContainerRunner:
         env["GIT_USER_EMAIL"] = self.settings.git_user_email
 
         # Pass system prompt template (unformatted - entrypoint will interpolate)
-        try:
-            # Load raw template without interpolation by passing empty values
-            prompt_template = load_prompt("container-system")
-            env["FORGE_SYSTEM_PROMPT_TEMPLATE"] = prompt_template
-        except FileNotFoundError:
-            logger.warning("container-system prompt not found, using entrypoint default")
+        # Load raw template without interpolation by passing empty values
+        prompt_template = load_prompt("container-system")
+        env["FORGE_SYSTEM_PROMPT_TEMPLATE"] = prompt_template
 
         # Merge with any custom env vars from config
         env.update(config.env_vars)

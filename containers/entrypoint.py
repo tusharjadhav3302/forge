@@ -195,7 +195,7 @@ def build_system_prompt(
     guardrails: str,
     previous_task_keys: list[str] | None = None,
 ) -> str:
-    """Build the system prompt from template or fallback.
+    """Build the system prompt from template.
 
     Loads prompt template from FORGE_SYSTEM_PROMPT_TEMPLATE env var
     and interpolates task-specific values.
@@ -207,68 +207,17 @@ def build_system_prompt(
         task_description: Detailed task description.
         guardrails: Repository guidelines.
         previous_task_keys: List of previously implemented task keys for handoff context.
+
+    Raises:
+        ValueError: If FORGE_SYSTEM_PROMPT_TEMPLATE env var is not set.
     """
     template = os.environ.get("FORGE_SYSTEM_PROMPT_TEMPLATE")
 
     if not template:
-        logger.warning("FORGE_SYSTEM_PROMPT_TEMPLATE not set, using fallback")
-        template = """You are an AI software engineer implementing a specific task.
-
-## Workspace
-You are working in: {workspace_path}
-All file paths should be relative to this directory.
-
-## Task
-{task_summary}
-
-## Detailed Requirements
-{task_description}
-
-## Repository Guidelines
-{guardrails}
-
-## Task Context Handoff
-
-Before you begin implementing, check for context from previous tasks:
-
-1. **Read `.forge/handoff.md`** if it exists - this contains a concise summary of what previous tasks accomplished.
-
-2. **If you need deeper context**, read the full conversation history from `.forge/history/{{task_key}}.json`.
-
-Previous tasks in this workflow: {previous_task_keys}
-
-## Instructions
-
-1. Read `.forge/handoff.md` first (if it exists) to understand prior work
-2. Read and understand the existing codebase structure
-3. Implement the task following the repository's coding standards
-4. Write clean, well-documented code
-5. Run tests to verify your changes work
-6. **Update handoff for next task** - append your summary to `.forge/handoff.md`
-7. Commit your changes with a descriptive message
-8. Do NOT push to git - only commit your changes locally
-
-## Git Commit Rules
-
-**CRITICAL**: Follow these rules exactly.
-
-### Files to NEVER commit:
-- `.forge/` directory and ALL its contents (task.json, handoff.md, history/)
-- Do NOT modify `.gitignore` - assume it's already configured correctly
-- Do NOT create helper scripts (git_commit.sh, etc.) - use git directly
-
-### Commit message format:
-[{{task_key}}] Brief summary of what was implemented
-
-Detailed description of changes and why they were made.
-
-### Staging files:
-1. Use `git add <specific-files>` - never `git add .` or `git add -A`
-2. Review staged files with `git diff --cached` before committing
-3. Only commit the actual implementation files you created/modified
-
-Use the available tools to read, write, and edit files as needed.
-"""
+        raise ValueError(
+            "FORGE_SYSTEM_PROMPT_TEMPLATE environment variable is not set. "
+            "The orchestrator must pass the system prompt template to the container."
+        )
 
     # Format previous task keys for display
     prev_keys_str = ", ".join(previous_task_keys) if previous_task_keys else "(none - this is the first task)"
