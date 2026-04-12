@@ -100,15 +100,19 @@ Passed automatically by the orchestrator:
 | `CLAUDE_MODEL` | Model to use (e.g., `claude-sonnet-4-5-20250929`) |
 | `FORGE_SYSTEM_PROMPT_TEMPLATE` | System prompt template (interpolated by entrypoint) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to mounted gcloud credentials |
+| `GIT_USER_NAME` | Git author name for commits (default: `Forge`) |
+| `GIT_USER_EMAIL` | Git author email for commits (default: `forge@example.com`) |
 
 ### System Prompt
 
 The system prompt is loaded from `src/forge/prompts/v1/container-system.md` and passed to the container via `FORGE_SYSTEM_PROMPT_TEMPLATE`. The entrypoint interpolates these variables:
 
 - `{workspace_path}` - Container workspace path (/workspace)
+- `{task_key}` - Jira task key being implemented (e.g., `AISOS-191`)
 - `{task_summary}` - Short task description
 - `{task_description}` - Detailed task requirements
 - `{guardrails}` - Repository guidelines from CLAUDE.md, AGENTS.md, etc.
+- `{previous_task_keys}` - List of previously completed task keys for context handoff
 
 ## Container Naming
 

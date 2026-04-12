@@ -68,3 +68,6 @@ dump.rdb
 *.swp
 *.swo
 *~
+
+# Forge local workflow state
+.forge/

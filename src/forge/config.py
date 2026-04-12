@@ -86,6 +86,14 @@ class Settings(BaseSettings):
         default="",
         description="GitHub account/org where forks are created (defaults to authenticated user if empty)",
     )
+    git_user_name: str = Field(
+        default="Forge",
+        description="Git user name for commits made by Forge",
+    )
+    git_user_email: str = Field(
+        default="forge@example.com",
+        description="Git user email for commits made by Forge",
+    )
 
     @property
     def known_repos(self) -> list[str]:

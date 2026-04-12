@@ -123,6 +123,10 @@ class ContainerRunner:
         # Pass model configuration
         env["CLAUDE_MODEL"] = self.settings.claude_model
 
+        # Pass git configuration for commits
+        env["GIT_USER_NAME"] = self.settings.git_user_name
+        env["GIT_USER_EMAIL"] = self.settings.git_user_email
+
         # Pass system prompt template (unformatted - entrypoint will interpolate)
         try:
             # Load raw template without interpolation by passing empty values

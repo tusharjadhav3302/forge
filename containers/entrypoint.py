@@ -151,16 +151,35 @@ def run_tests(workspace: Path, test_command: str) -> bool:
         return False
 
 
+def configure_git() -> None:
+    """Configure git user name and email from environment variables."""
+    user_name = os.environ.get("GIT_USER_NAME", "Forge")
+    user_email = os.environ.get("GIT_USER_EMAIL", "forge@example.com")
+
+    subprocess.run(
+        ["git", "config", "--global", "user.name", user_name],
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "config", "--global", "user.email", user_email],
+        capture_output=True,
+    )
+    logger.info(f"Configured git as {user_name} <{user_email}>")
+
+
 def git_commit(workspace: Path, message: str) -> bool:
     """Stage all changes and create a commit."""
     try:
         # Stage all changes
-        subprocess.run(
+        result = subprocess.run(
             ["git", "add", "-A"],
             cwd=workspace,
-            check=True,
             capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            logger.error(f"Git add failed: {result.stderr}")
+            return False
 
         # Check if there are changes to commit
         result = subprocess.run(
@@ -174,18 +193,23 @@ def git_commit(workspace: Path, message: str) -> bool:
             return True
 
         # Create commit
-        subprocess.run(
+        result = subprocess.run(
             ["git", "commit", "-m", message],
             cwd=workspace,
-            check=True,
             capture_output=True,
+            text=True,
         )
+        if result.returncode != 0:
+            logger.error(f"Git commit failed: {result.stderr}")
+            return False
 
         logger.info(f"Created commit: {message}")
         return True
 
     except subprocess.CalledProcessError as e:
-        logger.error(f"Git commit failed: {e}")
+        logger.error(f"Git operation failed: {e}")
+        if hasattr(e, 'stderr') and e.stderr:
+            logger.error(f"stderr: {e.stderr}")
         return False
 
 
@@ -416,6 +440,9 @@ def main():
         logger.error(f"Workspace not found: {workspace}")
         sys.exit(EXIT_CONFIG_ERROR)
 
+    # Configure git for commits
+    configure_git()
+
     logger.info(f"Workspace: {workspace}")
     logger.info(f"Task: {task_summary}")
 
@@ -442,7 +469,9 @@ def main():
         sys.exit(EXIT_TASK_FAILED)
 
     # Ensure changes are committed (agent should have done this, but as fallback)
-    git_commit(workspace, f"[forge] {task_summary}")
+    if not git_commit(workspace, f"[forge] {task_summary}"):
+        logger.error("Failed to commit changes")
+        sys.exit(EXIT_TASK_FAILED)
 
     logger.info("Task completed successfully")
     sys.exit(EXIT_SUCCESS)
