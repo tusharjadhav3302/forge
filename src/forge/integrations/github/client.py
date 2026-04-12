@@ -282,3 +282,221 @@ class GitHubClient:
         response.raise_for_status()
         logger.info(f"Updated PR #{pr_number} in {owner}/{repo}")
         return response.json()
+
+    async def get_authenticated_user(self) -> dict[str, Any]:
+        """Get the authenticated user's information.
+
+        Returns:
+            API response with user details including login name.
+        """
+        client = await self._get_client()
+        response = await client.get("/user")
+        response.raise_for_status()
+        return response.json()
+
+    async def get_fork(
+        self,
+        upstream_owner: str,
+        upstream_repo: str,
+        fork_owner: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Get an existing fork of a repository.
+
+        Args:
+            upstream_owner: Owner of the upstream repository.
+            upstream_repo: Name of the upstream repository.
+            fork_owner: Owner of the fork. Uses configured or authenticated user if None.
+
+        Returns:
+            Fork repository data if exists, None otherwise.
+        """
+        client = await self._get_client()
+
+        # Determine fork owner
+        if not fork_owner:
+            fork_owner = self.settings.github_fork_owner
+        if not fork_owner:
+            user = await self.get_authenticated_user()
+            fork_owner = user["login"]
+
+        try:
+            response = await client.get(f"/repos/{fork_owner}/{upstream_repo}")
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+
+            repo_data = response.json()
+            # Verify this is actually a fork of the upstream repo
+            if repo_data.get("fork"):
+                parent = repo_data.get("parent", {})
+                if (parent.get("owner", {}).get("login") == upstream_owner
+                        and parent.get("name") == upstream_repo):
+                    return repo_data
+
+            return None
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                return None
+            raise
+
+    async def create_fork(
+        self,
+        upstream_owner: str,
+        upstream_repo: str,
+        fork_owner: str | None = None,
+    ) -> dict[str, Any]:
+        """Create a fork of a repository.
+
+        Args:
+            upstream_owner: Owner of the upstream repository.
+            upstream_repo: Name of the upstream repository.
+            fork_owner: Organization to create fork in (None = user's account).
+
+        Returns:
+            API response with fork repository details.
+        """
+        client = await self._get_client()
+
+        # Determine fork owner for organization forks
+        org = fork_owner or self.settings.github_fork_owner
+
+        data: dict[str, Any] = {"default_branch_only": True}
+        if org:
+            data["organization"] = org
+
+        response = await client.post(
+            f"/repos/{upstream_owner}/{upstream_repo}/forks",
+            json=data,
+        )
+        response.raise_for_status()
+        fork_data = response.json()
+        logger.info(
+            f"Created fork {fork_data['full_name']} from {upstream_owner}/{upstream_repo}"
+        )
+        return fork_data
+
+    async def get_or_create_fork(
+        self,
+        upstream_owner: str,
+        upstream_repo: str,
+        fork_owner: str | None = None,
+        wait_for_ready: bool = True,
+        max_wait_seconds: int = 60,
+    ) -> dict[str, Any]:
+        """Get existing fork or create one if it doesn't exist.
+
+        Args:
+            upstream_owner: Owner of the upstream repository.
+            upstream_repo: Name of the upstream repository.
+            fork_owner: Owner for the fork. Uses configured or authenticated user if None.
+            wait_for_ready: Wait for fork to be ready after creation.
+            max_wait_seconds: Maximum time to wait for fork readiness.
+
+        Returns:
+            Fork repository data.
+        """
+        import asyncio
+
+        # Check for existing fork
+        existing = await self.get_fork(upstream_owner, upstream_repo, fork_owner)
+        if existing:
+            logger.info(f"Found existing fork: {existing['full_name']}")
+            return existing
+
+        # Create new fork
+        fork = await self.create_fork(upstream_owner, upstream_repo, fork_owner)
+
+        if not wait_for_ready:
+            return fork
+
+        # Wait for fork to be ready (GitHub creates forks asynchronously)
+        fork_owner_actual = fork["owner"]["login"]
+        fork_name = fork["name"]
+        client = await self._get_client()
+
+        start_time = asyncio.get_event_loop().time()
+        while True:
+            elapsed = asyncio.get_event_loop().time() - start_time
+            if elapsed > max_wait_seconds:
+                logger.warning(
+                    f"Fork {fork_owner_actual}/{fork_name} not ready after "
+                    f"{max_wait_seconds}s, proceeding anyway"
+                )
+                return fork
+
+            await asyncio.sleep(2)
+
+            try:
+                # Check if we can access the fork's default branch
+                response = await client.get(
+                    f"/repos/{fork_owner_actual}/{fork_name}/branches/{fork.get('default_branch', 'main')}"
+                )
+                if response.status_code == 200:
+                    logger.info(f"Fork {fork_owner_actual}/{fork_name} is ready")
+                    return fork
+            except Exception:
+                pass
+
+            logger.debug(
+                f"Waiting for fork {fork_owner_actual}/{fork_name} to be ready..."
+            )
+
+    async def sync_fork_with_upstream(
+        self,
+        fork_owner: str,
+        fork_repo: str,
+        branch: str = "main",
+    ) -> bool:
+        """Sync a fork's branch with its upstream repository.
+
+        Uses GitHub's merge-upstream API to update the fork.
+
+        Args:
+            fork_owner: Owner of the fork.
+            fork_repo: Name of the fork repository.
+            branch: Branch to sync (default: main).
+
+        Returns:
+            True if sync succeeded or was not needed, False on error.
+        """
+        client = await self._get_client()
+
+        try:
+            response = await client.post(
+                f"/repos/{fork_owner}/{fork_repo}/merge-upstream",
+                json={"branch": branch},
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                message = result.get("message", "")
+                if "up to date" in message.lower():
+                    logger.info(f"Fork {fork_owner}/{fork_repo}:{branch} is already up to date")
+                else:
+                    logger.info(f"Synced fork {fork_owner}/{fork_repo}:{branch} with upstream")
+                return True
+            elif response.status_code == 409:
+                # Conflict - fork has diverged, can't auto-sync
+                logger.warning(
+                    f"Fork {fork_owner}/{fork_repo}:{branch} has diverged from upstream, "
+                    "cannot auto-sync"
+                )
+                return False
+            else:
+                response.raise_for_status()
+                return True
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to sync fork {fork_owner}/{fork_repo}: {e}")
+            return False
+
+    async def get_fork_owner(self) -> str:
+        """Get the fork owner (configured or authenticated user).
+
+        Returns:
+            GitHub username or organization for forks.
+        """
+        if self.settings.github_fork_owner:
+            return self.settings.github_fork_owner
+        user = await self.get_authenticated_user()
+        return user["login"]

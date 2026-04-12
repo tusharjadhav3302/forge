@@ -372,7 +372,14 @@ def create_workflow_graph() -> StateGraph:
             "escalate_blocked": "escalate_blocked",
         },
     )
-    graph.add_edge("create_pr", "teardown_workspace")
+    graph.add_conditional_edges(
+        "create_pr",
+        _route_after_pr_creation,
+        {
+            "teardown_workspace": "teardown_workspace",
+            "escalate_blocked": "escalate_blocked",
+        },
+    )
     graph.add_conditional_edges(
         "teardown_workspace",
         _route_after_teardown,
@@ -563,6 +570,31 @@ def _route_implementation(
     if not remaining:
         return "create_pr"
     return "implement_task"
+
+
+def _route_after_pr_creation(
+    state: WorkflowState,
+) -> Literal["teardown_workspace", "escalate_blocked"]:
+    """Route after PR creation attempt.
+
+    On success: proceed to teardown workspace
+    On failure: escalate to blocked status
+
+    Args:
+        state: Current workflow state.
+
+    Returns:
+        Next node name.
+    """
+    last_error = state.get("last_error")
+    pr_urls = state.get("pr_urls", [])
+
+    # If there's an error and no PR was created, escalate
+    if last_error and not pr_urls:
+        return "escalate_blocked"
+
+    # Success or partial success - proceed to teardown
+    return "teardown_workspace"
 
 
 def _route_after_teardown(

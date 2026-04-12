@@ -120,6 +120,43 @@ class GitOperations:
             )
             raise
 
+    def add_fork_remote(self, fork_owner: str, fork_repo: str) -> None:
+        """Add the fork as a remote named 'fork'.
+
+        Args:
+            fork_owner: Owner of the fork repository.
+            fork_repo: Name of the fork repository.
+        """
+        token = self.settings.github_token.get_secret_value()
+        fork_url = f"https://x-access-token:{token}@github.com/{fork_owner}/{fork_repo}.git"
+
+        # Check if remote already exists
+        result = self._run_git("remote", check=False)
+        if "fork" in result.stdout.split():
+            # Update existing remote
+            self._run_git("remote", "set-url", "fork", fork_url)
+            logger.info(f"Updated fork remote to {fork_owner}/{fork_repo}")
+        else:
+            # Add new remote
+            self._run_git("remote", "add", "fork", fork_url)
+            logger.info(f"Added fork remote: {fork_owner}/{fork_repo}")
+
+        # Fetch from fork
+        self._run_git("fetch", "fork", check=False)
+
+    def push_to_fork(self, force: bool = False) -> None:
+        """Push the current branch to the fork remote.
+
+        Args:
+            force: Force push (use with caution).
+        """
+        args = ["push", "-u", "fork", self.workspace.branch_name]
+        if force:
+            args.insert(1, "--force")
+
+        self._run_git(*args)
+        logger.info(f"Pushed branch {self.workspace.branch_name} to fork")
+
     def create_branch(self, base_branch: str = "main") -> None:
         """Create and checkout a new branch.
 

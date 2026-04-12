@@ -82,6 +82,10 @@ class Settings(BaseSettings):
         default="",
         description="Comma-separated list of known repositories (owner/repo format) for repo assignment",
     )
+    github_fork_owner: str = Field(
+        default="",
+        description="GitHub account/org where forks are created (defaults to authenticated user if empty)",
+    )
 
     @property
     def known_repos(self) -> list[str]:

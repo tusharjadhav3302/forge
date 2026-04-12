@@ -230,14 +230,14 @@
 
 ### Fork-Based Workflow (FR-040 to FR-043)
 
-- [ ] T203 [US6] Add GITHUB_FORK_OWNER setting to src/forge/config.py (defaults to authenticated user)
-- [ ] T204 [US6] Implement get_or_create_fork() in src/forge/integrations/github/client.py (check exists, create if needed, wait for ready)
-- [ ] T205 [US6] Implement sync_fork_with_upstream() in src/forge/integrations/github/client.py (fetch upstream, update fork default branch)
-- [ ] T206 [US6] Update workspace setup to clone upstream and add fork as remote in src/forge/workspace/git_ops.py
-- [ ] T207 [US6] Update PR creation to push to fork remote in src/forge/orchestrator/nodes/pr_creation.py
-- [ ] T208 [US6] Update PR creation to use fork head format (forge-account:branch) in src/forge/integrations/github/client.py
-- [ ] T209 [P] [US6] Create integration test for fork creation (mock GitHub API, verify fork created)
-- [ ] T210 [P] [US6] Create integration test for PR from fork (verify head format is correct)
+- [x] T203 [US6] Add GITHUB_FORK_OWNER setting to src/forge/config.py (defaults to authenticated user)
+- [x] T204 [US6] Implement get_or_create_fork() in src/forge/integrations/github/client.py (check exists, create if needed, wait for ready)
+- [x] T205 [US6] Implement sync_fork_with_upstream() in src/forge/integrations/github/client.py (fetch upstream, update fork default branch)
+- [x] T206 [US6] Update workspace setup to clone upstream and add fork as remote in src/forge/workspace/git_ops.py
+- [x] T207 [US6] Update PR creation to push to fork remote in src/forge/orchestrator/nodes/pr_creation.py
+- [x] T208 [US6] Update PR creation to use fork head format (forge-account:branch) in src/forge/integrations/github/client.py
+- [x] T209 [P] [US6] Create integration test for fork creation (mock GitHub API, verify fork created)
+- [x] T210 [P] [US6] Create integration test for PR from fork (verify head format is correct)
 
 **Checkpoint**: Single-repo execution functional with container isolation, task context handoff, and fork-based PRs
 
@@ -611,9 +611,9 @@
 
 ## Summary
 
-- **Total Tasks**: 195 (T001-T195)
-- **Completed**: 153 tasks
-- **Remaining**: 42 tasks
+- **Total Tasks**: 210 (T001-T210)
+- **Completed**: 161 tasks
+- **Remaining**: 49 tasks
 - **New Phases Added** (2026-04-05 via spec sync):
   - Phase 15: US12 Observability (9 tasks) - 9 done
   - Phase 16: US13 Metrics (8 tasks) - 8 done
@@ -625,4 +625,7 @@
   - Phase 6: Task Revision (5 tasks: T174-T178) - 5 done
   - Phase 6: Child Ticket Webhook Routing (5 tasks: T179-T183) - 5 done
 - **New Tasks Added** (2026-04-09):
-  - Phase 8: Container Sandbox Implementation (12 tasks: T184-T195) - 0 done
+  - Phase 8: Container Sandbox Implementation (12 tasks: T184-T195) - 10 done
+- **New Tasks Added** (2026-04-12):
+  - Phase 8: Task Context Handoff (7 tasks: T196-T202) - 7 done
+  - Phase 8: Fork-Based Workflow (8 tasks: T203-T210) - 8 done

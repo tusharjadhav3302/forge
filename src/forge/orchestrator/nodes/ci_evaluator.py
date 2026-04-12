@@ -268,7 +268,7 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
                 f"Failed checks: {', '.join(check_names)}. "
                 "Manual intervention required."
             )
-        elif "repository" in last_error.lower() or "workspace" in last_error.lower():
+        elif last_error and ("repository" in last_error.lower() or "workspace" in last_error.lower()):
             # Workspace/repository setup failure
             error_msg = (
                 f"Repository configuration error: {last_error}. "

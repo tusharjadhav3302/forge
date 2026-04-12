@@ -64,13 +64,15 @@ async def check_merge_conflicts(
 
 
 async def create_pull_request(state: WorkflowState) -> WorkflowState:
-    """Create a pull request from the workspace changes.
+    """Create a pull request from the workspace changes using fork-based workflow.
 
     This node:
-    1. Pushes the feature branch
-    2. Creates a PR with Task summaries
-    3. Links PR to Jira tickets
-    4. Stores PR URL in state
+    1. Gets or creates a fork of the upstream repository
+    2. Syncs fork with upstream
+    3. Pushes the feature branch to the fork
+    4. Creates a PR from fork to upstream
+    5. Links PR to Jira tickets
+    6. Stores PR URL in state
 
     Args:
         state: Current workflow state.
@@ -115,6 +117,21 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         )
         git = GitOperations(workspace)
 
+        # Parse owner/repo for upstream
+        owner, repo = current_repo.split("/")
+
+        # Get or create fork
+        logger.info(f"Getting or creating fork for {current_repo}")
+        fork_data = await github.get_or_create_fork(owner, repo)
+        fork_owner = fork_data["owner"]["login"]
+        fork_repo = fork_data["name"]
+
+        # Sync fork with upstream
+        await github.sync_fork_with_upstream(fork_owner, fork_repo)
+
+        # Add fork as remote
+        git.add_fork_remote(fork_owner, fork_repo)
+
         # Check for merge conflicts before pushing
         has_conflicts, conflicting_files = await check_merge_conflicts(git, "main")
 
@@ -141,23 +158,21 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
                 "merge_conflicts": conflicting_files,
             })
 
-        # Push branch to remote
-        git.push()
+        # Push branch to fork (not origin)
+        git.push_to_fork()
 
         # Build PR title and body
         pr_title = f"[{ticket_key}] {_get_pr_title(state)}"
         pr_body = _build_pr_body(state, implemented_tasks)
 
-        # Parse owner/repo
-        owner, repo = current_repo.split("/")
-
-        # Create PR
+        # Create PR from fork to upstream
+        # Head format: "fork_owner:branch_name"
         pr_data = await github.create_pull_request(
             owner=owner,
             repo=repo,
             title=pr_title,
             body=pr_body,
-            head=branch_name,
+            head=f"{fork_owner}:{branch_name}",
             base="main",
         )
 
