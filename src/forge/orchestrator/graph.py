@@ -397,6 +397,7 @@ def create_workflow_graph() -> StateGraph:
             "ai_review": "ai_review",
             "attempt_ci_fix": "attempt_ci_fix",
             "escalate_blocked": "escalate_blocked",
+            END: END,  # Pause workflow until CI webhook
         },
     )
     graph.add_edge("attempt_ci_fix", "ci_evaluator")
@@ -628,16 +629,16 @@ def _route_execution_mode(
 
 def _route_ci_evaluation(
     state: WorkflowState,
-) -> Literal["ai_review", "attempt_ci_fix", "escalate_blocked"]:
+) -> Literal["ai_review", "attempt_ci_fix", "escalate_blocked", "__end__"]:
     """Route based on CI evaluation results."""
     ci_status = state.get("ci_status", "")
 
-    if ci_status == "passed":
-        return "ai_review"
-    elif ci_status == "fixing":
-        return "attempt_ci_fix"
-    else:
-        return "escalate_blocked"
+    routes = {
+        "passed": "ai_review",
+        "fixing": "attempt_ci_fix",
+        "pending": "__end__",  # Pause workflow until CI webhook
+    }
+    return routes.get(ci_status, "escalate_blocked")
 
 
 def _route_ai_review(
