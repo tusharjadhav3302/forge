@@ -21,7 +21,7 @@ The container sandbox provides an isolated environment for AI-powered code imple
 │                                                              │
 │  entrypoint.py                                              │
 │    - Loads system prompt from FORGE_SYSTEM_PROMPT_TEMPLATE  │
-│    - Reads task details from mounted /task.json             │
+│    - Reads task details from .forge/task.json               │
 │    - Loads guardrails (CLAUDE.md, AGENTS.md, etc.)          │
 │    - Invokes Deep Agents with full tool access              │
 │    - Agent decides when/what tests to run                   │
