@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from opentelemetry import trace
-from opentelemetry.trace import SpanContext
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +28,8 @@ class WorkflowTraceContext:
 
     ticket_key: str
     workflow_phase: str
-    repository: Optional[str] = None
-    pr_number: Optional[int] = None
+    repository: str | None = None
+    pr_number: int | None = None
 
     def to_attributes(self) -> dict:
         """Convert to span attributes."""
@@ -75,7 +74,7 @@ def set_correlation_id(correlation_id: str) -> contextvars.Token:
     return _correlation_id.set(correlation_id)
 
 
-def get_workflow_context() -> Optional[WorkflowTraceContext]:
+def get_workflow_context() -> WorkflowTraceContext | None:
     """Get the current workflow trace context.
 
     Returns:
@@ -107,10 +106,10 @@ class CorrelationContext:
 
     def __init__(
         self,
-        correlation_id: Optional[str] = None,
-        ticket_key: Optional[str] = None,
-        workflow_phase: Optional[str] = None,
-        repository: Optional[str] = None,
+        correlation_id: str | None = None,
+        ticket_key: str | None = None,
+        workflow_phase: str | None = None,
+        repository: str | None = None,
     ):
         """Initialize correlation context.
 
@@ -124,8 +123,8 @@ class CorrelationContext:
         self.ticket_key = ticket_key
         self.workflow_phase = workflow_phase
         self.repository = repository
-        self._correlation_token: Optional[contextvars.Token] = None
-        self._workflow_token: Optional[contextvars.Token] = None
+        self._correlation_token: contextvars.Token | None = None
+        self._workflow_token: contextvars.Token | None = None
 
     def __enter__(self) -> "CorrelationContext":
         """Enter context and set correlation ID."""
@@ -169,9 +168,9 @@ class CorrelationContext:
 
 
 def add_trace_metadata(
-    ticket_key: Optional[str] = None,
-    workflow_phase: Optional[str] = None,
-    repository: Optional[str] = None,
+    ticket_key: str | None = None,
+    workflow_phase: str | None = None,
+    repository: str | None = None,
     **extra_attributes,
 ) -> None:
     """Add metadata to the current span.

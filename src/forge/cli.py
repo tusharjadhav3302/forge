@@ -1,7 +1,7 @@
 """Command-line interface for Forge SDLC Orchestrator."""
 
-import asyncio
 import argparse
+import asyncio
 import logging
 import sys
 from typing import Any
@@ -24,7 +24,7 @@ async def cmd_run(args: argparse.Namespace) -> int:
 
     try:
         result = await run_single_ticket(args.ticket)
-        print(f"\nWorkflow completed!")
+        print("\nWorkflow completed!")
         print(f"  Final node: {result.get('current_node')}")
         print(f"  Paused: {result.get('is_paused', False)}")
         if result.get("last_error"):
@@ -49,11 +49,13 @@ async def cmd_test_node(args: argparse.Namespace) -> int:
     from forge.integrations.jira.client import JiraClient
 
     # Import all nodes
-    from forge.orchestrator.nodes import prd_generation, spec_generation
-    from forge.orchestrator.nodes import epic_decomposition, task_generation
-    from forge.orchestrator.nodes import implementation, ci_evaluator
-    from forge.orchestrator.nodes import ai_reviewer, human_review
-    from forge.orchestrator.nodes import bug_workflow
+    from forge.orchestrator.nodes import (
+        bug_workflow,
+        epic_decomposition,
+        prd_generation,
+        spec_generation,
+        task_generation,
+    )
 
     node_map = {
         "generate_prd": prd_generation.generate_prd,
@@ -95,7 +97,7 @@ async def cmd_test_node(args: argparse.Namespace) -> int:
     try:
         node_func = node_map[node_name]
         result = await node_func(state)
-        print(f"\nNode completed!")
+        print("\nNode completed!")
         print(f"  Next node: {result.get('current_node')}")
         if result.get("last_error"):
             print(f"  Error: {result.get('last_error')}")
@@ -144,8 +146,8 @@ async def cmd_set_label(args: argparse.Namespace) -> int:
     except KeyError:
         print(f"Unknown label: {args.label}", file=sys.stderr)
         print("Available labels:")
-        for l in ForgeLabel:
-            print(f"  {l.name.lower().replace('_', '-')}: {l.value}")
+        for label_item in ForgeLabel:
+            print(f"  {label_item.name.lower().replace('_', '-')}: {label_item.value}")
         return 1
 
     jira = JiraClient()
@@ -176,17 +178,14 @@ async def cmd_approve(args: argparse.Namespace) -> int:
             # Approve PRD -> move to spec generation
             await jira.set_workflow_label(args.ticket, ForgeLabel.PRD_APPROVED)
             print(f"PRD approved for {args.ticket}")
-            next_stage = "generate_spec"
         elif ForgeLabel.SPEC_PENDING.value in labels:
             # Approve Spec -> move to epic decomposition
             await jira.set_workflow_label(args.ticket, ForgeLabel.SPEC_APPROVED)
             print(f"Spec approved for {args.ticket}")
-            next_stage = "decompose_epics"
         elif ForgeLabel.PLAN_PENDING.value in labels:
             # Approve Plan -> move to task generation
             await jira.set_workflow_label(args.ticket, ForgeLabel.PLAN_APPROVED)
             print(f"Plan approved for {args.ticket}")
-            next_stage = "generate_tasks"
         else:
             print(f"No pending approval found for {args.ticket}")
             print(f"Current labels: {labels}")
@@ -241,13 +240,10 @@ async def cmd_reject(args: argparse.Namespace) -> int:
 
         if ForgeLabel.PRD_PENDING.value in labels:
             stage = "PRD"
-            next_node = "regenerate_prd"
         elif ForgeLabel.SPEC_PENDING.value in labels:
             stage = "Spec"
-            next_node = "regenerate_spec"
         elif ForgeLabel.PLAN_PENDING.value in labels:
             stage = "Plan"
-            next_node = "regenerate_all_epics"
         else:
             print(f"No pending approval found for {args.ticket}")
             print(f"Current labels: {labels}")
@@ -310,7 +306,7 @@ async def cmd_clear_checkpoint(args: argparse.Namespace) -> int:
         return 1
 
 
-async def cmd_list(args: argparse.Namespace) -> int:
+async def cmd_list(_args: argparse.Namespace) -> int:
     """List active workflows."""
     from forge.orchestrator.checkpointer import get_redis_client
 
@@ -438,7 +434,7 @@ async def cmd_logs(args: argparse.Namespace) -> int:
         return 1
 
 
-async def cmd_health(args: argparse.Namespace) -> int:
+async def cmd_health(_args: argparse.Namespace) -> int:
     """Check system health."""
     from forge.orchestrator.checkpointer import get_redis_client
 
@@ -447,7 +443,7 @@ async def cmd_health(args: argparse.Namespace) -> int:
     # Check settings
     try:
         settings = get_settings()
-        print(f"[OK] Configuration loaded")
+        print("[OK] Configuration loaded")
         print(f"     Jira: {settings.jira_base_url}")
         print(f"     Use labels: {settings.jira_use_labels}")
         print(f"     Store in comments: {settings.jira_store_in_comments}")
@@ -471,19 +467,19 @@ async def cmd_health(args: argparse.Namespace) -> int:
             jira = JiraClient()
             # Try to get projects (simple API call)
             await jira.close()
-            print(f"[OK] Jira credentials configured")
+            print("[OK] Jira credentials configured")
         except Exception as e:
             print(f"[WARN] Jira: {e}")
     else:
-        print(f"[SKIP] Jira: API token not configured")
+        print("[SKIP] Jira: API token not configured")
 
     # Check Anthropic/Vertex
     if settings.use_vertex_ai:
         print(f"[OK] Using Vertex AI: {settings.anthropic_vertex_project_id}")
     elif settings.anthropic_api_key.get_secret_value():
-        print(f"[OK] Using direct Anthropic API")
+        print("[OK] Using direct Anthropic API")
     else:
-        print(f"[WARN] No Claude API configured")
+        print("[WARN] No Claude API configured")
 
     print("\nHealth check complete!")
     return 0

@@ -3,7 +3,7 @@
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from forge.models.events import EventSource, WebhookEvent
 
@@ -21,14 +21,14 @@ class GitHubWebhookData:
     event_type: str
     action: str
     repo_full_name: str
-    ticket_key: Optional[str]
-    pr_number: Optional[int]
-    pr_url: Optional[str]
-    pr_state: Optional[str]
-    branch_name: Optional[str]
-    commit_sha: Optional[str]
-    check_status: Optional[str]
-    check_conclusion: Optional[str]
+    ticket_key: str | None
+    pr_number: int | None
+    pr_url: str | None
+    pr_state: str | None
+    branch_name: str | None
+    commit_sha: str | None
+    check_status: str | None
+    check_conclusion: str | None
     sender_login: str
     raw_payload: dict[str, Any]
 
@@ -171,7 +171,7 @@ def create_github_webhook_event(data: GitHubWebhookData) -> WebhookEvent:
     )
 
 
-def _extract_ticket_key(text: str) -> Optional[str]:
+def _extract_ticket_key(text: str) -> str | None:
     """Extract Jira ticket key from text.
 
     Args:

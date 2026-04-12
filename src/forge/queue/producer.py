@@ -1,7 +1,7 @@
 """Queue producer for publishing webhook events to Redis Streams."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -19,7 +19,7 @@ GITHUB_STREAM = "forge:events:github"
 class QueueProducer:
     """Publishes webhook events to Redis Streams for async processing."""
 
-    def __init__(self, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, redis_client: redis.Redis | None = None):
         """Initialize the queue producer.
 
         Args:

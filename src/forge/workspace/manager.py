@@ -1,12 +1,10 @@
 """Ephemeral workspace manager for code execution."""
 
 import logging
-import os
 import shutil
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +30,7 @@ class WorkspaceManager:
     making changes, and cleaning up after PR creation.
     """
 
-    def __init__(self, base_dir: Optional[str] = None):
+    def __init__(self, base_dir: str | None = None):
         """Initialize the workspace manager.
 
         Args:
@@ -45,7 +43,7 @@ class WorkspaceManager:
         self,
         repo_name: str,
         ticket_key: str,
-        branch_name: Optional[str] = None,
+        branch_name: str | None = None,
     ) -> Workspace:
         """Create a new ephemeral workspace.
 
@@ -84,7 +82,7 @@ class WorkspaceManager:
         self,
         ticket_key: str,
         repo_name: str,
-    ) -> Optional[Workspace]:
+    ) -> Workspace | None:
         """Get an existing workspace.
 
         Args:

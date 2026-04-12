@@ -2,8 +2,9 @@
 
 import logging
 import os
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, Optional
+from typing import Any
 
 from forge.config import get_settings
 
@@ -37,10 +38,10 @@ def _ensure_langfuse_env() -> bool:
 
 
 def get_langfuse_handler(
-    session_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-) -> Optional[Any]:
+    session_id: str | None = None,  # noqa: ARG001
+    user_id: str | None = None,  # noqa: ARG001
+    tags: list[str] | None = None,  # noqa: ARG001
+) -> Any | None:
     """Get a Langfuse callback handler for LangChain/LangGraph.
 
     Creates a new handler instance. Note: In Langfuse v3+, session_id,
@@ -86,10 +87,10 @@ class AsyncLangfuseContext:
 
     def __init__(
         self,
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
     ):
         self.session_id = session_id
         self.user_id = user_id
@@ -140,10 +141,10 @@ class AsyncLangfuseContext:
 
 
 def get_langfuse_context(
-    session_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-    metadata: Optional[dict[str, Any]] = None,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> AsyncLangfuseContext:
     """Get an async context manager for Langfuse attribute propagation.
 
@@ -167,11 +168,11 @@ def get_langfuse_context(
 
 
 def get_langfuse_config(
-    trace_name: Optional[str] = None,
-    user_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-    tags: Optional[list[str]] = None,
-    metadata: Optional[dict[str, Any]] = None,
+    trace_name: str | None = None,
+    user_id: str | None = None,
+    session_id: str | None = None,
+    tags: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Get a LangChain config dict with Langfuse callback.
 
@@ -220,7 +221,7 @@ def get_langfuse_config(
 def trace_llm_call(
     name: str,
     input_data: dict[str, Any],
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     """Context manager for tracing LLM calls with Langfuse.
 

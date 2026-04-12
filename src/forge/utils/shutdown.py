@@ -1,9 +1,11 @@
 """Graceful shutdown handling for workers and services."""
 
 import asyncio
+import contextlib
 import logging
 import signal
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -70,13 +72,13 @@ class GracefulShutdown:
     def _signal_handler(
         self,
         signum: int,
-        frame: Any,
+        _frame: Any,
     ) -> None:
         """Handle shutdown signal.
 
         Args:
             signum: Signal number.
-            frame: Current stack frame.
+            _frame: Current stack frame (unused).
         """
         sig_name = signal.Signals(signum).name
         logger.info(f"Received {sig_name}, initiating graceful shutdown")
@@ -123,7 +125,7 @@ class GracefulShutdown:
                     ),
                     timeout=self.timeout,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     f"Timeout waiting for tasks after {self.timeout}s"
                 )
@@ -136,7 +138,7 @@ class GracefulShutdown:
                     cleanup_fn(),
                     timeout=5.0,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(
                     f"Cleanup timeout: {cleanup_fn.__name__}"
                 )
@@ -199,10 +201,8 @@ async def run_with_shutdown(
         # If shutdown was triggered, cancel main
         if not main_task.done():
             main_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await main_task
-            except asyncio.CancelledError:
-                pass
 
     finally:
         await shutdown.shutdown()

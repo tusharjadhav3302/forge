@@ -65,14 +65,13 @@ class StructuredFormatter(logging.Formatter):
         # Add extra fields from record
         if self.include_extra:
             for key, value in record.__dict__.items():
-                if key not in self.exclude_fields and key not in log_data:
-                    if not key.startswith("_"):
-                        try:
-                            # Ensure value is JSON serializable
-                            json.dumps(value)
-                            log_data[key] = value
-                        except (TypeError, ValueError):
-                            log_data[key] = str(value)
+                if key not in self.exclude_fields and key not in log_data and not key.startswith("_"):
+                    try:
+                        # Ensure value is JSON serializable
+                        json.dumps(value)
+                        log_data[key] = value
+                    except (TypeError, ValueError):
+                        log_data[key] = str(value)
 
         return json.dumps(log_data)
 

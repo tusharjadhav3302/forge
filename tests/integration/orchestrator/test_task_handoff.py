@@ -197,6 +197,7 @@ class TestHandoffPromptFormat:
 
             prompt = build_system_prompt(
                 workspace=Path("/workspace"),
+                task_key="TEST-123",
                 task_summary="Test task",
                 task_description="Test description",
                 guardrails="",
@@ -221,6 +222,7 @@ class TestHandoffPromptFormat:
 
             prompt = build_system_prompt(
                 workspace=Path("/workspace"),
+                task_key="TEST-123",
                 task_summary="Test task",
                 task_description="Test description",
                 guardrails="",
@@ -294,13 +296,14 @@ class TestGitIgnoreSafeguard:
             assert final_content.count(".forge") == 1
 
     def test_container_prompt_includes_gitignore_instructions(self):
-        """Container system prompt should instruct agent about .gitignore."""
+        """Container system prompt should instruct agent about .forge/ exclusion."""
         from forge.prompts import load_prompt
 
         prompt = load_prompt("container-system")
 
-        assert ".gitignore" in prompt, "Prompt should mention .gitignore"
-        assert "Do NOT commit" in prompt or "do not commit" in prompt.lower(), \
+        # Prompt should warn against committing .forge/ (using "NEVER commit" wording)
+        assert ".forge/" in prompt, "Prompt should mention .forge/ directory"
+        assert "NEVER commit" in prompt or "never commit" in prompt.lower(), \
             "Prompt should warn against committing .forge/"
 
 

@@ -76,19 +76,15 @@ async def receive_github_webhook(
         body = await request.body()
 
         # Validate signature
-        if settings.github_webhook_secret.get_secret_value():
-            if not _verify_github_signature(
-                body,
-                x_hub_signature_256,
-                settings.github_webhook_secret.get_secret_value(),
-            ):
-                span.set_attribute("error", True)
-                span.set_attribute("error.type", "auth_failure")
-                logger.warning("Invalid GitHub webhook signature")
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid webhook signature",
-                )
+        secret = settings.github_webhook_secret.get_secret_value()
+        if secret and not _verify_github_signature(body, x_hub_signature_256, secret):
+            span.set_attribute("error", True)
+            span.set_attribute("error.type", "auth_failure")
+            logger.warning("Invalid GitHub webhook signature")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid webhook signature",
+            )
 
         # Parse JSON payload
         try:

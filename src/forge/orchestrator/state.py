@@ -1,7 +1,7 @@
 """Workflow state definitions for LangGraph orchestrator."""
 
 from datetime import datetime
-from typing import Annotated, Any, Optional, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.graph.message import add_messages
 
@@ -25,7 +25,7 @@ class WorkflowState(TypedDict, total=False):
     current_node: str
     is_paused: bool
     retry_count: int
-    last_error: Optional[str]
+    last_error: str | None
 
     # Timestamps
     created_at: str
@@ -37,52 +37,52 @@ class WorkflowState(TypedDict, total=False):
 
     # Epic tracking
     epic_keys: list[str]
-    current_epic_key: Optional[str]
+    current_epic_key: str | None
 
     # Task tracking
     task_keys: list[str]
     tasks_by_repo: dict[str, list[str]]  # repo_name -> task_keys
 
     # Execution state
-    workspace_path: Optional[str]
+    workspace_path: str | None
     pr_urls: list[str]
-    ci_status: Optional[str]
-    current_pr_url: Optional[str]
-    current_pr_number: Optional[int]
+    ci_status: str | None
+    current_pr_url: str | None
+    current_pr_number: int | None
 
     # Repository execution tracking
-    current_repo: Optional[str]
+    current_repo: str | None
     repos_to_process: list[str]
     repos_completed: list[str]
     implemented_tasks: list[str]
-    current_task_key: Optional[str]
+    current_task_key: str | None
 
     # Parallel execution tracking (US10)
     parallel_execution_enabled: bool
-    parallel_branch_id: Optional[int]
-    parallel_total_branches: Optional[int]
+    parallel_branch_id: int | None
+    parallel_total_branches: int | None
 
     # CI/CD tracking (US7)
     ci_failed_checks: list[dict[str, Any]]
     ci_fix_attempts: int
 
     # AI Review tracking (US8)
-    ai_review_status: Optional[str]
+    ai_review_status: str | None
     ai_review_results: list[dict[str, Any]]
 
     # Human Review tracking (US9)
-    human_review_status: Optional[str]
+    human_review_status: str | None
     pr_merged: bool
     tasks_completed: bool
     epics_completed: bool
     feature_completed: bool
 
     # Bug workflow (US11)
-    rca_content: Optional[str]
+    rca_content: str | None
     bug_fix_implemented: bool
 
     # Feedback and comments
-    feedback_comment: Optional[str]
+    feedback_comment: str | None
     revision_requested: bool
 
     # Message history for LangGraph

@@ -3,9 +3,10 @@
 import asyncio
 import logging
 import random
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import wraps
-from typing import Any, Callable, Sequence, Type, TypeVar
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ class RetryConfig:
     max_delay: float = 60.0
     exponential_base: float = 2.0
     jitter: bool = True
-    retryable_exceptions: tuple[Type[Exception], ...] = (
+    retryable_exceptions: tuple[type[Exception], ...] = (
         ConnectionError,
         TimeoutError,
         asyncio.TimeoutError,
@@ -112,7 +113,7 @@ async def retry_async(
 
 def with_retry(
     config: RetryConfig | None = None,
-    retryable_exceptions: Sequence[Type[Exception]] | None = None,
+    retryable_exceptions: Sequence[type[Exception]] | None = None,
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
     """Decorator for adding retry logic to async functions.
 

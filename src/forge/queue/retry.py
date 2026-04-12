@@ -1,11 +1,11 @@
 """Webhook retry queue with dead-letter handling."""
 
-import asyncio
+import contextlib
 import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any
 
 from forge.orchestrator.checkpointer import get_redis_client
 from forge.queue.models import QueueMessage
@@ -212,10 +212,8 @@ class RetryQueue:
 
         results = []
         for entry_json in entries:
-            try:
+            with contextlib.suppress(json.JSONDecodeError):
                 results.append(json.loads(entry_json))
-            except json.JSONDecodeError:
-                pass
 
         return results
 
@@ -281,7 +279,7 @@ class RetryQueue:
 
 
 # Singleton instance
-_retry_queue: Optional[RetryQueue] = None
+_retry_queue: RetryQueue | None = None
 
 
 async def get_retry_queue() -> RetryQueue:

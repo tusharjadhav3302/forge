@@ -2,7 +2,6 @@
 
 import hashlib
 import logging
-from typing import Optional
 
 import redis.asyncio as redis
 
@@ -20,7 +19,7 @@ DEDUP_KEY_PREFIX = "forge:dedup:"
 class DeduplicationService:
     """Service for checking and recording event deduplication."""
 
-    def __init__(self, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, redis_client: redis.Redis | None = None):
         """Initialize deduplication service.
 
         Args:
@@ -114,7 +113,7 @@ def generate_idempotency_key(
 
 
 # Singleton instance
-_dedup_service: Optional[DeduplicationService] = None
+_dedup_service: DeduplicationService | None = None
 
 
 async def get_dedup_service() -> DeduplicationService:

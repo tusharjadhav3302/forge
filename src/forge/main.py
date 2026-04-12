@@ -1,18 +1,18 @@
 """FastAPI application entry point for Forge webhook gateway."""
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from forge import __version__
+from forge.api.middleware.correlation import CorrelationIdMiddleware
 from forge.api.routes import github_router, health_router, jira_router, metrics_router
 from forge.config import get_settings
-from forge.orchestrator.checkpointer import close_redis_pool
-from forge.api.middleware.correlation import CorrelationIdMiddleware
 from forge.observability.config import configure_tracing, shutdown_tracing
+from forge.orchestrator.checkpointer import close_redis_pool
 
 # Configure logging
 logging.basicConfig(
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager for startup and shutdown."""
     settings = get_settings()
     logger.info(f"Starting Forge v{__version__} ({settings.log_level})")

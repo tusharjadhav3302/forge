@@ -3,7 +3,8 @@
 import asyncio
 import logging
 from collections import defaultdict
-from typing import Any, Callable, Coroutine, Optional
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -32,8 +33,8 @@ class QueueConsumer:
     def __init__(
         self,
         consumer_name: str,
-        redis_client: Optional[redis.Redis] = None,
-        jira_client: Optional[JiraClient] = None,
+        redis_client: redis.Redis | None = None,
+        jira_client: JiraClient | None = None,
     ):
         """Initialize the queue consumer.
 
@@ -134,12 +135,12 @@ class QueueConsumer:
                 logger.error(f"Error processing {message.event_id}: {e}")
                 raise
 
-    async def _consume_stream(self, stream: str, source: EventSource) -> None:
+    async def _consume_stream(self, stream: str, _source: EventSource) -> None:
         """Consume messages from a single stream.
 
         Args:
             stream: Redis stream name.
-            source: Event source for the stream.
+            _source: Event source for the stream (unused, for API compatibility).
         """
         redis_client = await self._get_redis()
 
@@ -154,7 +155,7 @@ class QueueConsumer:
                     block=5000,  # 5 second timeout
                 )
 
-                for stream_name, entries in messages:
+                for _stream_name, entries in messages:
                     for message_id, data in entries:
                         message = QueueMessage.from_redis(message_id, data)
 

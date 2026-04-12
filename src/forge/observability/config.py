@@ -1,7 +1,6 @@
 """OpenTelemetry configuration for distributed tracing."""
 
 import logging
-from typing import Optional
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
@@ -14,7 +13,7 @@ from forge.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Global tracer provider
-_tracer_provider: Optional[TracerProvider] = None
+_tracer_provider: TracerProvider | None = None
 
 
 def configure_tracing(
@@ -103,7 +102,7 @@ async def shutdown_tracing() -> None:
 
 def create_span(
     name: str,
-    attributes: Optional[dict] = None,
+    attributes: dict | None = None,
     tracer_name: str = "forge",
 ):
     """Create a span context manager.

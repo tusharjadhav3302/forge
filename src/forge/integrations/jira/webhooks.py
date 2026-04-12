@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from forge.models.events import EventSource, WebhookEvent
 from forge.models.workflow import TicketType
@@ -19,11 +19,11 @@ class JiraWebhookData:
     ticket_key: str
     ticket_type: TicketType
     status: str
-    previous_status: Optional[str]
+    previous_status: str | None
     summary: str
     description: str
-    comment: Optional[str]
-    comment_author: Optional[str]
+    comment: str | None
+    comment_author: str | None
     user_id: str
     user_name: str
     raw_payload: dict[str, Any]
@@ -128,7 +128,7 @@ def _map_issue_type(issue_type_name: str) -> TicketType:
     return mapping.get(issue_type_name, TicketType.TASK)
 
 
-def _extract_previous_status(changelog: dict[str, Any]) -> Optional[str]:
+def _extract_previous_status(changelog: dict[str, Any]) -> str | None:
     """Extract previous status from changelog.
 
     Args:

@@ -2,8 +2,8 @@
 
 import logging
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -11,13 +11,13 @@ logger = logging.getLogger(__name__)
 class ValidationError(Exception):
     """Raised when webhook payload validation fails."""
 
-    def __init__(self, message: str, field: Optional[str] = None):
+    def __init__(self, message: str, field: str | None = None):
         self.message = message
         self.field = field
         super().__init__(message)
 
 
-class WebhookSource(str, Enum):
+class WebhookSource(StrEnum):
     """Supported webhook sources."""
 
     JIRA = "jira"
@@ -29,8 +29,8 @@ class ValidationResult:
     """Result of webhook payload validation."""
 
     is_valid: bool
-    error_message: Optional[str] = None
-    error_field: Optional[str] = None
+    error_message: str | None = None
+    error_field: str | None = None
     warnings: list[str] = None
 
     def __post_init__(self):
@@ -100,11 +100,9 @@ def validate_github_payload(
     """
     warnings = []
 
-    # Check for repository data
-    if "repository" not in payload:
-        # Some events like ping may not have repository
-        if event_type != "ping":
-            warnings.append("No repository data in payload")
+    # Check for repository data (some events like ping may not have it)
+    if "repository" not in payload and event_type != "ping":
+        warnings.append("No repository data in payload")
 
     # Validate based on event type
     if event_type == "pull_request":
@@ -163,7 +161,7 @@ def validate_github_payload(
 def validate_webhook_payload(
     payload: dict[str, Any],
     source: WebhookSource,
-    event_type: Optional[str] = None,
+    event_type: str | None = None,
 ) -> ValidationResult:
     """Validate a webhook payload based on its source.
 

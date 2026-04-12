@@ -65,10 +65,10 @@ Forge is agnostic to Jira statuses, but recommends:
 - Closed: Workflow complete
 """
 
-from enum import Enum
+from enum import StrEnum
 
 
-class JiraStatus(str, Enum):
+class JiraStatus(StrEnum):
     """Standard Jira statuses used for issue transitions.
 
     These are actual Jira workflow statuses (not Forge labels).
@@ -81,7 +81,7 @@ class JiraStatus(str, Enum):
     CLOSED = "Closed"
 
 
-class ForgeLabel(str, Enum):
+class ForgeLabel(StrEnum):
     """Labels used to track Forge workflow state.
 
     These labels are added/removed to track progress through the
@@ -128,7 +128,7 @@ class ForgeLabel(str, Enum):
     RETRY = "forge:retry"  # Add to trigger retry of current stage
 
 
-class TicketType(str, Enum):
+class TicketType(StrEnum):
     """Jira issue types supported by the orchestrator."""
 
     FEATURE = "Feature"
@@ -138,7 +138,7 @@ class TicketType(str, Enum):
     STORY = "Story"  # Treated as Feature
 
 
-class WorkspaceStatus(str, Enum):
+class WorkspaceStatus(StrEnum):
     """Status values for ephemeral workspaces."""
 
     CREATED = "created"

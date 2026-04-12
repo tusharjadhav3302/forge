@@ -184,12 +184,8 @@ def _parse_review_decision(review_text: str) -> bool:
         elif "request_changes" in lower:
             return False
 
-    # Fallback: check for critical/major issues
-    if "critical]" in lower or "major]" in lower:
-        return False
-
-    # Default to approved if no major issues found
-    return True
+    # Default to approved if no critical/major issues found
+    return "critical]" not in lower and "major]" not in lower
 
 
 def check_spec_alignment(
@@ -218,7 +214,7 @@ def check_spec_alignment(
 
 def check_constitution_compliance(
     code_changes: str,
-    constitution: str,
+    _constitution: str,
 ) -> tuple[bool, list[str]]:
     """Check if code changes comply with project constitution.
 

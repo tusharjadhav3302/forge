@@ -3,7 +3,6 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +28,8 @@ AGENTS_PATHS = [
 class Guardrails:
     """Loaded guardrails for code execution."""
 
-    constitution: Optional[str]
-    agents: Optional[str]
+    constitution: str | None
+    agents: str | None
     repo_path: Path
 
     @property
@@ -122,7 +121,7 @@ class GuardrailsLoader:
 
         return guardrails
 
-    def _load_file(self, candidate_paths: list[str]) -> Optional[str]:
+    def _load_file(self, candidate_paths: list[str]) -> str | None:
         """Load the first existing file from candidate paths.
 
         Args:

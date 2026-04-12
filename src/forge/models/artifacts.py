@@ -6,7 +6,6 @@ Workflow status is tracked via labels (see forge.models.workflow).
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional
 
 
 @dataclass
@@ -67,7 +66,7 @@ class Task:
     description: str = ""
     target_repo: str = ""
     acceptance_criteria: list[str] = field(default_factory=list)
-    pr_url: Optional[str] = None
+    pr_url: str | None = None
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: datetime = field(default_factory=datetime.utcnow)
 

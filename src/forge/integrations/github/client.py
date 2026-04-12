@@ -1,7 +1,7 @@
 """GitHub REST API client for PR and repository operations."""
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -17,7 +17,7 @@ class GitHubClient:
     pull requests, and code reviews.
     """
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(self, settings: Settings | None = None):
         """Initialize the GitHub client.
 
         Args:
@@ -25,7 +25,7 @@ class GitHubClient:
         """
         self.settings = settings or get_settings()
         self.base_url = "https://api.github.com"
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create the HTTP client with authentication."""

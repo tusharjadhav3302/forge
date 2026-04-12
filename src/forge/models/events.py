@@ -2,18 +2,18 @@
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
-from typing import Any, Optional
+from enum import StrEnum
+from typing import Any
 
 
-class EventSource(str, Enum):
+class EventSource(StrEnum):
     """Source of webhook events."""
 
     JIRA = "jira"
     GITHUB = "github"
 
 
-class EventStatus(str, Enum):
+class EventStatus(StrEnum):
     """Processing status for webhook events."""
 
     PENDING = "pending"
@@ -33,9 +33,9 @@ class WebhookEvent:
     ticket_key: str
     payload: dict[str, Any] = field(default_factory=dict)
     received_at: datetime = field(default_factory=datetime.utcnow)
-    processed_at: Optional[datetime] = None
+    processed_at: datetime | None = None
     status: EventStatus = EventStatus.PENDING
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     def mark_processing(self) -> None:
         """Mark event as currently being processed."""
