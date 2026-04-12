@@ -35,6 +35,32 @@ EXIT_TESTS_FAILED = 2
 EXIT_CONFIG_ERROR = 3
 
 
+def ensure_forge_in_gitignore(workspace: Path) -> None:
+    """Ensure .forge/ is in .gitignore to prevent accidental commits.
+
+    The .forge/ directory contains workflow state (handoff.md, history/)
+    that should not be committed to the repository.
+    """
+    gitignore_path = workspace / ".gitignore"
+    forge_pattern = ".forge/"
+
+    if gitignore_path.exists():
+        content = gitignore_path.read_text()
+        # Check if .forge/ is already ignored (with or without trailing slash)
+        if ".forge" in content:
+            return  # Already present
+        # Append to existing .gitignore
+        if not content.endswith("\n"):
+            content += "\n"
+        content += f"\n# Forge workflow state (do not commit)\n{forge_pattern}\n"
+        gitignore_path.write_text(content)
+        logger.info("Added .forge/ to existing .gitignore")
+    else:
+        # Create new .gitignore with .forge/
+        gitignore_path.write_text(f"# Forge workflow state (do not commit)\n{forge_pattern}\n")
+        logger.info("Created .gitignore with .forge/ entry")
+
+
 def load_guardrails(workspace: Path) -> str:
     """Load repository guardrails from constitution.md or agents.md."""
     guardrails = ""
@@ -168,11 +194,19 @@ def build_system_prompt(
     task_summary: str,
     task_description: str,
     guardrails: str,
+    previous_task_keys: list[str] | None = None,
 ) -> str:
     """Build the system prompt from template or fallback.
 
     Loads prompt template from FORGE_SYSTEM_PROMPT_TEMPLATE env var
     and interpolates task-specific values.
+
+    Args:
+        workspace: Path to the workspace directory.
+        task_summary: Short task summary.
+        task_description: Detailed task description.
+        guardrails: Repository guidelines.
+        previous_task_keys: List of previously implemented task keys for handoff context.
     """
     template = os.environ.get("FORGE_SYSTEM_PROMPT_TEMPLATE")
 
@@ -193,15 +227,42 @@ All file paths should be relative to this directory.
 ## Repository Guidelines
 {guardrails}
 
+## Task Context Handoff
+
+Before you begin implementing, check for context from previous tasks:
+
+1. **Read `.forge/handoff.md`** if it exists - this contains a concise summary of what previous tasks accomplished.
+
+2. **If you need deeper context**, read the full conversation history from `.forge/history/{{task_key}}.json`.
+
+Previous tasks in this workflow: {previous_task_keys}
+
 ## Instructions
-1. Read and understand the existing codebase structure
-2. Implement the task following the repository's coding standards
-3. Write clean, well-documented code
-4. Ensure your changes are complete and tested
-5. Do NOT push to git - only commit your changes locally
+
+1. Read `.forge/handoff.md` first (if it exists) to understand prior work
+2. Read and understand the existing codebase structure
+3. Implement the task following the repository's coding standards
+4. Write clean, well-documented code
+5. Run tests to verify your changes work
+6. **Update handoff for next task** - append your summary to `.forge/handoff.md`
+7. Commit your changes with a descriptive message
+8. Do NOT push to git - only commit your changes locally
+
+## Git Commit Rules
+
+**IMPORTANT**: The `.forge/` directory is for internal workflow state only. Do NOT commit it.
+
+Before committing:
+1. Ensure `.forge/` is in `.gitignore` - add it if missing
+2. Do NOT stage any files in `.forge/` (handoff.md, history/*.json)
+3. Do NOT stage `.forge-task.json` if it exists
+4. Only commit the actual implementation files you created/modified
 
 Use the available tools to read, write, and edit files as needed.
 """
+
+    # Format previous task keys for display
+    prev_keys_str = ", ".join(previous_task_keys) if previous_task_keys else "(none - this is the first task)"
 
     # Interpolate template variables
     return template.format(
@@ -209,6 +270,7 @@ Use the available tools to read, write, and edit files as needed.
         task_summary=task_summary,
         task_description=task_description,
         guardrails=guardrails if guardrails else "No specific guidelines provided.",
+        previous_task_keys=prev_keys_str,
     )
 
 
@@ -217,8 +279,17 @@ def run_agent_task(
     task_summary: str,
     task_description: str,
     guardrails: str,
+    previous_task_keys: list[str] | None = None,
 ) -> bool:
-    """Run Deep Agents to implement the task."""
+    """Run Deep Agents to implement the task.
+
+    Args:
+        workspace: Path to the workspace directory.
+        task_summary: Short task summary.
+        task_description: Detailed task description.
+        guardrails: Repository guidelines.
+        previous_task_keys: List of previously implemented task keys for handoff context.
+    """
     logger.info(f"Implementing task: {task_summary}")
 
     try:
@@ -239,7 +310,7 @@ def run_agent_task(
 
         # Build system prompt from template
         system_prompt = build_system_prompt(
-            workspace, task_summary, task_description, guardrails)
+            workspace, task_summary, task_description, guardrails, previous_task_keys)
 
         # Determine model based on available credentials
         if vertex_project:
@@ -315,6 +386,7 @@ def main():
     args = parser.parse_args()
 
     # Load task details
+    previous_task_keys: list[str] = []
     if args.task_file:
         if not args.task_file.exists():
             logger.error(f"Task file not found: {args.task_file}")
@@ -323,6 +395,7 @@ def main():
         task_data = json.loads(args.task_file.read_text())
         task_summary = task_data.get("summary", "")
         task_description = task_data.get("description", "")
+        previous_task_keys = task_data.get("previous_task_keys", [])
     elif args.task_summary and args.task_description:
         task_summary = args.task_summary
         task_description = args.task_description
@@ -342,13 +415,22 @@ def main():
     # Load guardrails
     guardrails = load_guardrails(workspace)
 
+    # Ensure .forge directory exists for handoff
+    forge_dir = workspace / ".forge"
+    forge_dir.mkdir(exist_ok=True)
+    history_dir = forge_dir / "history"
+    history_dir.mkdir(exist_ok=True)
+
+    # Ensure .forge/ is in .gitignore to prevent accidental commits
+    ensure_forge_in_gitignore(workspace)
+
     # Run agent to implement task
     # The agent has full tool access (bash, file ops) and is responsible for:
     # - Reading/understanding the codebase
     # - Implementing the changes
     # - Running relevant tests as it sees fit
     # - Committing changes when ready
-    if not run_agent_task(workspace, task_summary, task_description, guardrails):
+    if not run_agent_task(workspace, task_summary, task_description, guardrails, previous_task_keys):
         logger.error("Task implementation failed")
         sys.exit(EXIT_TASK_FAILED)
 

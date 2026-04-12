@@ -100,6 +100,8 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         )
 
         current_repo = state.get("current_repo", "")
+        # Copy list to avoid mutation after passing to runner
+        implemented_tasks = list(state.get("implemented_tasks", []))
         result = await runner.run(
             workspace_path=Path(workspace_path),
             task_summary=task_summary,
@@ -107,6 +109,7 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
             config=config,
             ticket_key=ticket_key,
             repo_name=current_repo,
+            previous_task_keys=implemented_tasks,
         )
 
         if result.success:

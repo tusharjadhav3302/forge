@@ -92,6 +92,25 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         # Create feature branch
         git.create_branch()
 
+        # Create .forge directory for task handoff
+        forge_dir = workspace.path / ".forge"
+        forge_dir.mkdir(exist_ok=True)
+        (forge_dir / "history").mkdir(exist_ok=True)
+
+        # Ensure .forge/ is in .gitignore to prevent accidental commits
+        gitignore_path = workspace.path / ".gitignore"
+        if gitignore_path.exists():
+            content = gitignore_path.read_text()
+            if ".forge" not in content:
+                if not content.endswith("\n"):
+                    content += "\n"
+                content += "\n# Forge workflow state (do not commit)\n.forge/\n"
+                gitignore_path.write_text(content)
+        else:
+            gitignore_path.write_text("# Forge workflow state (do not commit)\n.forge/\n")
+
+        logger.info("Created .forge directory for task handoff")
+
         # Load guardrails
         loader = GuardrailsLoader(workspace.path)
         guardrails = loader.load()

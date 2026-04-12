@@ -219,6 +219,7 @@ class ContainerRunner:
         config: ContainerConfig | None = None,
         ticket_key: str | None = None,
         repo_name: str | None = None,
+        previous_task_keys: list[str] | None = None,
     ) -> ContainerResult:
         """Run a task in a container sandbox.
 
@@ -229,6 +230,7 @@ class ContainerRunner:
             config: Container configuration. Uses defaults if not provided.
             ticket_key: Jira ticket key for container naming.
             repo_name: Repository name (e.g., "owner/repo") for container naming.
+            previous_task_keys: List of previously implemented task keys for handoff context.
 
         Returns:
             ContainerResult with execution status and logs.
@@ -240,6 +242,7 @@ class ContainerRunner:
         task_data = {
             "summary": task_summary,
             "description": task_description,
+            "previous_task_keys": previous_task_keys or [],
         }
         task_file.write_text(json.dumps(task_data, indent=2))
 
