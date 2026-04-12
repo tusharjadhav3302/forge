@@ -66,6 +66,15 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             # Get check runs for the commit
             check_runs = await github.get_check_runs(owner, repo, head_sha)
 
+            # If no check runs exist yet, CI is still pending
+            if not check_runs:
+                logger.info(f"No CI checks registered yet for {pr_url}, waiting for webhook")
+                return update_state_timestamp({
+                    **state,
+                    "ci_status": "pending",
+                    "current_node": "ci_evaluator",  # Stay here, wait for webhook
+                })
+
             for check in check_runs:
                 status = check.get("status")
                 conclusion = check.get("conclusion")
