@@ -49,12 +49,45 @@ full AI agent autonomy ("lights-out factory"):
 │                                                                    │
 │    Workflow:                                                       │
 │    1. Read constitution.md/agents.md from workspace                │
-│    2. Implement Tasks using full tool autonomy                     │
-│    3. Run local tests (repo-defined: make test, pytest, go test)   │
-│    4. Fix failures and re-test (up to N retries)                   │
+│    2. Read .forge/handoff.md for context from previous tasks       │
+│    3. Implement Tasks using full tool autonomy                     │
+│    4. Run local tests (at agent's discretion)                      │
 │    5. Git commit (within workspace)                                │
-│    6. Exit with status code (success/failure)                      │
+│    6. Save handoff summary to .forge/handoff.md                    │
+│    7. Save conversation history to .forge/history/{task}.json      │
+│    8. Exit with status code (success/failure)                      │
 └─────────────────────────────────────────────────────────────────────┘
+
+### Task Context Handoff
+
+When multiple Tasks target the same repository, context is preserved between
+Task implementations via a two-tier handoff mechanism:
+
+```
+.forge/
+├── handoff.md              # Concise summary (always read by next agent)
+│   ## Task: AISOS-101 - Add user authentication
+│   - Added auth.py with JWT handling
+│   - Key decision: Used PyJWT for simplicity
+│   - Tests: test_auth.py added
+│
+└── history/
+    ├── AISOS-101.json      # Full conversation history (read on demand)
+    └── AISOS-102.json
+```
+
+**Handoff Flow**:
+1. Agent starts → reads `.forge/handoff.md` for quick context
+2. If deeper context needed → agent reads specific history file
+3. Agent implements current task
+4. Agent appends summary to `handoff.md`
+5. Agent saves full history to `history/{task_key}.json`
+
+**Benefits**:
+- Handoff is lightweight (~100 lines), always fits in context window
+- Full history available for complex situations requiring deep context
+- Per-task history files enable inspection and debugging
+- Context survives container restarts and task retries
 ```
 
 **Container Image Requirements**:

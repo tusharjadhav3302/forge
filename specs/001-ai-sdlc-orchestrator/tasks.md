@@ -218,7 +218,17 @@
 - [ ] T194 [P] [US6] Add container network restrictions (allow only LLM API, block internal systems)
 - [ ] T195 [P] [US6] Create integration test for container sandbox (spawn, run simple task, verify git commit)
 
-**Checkpoint**: Single-repo execution functional with container isolation (devcontainers universal)
+### Task Context Handoff (FR-036 to FR-039)
+
+- [ ] T196 [US6] Update container system prompt to instruct agent to read .forge/handoff.md before implementing
+- [ ] T197 [US6] Update container system prompt to instruct agent to save handoff summary after task completion
+- [ ] T198 [US6] Create handoff summary format specification in src/forge/prompts/v1/container-system.md
+- [ ] T199 [US6] Update entrypoint.py to pass previous task keys to agent for history file references
+- [ ] T200 [US6] Add .forge/ directory creation in workspace setup if it doesn't exist
+- [ ] T201 [P] [US6] Create integration test for task handoff (implement 2 tasks, verify handoff.md created and read)
+- [ ] T202 [P] [US6] Create integration test for history persistence (verify .forge/history/{task}.json created)
+
+**Checkpoint**: Single-repo execution functional with container isolation and task context handoff (devcontainers universal)
 
 ### Container Sandbox Phase 2: Leverage Devcontainer Ecosystem (Future)
 

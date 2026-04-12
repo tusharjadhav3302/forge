@@ -112,6 +112,10 @@ The system creates an isolated container sandbox, clones the target repository, 
 6. **Given** local tests configured in the repository, **When** the AI completes implementation, **Then** it runs local tests (unit tests) and only signals success if tests pass.
 7. **Given** local tests fail inside container, **When** the AI detects failure, **Then** it attempts to fix the code and re-run tests (up to configurable retry limit).
 8. **Given** execution complete (success or max retries), **When** the container exits, **Then** the container is destroyed and only the git changes persist in the mounted workspace.
+9. **Given** multiple Tasks for the same repository, **When** the first Task completes, **Then** the agent saves a handoff summary to `.forge/handoff.md` and full conversation history to `.forge/history/{task_key}.json`.
+10. **Given** a subsequent Task starting, **When** the agent initializes, **Then** it reads `.forge/handoff.md` to understand previous implementation context before proceeding.
+11. **Given** an agent needs more context about a previous Task, **When** the handoff summary is insufficient, **Then** the agent can read the full conversation history from `.forge/history/{task_key}.json`.
+12. **Given** Task context files exist, **When** execution fails and is retried, **Then** the context from previous successful Tasks is preserved and available to the retry attempt.
 
 **Functional Requirements**:
 - **FR-030**: System MUST execute AI agent inside a podman container (based on devcontainers/universal image) with the workspace mounted at /workspace
@@ -120,6 +124,10 @@ The system creates an isolated container sandbox, clones the target repository, 
 - **FR-033**: System MUST run local tests (following repo-defined test commands) before signaling implementation complete
 - **FR-034**: System MUST perform git push and PR creation from the orchestrator (host), not from inside the container
 - **FR-035**: System MUST destroy the container after execution regardless of success/failure
+- **FR-036**: System MUST persist task handoff summary to `.forge/handoff.md` after each successful Task implementation
+- **FR-037**: System MUST persist full agent conversation history to `.forge/history/{task_key}.json` after each Task implementation
+- **FR-038**: System MUST instruct the agent to read `.forge/handoff.md` before implementing subsequent Tasks
+- **FR-039**: System MUST make historical conversation files available for agent reference when deeper context is needed
 
 ---
 
