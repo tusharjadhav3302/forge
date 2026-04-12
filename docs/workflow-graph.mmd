@@ -34,11 +34,14 @@ flowchart TD
 
         subgraph Tasks["US4: Task Generation"]
             generate_tasks["Generate Tasks"]
-            task_router["Task Router"]
+            task_approval_gate{{"Task Approval<br/>Gate"}}
+            regenerate_all_tasks["Regenerate All Tasks"]
+            update_single_task["Update Single Task"]
         end
     end
 
     subgraph Execution["US6: Code Execution"]
+        task_router["Task Router"]
         setup_workspace["Setup Workspace"]
         implement_task["Implement Task"]
         create_pr["Create PR"]
@@ -61,7 +64,6 @@ flowchart TD
         aggregate_epic_status["Aggregate Epic Status"]
         aggregate_feature_status["Aggregate Feature Status"]
         END_SUCCESS(("Done"))
-        END_ERROR(("Error"))
     end
 
     subgraph Bug["US11: Bug Workflow"]
@@ -83,33 +85,47 @@ flowchart TD
 
     %% PRD flow
     generate_prd -->|Success| prd_approval_gate
-    generate_prd -->|Error| END_ERROR
+    generate_prd -->|Error| END_SUCCESS
     prd_approval_gate -->|Approved| generate_spec
     prd_approval_gate -->|Rejected| regenerate_prd
+    prd_approval_gate -->|Paused| END_SUCCESS
     regenerate_prd --> prd_approval_gate
 
     %% Spec flow
     generate_spec -->|Success| spec_approval_gate
-    generate_spec -->|Error| END_ERROR
+    generate_spec -->|Error| END_SUCCESS
     spec_approval_gate -->|Approved| decompose_epics
     spec_approval_gate -->|Rejected| regenerate_spec
+    spec_approval_gate -->|Paused| END_SUCCESS
     regenerate_spec --> spec_approval_gate
 
     %% Epic flow
     decompose_epics -->|Success| plan_approval_gate
-    decompose_epics -->|Error| END_ERROR
+    decompose_epics -->|Error| END_SUCCESS
     plan_approval_gate -->|Approved| generate_tasks
     plan_approval_gate -->|Reject All| regenerate_all_epics
     plan_approval_gate -->|Reject Epic| update_single_epic
+    plan_approval_gate -->|Paused| END_SUCCESS
     regenerate_all_epics --> plan_approval_gate
     update_single_epic --> plan_approval_gate
 
+    %% Task generation flow
+    generate_tasks -->|Success| task_approval_gate
+    generate_tasks -->|Error| END_SUCCESS
+    task_approval_gate -->|Approved| task_router
+    task_approval_gate -->|Reject All| regenerate_all_tasks
+    task_approval_gate -->|Reject Task| update_single_task
+    task_approval_gate -->|Paused| END_SUCCESS
+    regenerate_all_tasks --> task_approval_gate
+    update_single_task --> task_approval_gate
+
     %% Task execution flow
-    generate_tasks --> task_router
     task_router --> setup_workspace
-    setup_workspace --> implement_task
+    setup_workspace -->|Success| implement_task
+    setup_workspace -->|Error| escalate_blocked
     implement_task -->|More Tasks| implement_task
     implement_task -->|Done| create_pr
+    implement_task -->|Max Retries| escalate_blocked
     create_pr --> teardown_workspace
     teardown_workspace -->|More Repos| setup_workspace
     teardown_workspace -->|Done| ci_evaluator
@@ -126,6 +142,7 @@ flowchart TD
     ai_review -->|Changes| implement_task
     human_review_gate -->|Approved| complete_tasks
     human_review_gate -->|Changes| implement_task
+    human_review_gate -->|Paused| END_SUCCESS
 
     %% Completion flow
     complete_tasks --> aggregate_epic_status
@@ -136,6 +153,7 @@ flowchart TD
     analyze_bug --> rca_approval_gate
     rca_approval_gate -->|Approved| implement_bug_fix
     rca_approval_gate -->|Rejected| regenerate_rca
+    rca_approval_gate -->|Paused| END_SUCCESS
     regenerate_rca --> rca_approval_gate
     implement_bug_fix --> create_pr
 
@@ -148,6 +166,6 @@ flowchart TD
     classDef endpoint fill:#90EE90,stroke:#228B22,stroke-width:2px
     classDef error fill:#ffcccb,stroke:#dc143c,stroke-width:1px
 
-    class prd_approval_gate,spec_approval_gate,plan_approval_gate,human_review_gate,rca_approval_gate gate
+    class prd_approval_gate,spec_approval_gate,plan_approval_gate,task_approval_gate,human_review_gate,rca_approval_gate gate
     class START,END_SUCCESS endpoint
-    class escalate_blocked,END_ERROR error
+    class escalate_blocked error

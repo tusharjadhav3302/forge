@@ -101,7 +101,7 @@ python -m forge.orchestrator.worker
 ### Production Mode
 
 ```bash
-# Start with Docker Compose
+# Start with Podman Compose
 podman-compose up -d
 
 # View logs
