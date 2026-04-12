@@ -53,7 +53,7 @@ htmlcov/
 *.log
 logs/
 
-# Docker
+# Container overrides
 docker-compose.override.yml
 
 # OS

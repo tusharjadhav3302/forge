@@ -181,8 +181,8 @@ def compute_github_webhook_signature(payload: bytes, secret: str) -> str:
 # Redis testcontainers fixtures for integration tests with real Redis
 
 
-def _docker_available() -> bool:
-    """Check if Docker is available for testcontainers."""
+def _container_runtime_available() -> bool:
+    """Check if Podman/Docker is available for testcontainers."""
     try:
         import docker
         client = docker.from_env()
@@ -199,8 +199,8 @@ def redis_container():
     This fixture uses testcontainers to spin up a real Redis instance.
     The container is shared across all tests in the session for efficiency.
     """
-    if not _docker_available():
-        pytest.skip("Docker not available - skipping testcontainers tests")
+    if not _container_runtime_available():
+        pytest.skip("Podman/Docker not available - skipping testcontainers tests")
 
     with RedisContainer("redis:7-alpine") as container:
         yield container

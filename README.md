@@ -122,21 +122,21 @@ By default, MCP tools are restricted to **read-only operations** (`AGENT_MCP_REA
 
 ## Running Locally
 
-### Using Docker Compose (not tested)
+### Using Podman Compose (not tested)
 
 ```bash
 # Start all services
-docker-compose up -d
+podman-compose up -d
 
 # View logs
-docker-compose logs -f forge
+podman-compose logs -f forge
 ```
 
 ### Development Mode
 
 ```bash
 # Start Redis
-docker-compose up -d redis
+podman-compose up -d redis
 
 # Run the API server
 uv run uvicorn forge.main:app --reload --port 8000

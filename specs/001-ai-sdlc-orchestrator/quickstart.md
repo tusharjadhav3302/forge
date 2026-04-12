@@ -6,7 +6,7 @@
 ## Prerequisites
 
 - Python 3.11+
-- Docker & Docker Compose (for Redis)
+- Podman & podman-compose (for Redis and containers)
 - Jira Cloud instance with admin access
 - GitHub repository access
 - Claude API key (Anthropic)
@@ -32,10 +32,10 @@ pip install -e ".[dev]"
 
 ```bash
 # Start Redis (for state persistence and message queue)
-docker-compose up -d redis
+podman-compose up -d redis
 
 # Verify Redis is running
-docker-compose ps
+podman-compose ps
 ```
 
 ### 3. Configure Environment
@@ -102,10 +102,10 @@ python -m forge.orchestrator.worker
 
 ```bash
 # Start with Docker Compose
-docker-compose up -d
+podman-compose up -d
 
 # View logs
-docker-compose logs -f forge-api forge-worker
+podman-compose logs -f forge-api forge-worker
 ```
 
 ## Verify Installation
@@ -178,7 +178,7 @@ Expected response:
 - Check Jira webhook delivery logs
 
 ### Redis Connection Failed
-- Verify Redis is running: `docker-compose ps`
+- Verify Redis is running: `podman-compose ps`
 - Check `REDIS_URL` configuration
 - Test connection: `redis-cli ping`
 

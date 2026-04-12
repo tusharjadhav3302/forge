@@ -38,7 +38,7 @@ htmlcov/
 *.log
 logs/
 
-# Docker
+# Container files
 Dockerfile*
 docker-compose*.yml
 .dockerignore
