@@ -243,8 +243,10 @@ class ContainerRunner:
         """
         config = config or self._default_config()
 
-        # Create task file
-        task_file = workspace_path / ".forge-task.json"
+        # Create task file in .forge directory (excluded from commits)
+        forge_dir = workspace_path / ".forge"
+        forge_dir.mkdir(exist_ok=True)
+        task_file = forge_dir / "task.json"
         task_data = {
             "task_key": task_key or "UNKNOWN",
             "summary": task_summary,

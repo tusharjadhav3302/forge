@@ -239,6 +239,13 @@
 - [x] T209 [P] [US6] Create integration test for fork creation (mock GitHub API, verify fork created)
 - [x] T210 [P] [US6] Create integration test for PR from fork (verify head format is correct)
 
+### PR Quality Improvements
+
+- [x] T211 [US6] Create generate-pr-body prompt in src/forge/prompts/v1/generate-pr-body.md (template for agent to synthesize commits + tasks into coherent PR description)
+- [x] T212 [US6] Implement _generate_pr_body_with_agent() in src/forge/orchestrator/nodes/pr_creation.py (read git log, fetch task descriptions, invoke agent)
+- [x] T213 [US6] Update create_pull_request() to use agent-generated body with fallback to template
+- [x] T214 [US6] Update container system prompt with structured commit message format and file exclusion rules
+
 **Checkpoint**: Single-repo execution functional with container isolation, task context handoff, and fork-based PRs
 
 ### Container Sandbox Phase 2: Leverage Devcontainer Ecosystem (Future)

@@ -35,32 +35,6 @@ EXIT_TESTS_FAILED = 2
 EXIT_CONFIG_ERROR = 3
 
 
-def ensure_forge_in_gitignore(workspace: Path) -> None:
-    """Ensure .forge/ is in .gitignore to prevent accidental commits.
-
-    The .forge/ directory contains workflow state (handoff.md, history/)
-    that should not be committed to the repository.
-    """
-    gitignore_path = workspace / ".gitignore"
-    forge_pattern = ".forge/"
-
-    if gitignore_path.exists():
-        content = gitignore_path.read_text()
-        # Check if .forge/ is already ignored (with or without trailing slash)
-        if ".forge" in content:
-            return  # Already present
-        # Append to existing .gitignore
-        if not content.endswith("\n"):
-            content += "\n"
-        content += f"\n# Forge workflow state (do not commit)\n{forge_pattern}\n"
-        gitignore_path.write_text(content)
-        logger.info("Added .forge/ to existing .gitignore")
-    else:
-        # Create new .gitignore with .forge/
-        gitignore_path.write_text(f"# Forge workflow state (do not commit)\n{forge_pattern}\n")
-        logger.info("Created .gitignore with .forge/ entry")
-
-
 def load_guardrails(workspace: Path) -> str:
     """Load repository guardrails from constitution.md or agents.md."""
     guardrails = ""
@@ -276,13 +250,22 @@ Previous tasks in this workflow: {previous_task_keys}
 
 ## Git Commit Rules
 
-**IMPORTANT**: The `.forge/` directory is for internal workflow state only. Do NOT commit it.
+**CRITICAL**: Follow these rules exactly.
 
-Before committing:
-1. Ensure `.forge/` is in `.gitignore` - add it if missing
-2. Do NOT stage any files in `.forge/` (handoff.md, history/*.json)
-3. Do NOT stage `.forge-task.json` if it exists
-4. Only commit the actual implementation files you created/modified
+### Files to NEVER commit:
+- `.forge/` directory and ALL its contents (task.json, handoff.md, history/)
+- Do NOT modify `.gitignore` - assume it's already configured correctly
+- Do NOT create helper scripts (git_commit.sh, etc.) - use git directly
+
+### Commit message format:
+[{{task_key}}] Brief summary of what was implemented
+
+Detailed description of changes and why they were made.
+
+### Staging files:
+1. Use `git add <specific-files>` - never `git add .` or `git add -A`
+2. Review staged files with `git diff --cached` before committing
+3. Only commit the actual implementation files you created/modified
 
 Use the available tools to read, write, and edit files as needed.
 """
@@ -449,14 +432,11 @@ def main():
     # Load guardrails
     guardrails = load_guardrails(workspace)
 
-    # Ensure .forge directory exists for handoff
+    # Ensure .forge directory exists for handoff (this dir is excluded from commits)
     forge_dir = workspace / ".forge"
     forge_dir.mkdir(exist_ok=True)
     history_dir = forge_dir / "history"
     history_dir.mkdir(exist_ok=True)
-
-    # Ensure .forge/ is in .gitignore to prevent accidental commits
-    ensure_forge_in_gitignore(workspace)
 
     # Run agent to implement task
     # The agent has full tool access (bash, file ops) and is responsible for:

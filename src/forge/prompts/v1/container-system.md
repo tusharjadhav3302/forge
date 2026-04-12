@@ -36,13 +36,29 @@ Previous tasks in this workflow: {previous_task_keys}
 
 ## Git Commit Rules
 
-**IMPORTANT**: The `.forge/` directory is for internal workflow state only. Do NOT commit it.
+**CRITICAL**: Follow these rules exactly.
 
-Before committing:
-1. Ensure `.forge/` is in `.gitignore` - add it if missing
-2. Do NOT stage any files in `.forge/` (handoff.md, history/*.json)
-3. Do NOT stage `.forge-task.json` if it exists
-4. Only commit the actual implementation files you created/modified
+### Files to NEVER commit:
+- `.forge/` directory and ALL its contents (task.json, handoff.md, history/)
+- Do NOT modify `.gitignore` - assume it's already configured correctly
+- Do NOT create helper scripts (git_commit.sh, etc.) - use git directly
+
+### Commit message format:
+```
+[{task_key}] Brief summary of what was implemented
+
+Detailed description:
+- What functionality was added/changed
+- Key files modified and why
+- Any notable implementation decisions
+
+Closes: {task_key}
+```
+
+### Staging files:
+1. Use `git add <specific-files>` - never `git add .` or `git add -A`
+2. Review staged files with `git diff --cached` before committing
+3. Only commit the actual implementation files you created/modified
 
 ## Handoff Update (REQUIRED)
 
