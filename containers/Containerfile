@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir \
     anthropic \
     langchain-anthropic \
     langchain-google-vertexai \
+    langfuse \
     httpx \
     pydantic \
     pydantic-settings

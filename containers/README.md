@@ -125,13 +125,13 @@ Example: `forge-AISOS-189-installer-12345`
 
 ## Task Execution
 
-The entrypoint runs a Deep Agent with full tool access:
+The entrypoint runs a Deep Agent with `LocalShellBackend`:
 1. Reads and understands the codebase
-2. Implements the required changes
-3. Runs tests **at its discretion** (not forced)
-4. Commits changes when ready
+2. Implements the required changes using file tools (`read`, `write`, `edit`, `glob`, `grep`)
+3. Runs shell commands via `execute` tool (including git, tests, builds)
+4. Commits changes when ready using git
 
-The agent has full bash access and decides its own approach to implementation, including when and what tests to run.
+The agent has full bash access via the `execute` tool and decides its own approach to implementation, including when and what tests to run.
 
 ## Exit Codes
 

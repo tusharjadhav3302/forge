@@ -118,7 +118,9 @@ class ContainerRunner:
             env["ANTHROPIC_VERTEX_PROJECT_ID"] = self.settings.anthropic_vertex_project_id
             env["ANTHROPIC_VERTEX_REGION"] = self.settings.anthropic_vertex_region
             # GOOGLE_APPLICATION_CREDENTIALS will be set if we mount gcloud creds
-            env["GOOGLE_APPLICATION_CREDENTIALS"] = "/root/.config/gcloud/application_default_credentials.json"
+            env["GOOGLE_APPLICATION_CREDENTIALS"] = (
+                "/root/.config/gcloud/application_default_credentials.json"
+            )
 
         # Pass model configuration
         env["CLAUDE_MODEL"] = self.settings.claude_model
@@ -126,6 +128,12 @@ class ContainerRunner:
         # Pass git configuration for commits
         env["GIT_USER_NAME"] = self.settings.git_user_name
         env["GIT_USER_EMAIL"] = self.settings.git_user_email
+
+        # Pass Langfuse tracing credentials if enabled
+        if self.settings.langfuse_enabled:
+            env["LANGFUSE_PUBLIC_KEY"] = self.settings.langfuse_public_key
+            env["LANGFUSE_SECRET_KEY"] = self.settings.langfuse_secret_key.get_secret_value()
+            env["LANGFUSE_HOST"] = self.settings.langfuse_host
 
         # Pass system prompt template (unformatted - entrypoint will interpolate)
         # Load raw template without interpolation by passing empty values
@@ -166,20 +174,28 @@ class ContainerRunner:
         container_name = "-".join(name_parts)
 
         cmd = [
-            "podman", "run",
+            "podman",
+            "run",
             "--rm",  # Remove container after exit
-            "--name", container_name,
+            "--name",
+            container_name,
             # Mount workspace
-            "-v", f"{workspace_path}:/workspace:Z",
+            "-v",
+            f"{workspace_path}:/workspace:Z",
             # Mount task file
-            "-v", f"{task_file}:/task.json:ro,Z",
+            "-v",
+            f"{task_file}:/task.json:ro,Z",
             # Resource limits
-            "--memory", config.memory_limit,
-            "--cpus", config.cpu_limit,
+            "--memory",
+            config.memory_limit,
+            "--cpus",
+            config.cpu_limit,
             # Network (limited)
-            "--network", config.network_mode,
+            "--network",
+            config.network_mode,
             # Working directory
-            "-w", "/workspace",
+            "-w",
+            "/workspace",
         ]
 
         # Mount gcloud credentials for Vertex AI authentication
@@ -187,9 +203,12 @@ class ContainerRunner:
             gcloud_creds = self._get_gcloud_credentials_path()
             if gcloud_creds:
                 # Mount the credentials file to container
-                cmd.extend([
-                    "-v", f"{gcloud_creds}:/root/.config/gcloud/application_default_credentials.json:ro,Z",
-                ])
+                cmd.extend(
+                    [
+                        "-v",
+                        f"{gcloud_creds}:/root/.config/gcloud/application_default_credentials.json:ro,Z",
+                    ]
+                )
 
         # Add environment variables
         for key, value in self._build_env_vars(config).items():
@@ -202,10 +221,14 @@ class ContainerRunner:
         cmd.append(config.image)
 
         # Add entrypoint arguments
-        cmd.extend([
-            "--task-file", "/task.json",
-            "--max-retries", str(config.max_retries),
-        ])
+        cmd.extend(
+            [
+                "--task-file",
+                "/task.json",
+                "--max-retries",
+                str(config.max_retries),
+            ]
+        )
 
         if config.skip_tests:
             cmd.append("--skip-tests")
@@ -356,9 +379,12 @@ class ContainerRunner:
         context_dir = containerfile_path.parent
 
         cmd = [
-            "podman", "build",
-            "-t", tag,
-            "-f", str(containerfile_path),
+            "podman",
+            "build",
+            "-t",
+            tag,
+            "-f",
+            str(containerfile_path),
             str(context_dir),
         ]
 
@@ -406,7 +432,8 @@ class ContainerRunner:
             True if pull succeeded.
         """
         cmd = [
-            "podman", "pull",
+            "podman",
+            "pull",
             "mcr.microsoft.com/devcontainers/universal:linux",
         ]
 

@@ -182,7 +182,7 @@ def git_commit(workspace: Path, message: str) -> bool:
 
     except subprocess.CalledProcessError as e:
         logger.error(f"Git operation failed: {e}")
-        if hasattr(e, 'stderr') and e.stderr:
+        if hasattr(e, "stderr") and e.stderr:
             logger.error(f"stderr: {e.stderr}")
         return False
 
@@ -220,7 +220,9 @@ def build_system_prompt(
         )
 
     # Format previous task keys for display
-    prev_keys_str = ", ".join(previous_task_keys) if previous_task_keys else "(none - this is the first task)"
+    prev_keys_str = (
+        ", ".join(previous_task_keys) if previous_task_keys else "(none - this is the first task)"
+    )
 
     # Interpolate template variables
     return template.format(
@@ -255,7 +257,7 @@ def run_agent_task(
 
     try:
         from deepagents import create_deep_agent
-        from deepagents.backends import FilesystemBackend
+        from deepagents.backends import LocalShellBackend
 
         # Check for API credentials
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -263,30 +265,32 @@ def run_agent_task(
 
         if not api_key and not vertex_project:
             logger.error(
-                "No API credentials found (ANTHROPIC_API_KEY or ANTHROPIC_VERTEX_PROJECT_ID)")
+                "No API credentials found (ANTHROPIC_API_KEY or ANTHROPIC_VERTEX_PROJECT_ID)"
+            )
             return False
 
-        # Create the agent with filesystem backend
-        backend = FilesystemBackend(root_dir=str(workspace))
+        # Create the agent with local shell backend (enables git commands)
+        backend = LocalShellBackend(root_dir=str(workspace), inherit_env=True)
 
         # Build system prompt from template
         system_prompt = build_system_prompt(
-            workspace, task_key, task_summary, task_description, guardrails, previous_task_keys)
+            workspace, task_key, task_summary, task_description, guardrails, previous_task_keys
+        )
 
         # Determine model based on available credentials
         if vertex_project:
             from langchain_google_vertexai.model_garden import ChatAnthropicVertex
+
             model = ChatAnthropicVertex(
-                model_name=os.environ.get(
-                    "CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
+                model_name=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
                 project=vertex_project,
                 location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
             )
         else:
             from langchain_anthropic import ChatAnthropic
+
             model = ChatAnthropic(
-                model=os.environ.get(
-                    "CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
+                model=os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-5-20250929"),
                 api_key=api_key,
             )
 
@@ -297,10 +301,59 @@ def run_agent_task(
             system_prompt=system_prompt,
         )
 
-        # Run the agent
-        agent.invoke({
-            "messages": [{"role": "user", "content": f"Implement this task:\n\n{task_description}"}],
-        })
+        # Set up Langfuse tracing if credentials are available
+        config: dict = {}
+        langfuse_enabled = False
+        if os.environ.get("LANGFUSE_PUBLIC_KEY"):
+            try:
+                from langfuse import propagate_attributes
+                from langfuse.langchain import CallbackHandler
+
+                handler = CallbackHandler()
+                config["callbacks"] = [handler]
+                langfuse_enabled = True
+                logger.info(f"Langfuse tracing enabled for task {task_key}")
+            except ImportError:
+                logger.debug("Langfuse not installed, skipping tracing")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Langfuse: {e}")
+
+        # Run the agent (with Langfuse session context if enabled)
+        if langfuse_enabled:
+            with propagate_attributes(
+                session_id=task_key,
+                tags=["forge-container", "task-implementation"],
+                metadata={"task_summary": task_summary},
+            ):
+                agent.invoke(
+                    {
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": f"Implement this task:\n\n{task_description}",
+                            }
+                        ]
+                    },
+                    config=config,
+                )
+        else:
+            agent.invoke(
+                {
+                    "messages": [
+                        {"role": "user", "content": f"Implement this task:\n\n{task_description}"}
+                    ]
+                },
+                config=config,
+            )
+
+        # Flush Langfuse traces before exit
+        if langfuse_enabled:
+            try:
+                from langfuse import get_client
+
+                get_client().flush()
+            except Exception:
+                pass
 
         logger.info("Agent completed task execution")
         return True
@@ -339,10 +392,8 @@ def main():
         help="Workspace directory (default: /workspace)",
     )
     # Kept for backwards compatibility but no longer used
-    parser.add_argument("--skip-tests", action="store_true",
-                        help=argparse.SUPPRESS)
-    parser.add_argument("--max-retries", type=int,
-                        default=3, help=argparse.SUPPRESS)
+    parser.add_argument("--skip-tests", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--max-retries", type=int, default=3, help=argparse.SUPPRESS)
 
     args = parser.parse_args()
 
@@ -364,7 +415,8 @@ def main():
         task_description = args.task_description
     else:
         logger.error(
-            "Task details required: use --task-file or --task-summary + --task-description")
+            "Task details required: use --task-file or --task-summary + --task-description"
+        )
         sys.exit(EXIT_CONFIG_ERROR)
 
     workspace = args.workspace
@@ -393,12 +445,16 @@ def main():
     # - Implementing the changes
     # - Running relevant tests as it sees fit
     # - Committing changes when ready
-    if not run_agent_task(workspace, task_key, task_summary, task_description, guardrails, previous_task_keys):
+    if not run_agent_task(
+        workspace, task_key, task_summary, task_description, guardrails, previous_task_keys
+    ):
         logger.error("Task implementation failed")
         sys.exit(EXIT_TASK_FAILED)
 
     # Ensure changes are committed (agent should have done this, but as fallback)
-    if not git_commit(workspace, f"[forge] {task_summary}"):
+    # Use task_key in commit message to match expected format
+    fallback_message = f"[{task_key}] {task_summary}\n\nAuto-committed by Forge container fallback."
+    if not git_commit(workspace, fallback_message):
         logger.error("Failed to commit changes")
         sys.exit(EXIT_TASK_FAILED)
 
