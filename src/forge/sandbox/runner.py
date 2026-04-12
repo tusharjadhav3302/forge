@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from forge.config import Settings, get_settings
+from forge.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,14 @@ class ContainerRunner:
 
         # Pass model configuration
         env["CLAUDE_MODEL"] = self.settings.claude_model
+
+        # Pass system prompt template (unformatted - entrypoint will interpolate)
+        try:
+            # Load raw template without interpolation by passing empty values
+            prompt_template = load_prompt("container-system")
+            env["FORGE_SYSTEM_PROMPT_TEMPLATE"] = prompt_template
+        except FileNotFoundError:
+            logger.warning("container-system prompt not found, using entrypoint default")
 
         # Merge with any custom env vars from config
         env.update(config.env_vars)

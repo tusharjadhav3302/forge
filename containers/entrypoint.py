@@ -163,6 +163,55 @@ def git_commit(workspace: Path, message: str) -> bool:
         return False
 
 
+def build_system_prompt(
+    workspace: Path,
+    task_summary: str,
+    task_description: str,
+    guardrails: str,
+) -> str:
+    """Build the system prompt from template or fallback.
+
+    Loads prompt template from FORGE_SYSTEM_PROMPT_TEMPLATE env var
+    and interpolates task-specific values.
+    """
+    template = os.environ.get("FORGE_SYSTEM_PROMPT_TEMPLATE")
+
+    if not template:
+        logger.warning("FORGE_SYSTEM_PROMPT_TEMPLATE not set, using fallback")
+        template = """You are an AI software engineer implementing a specific task.
+
+## Workspace
+You are working in: {workspace_path}
+All file paths should be relative to this directory.
+
+## Task
+{task_summary}
+
+## Detailed Requirements
+{task_description}
+
+## Repository Guidelines
+{guardrails}
+
+## Instructions
+1. Read and understand the existing codebase structure
+2. Implement the task following the repository's coding standards
+3. Write clean, well-documented code
+4. Ensure your changes are complete and tested
+5. Do NOT push to git - only commit your changes locally
+
+Use the available tools to read, write, and edit files as needed.
+"""
+
+    # Interpolate template variables
+    return template.format(
+        workspace_path=str(workspace),
+        task_summary=task_summary,
+        task_description=task_description,
+        guardrails=guardrails if guardrails else "No specific guidelines provided.",
+    )
+
+
 def run_agent_task(
     workspace: Path,
     task_summary: str,
@@ -187,31 +236,8 @@ def run_agent_task(
         # Create the agent with filesystem backend
         backend = FilesystemBackend(root_dir=str(workspace))
 
-        # Build system prompt with guardrails
-        system_prompt = f"""You are an AI software engineer implementing a specific task.
-
-## Workspace
-You are working in: /workspace
-All file paths should be relative to this directory.
-
-## Task
-{task_summary}
-
-## Detailed Requirements
-{task_description}
-
-## Repository Guidelines
-{guardrails if guardrails else "No specific guidelines provided."}
-
-## Instructions
-1. Read and understand the existing codebase structure
-2. Implement the task following the repository's coding standards
-3. Write clean, well-documented code
-4. Ensure your changes are complete and tested
-5. Do NOT push to git - only commit your changes locally
-
-Use the available tools to read, write, and edit files as needed.
-"""
+        # Build system prompt from template
+        system_prompt = build_system_prompt(workspace, task_summary, task_description, guardrails)
 
         # Determine model based on available credentials
         if vertex_project:
