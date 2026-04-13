@@ -320,31 +320,34 @@ class JiraClient:
         current_labels = issue.labels or []
         forge_labels = [lbl for lbl in current_labels if lbl.startswith("forge:")]
 
-        # Build update payload
-        update: dict = {
-            "labels": [
-                # Remove all forge workflow labels
-                *[{"remove": label} for label in forge_labels],
-                # Add archived label
-                {"add": "forge:archived"},
-            ]
+        # Step 1: Update labels (remove forge workflow labels, add archived)
+        label_update = {
+            "update": {
+                "labels": [
+                    # Remove all forge workflow labels
+                    *[{"remove": label} for label in forge_labels],
+                    # Add archived label
+                    {"add": "forge:archived"},
+                ]
+            }
         }
 
-        # Try to unlink from parent by setting parent to null
-        # This may fail in some Jira configurations, so we handle gracefully
-        fields: dict = {}
         try:
-            # Setting parent to null removes the parent link
-            fields["parent"] = None
-        except Exception:
-            pass  # Parent field may not be writable in all configurations
+            response = await client.put(f"/issue/{issue_key}", json=label_update)
+            response.raise_for_status()
+            logger.info(f"Added forge:archived label to {issue_key}")
+        except Exception as e:
+            logger.warning(f"Failed to update labels for {issue_key}: {e}")
 
-        payload: dict = {"update": update}
-        if fields:
-            payload["fields"] = fields
+        # Step 2: Try to unlink from parent (separate request, may fail in some configs)
+        try:
+            parent_update = {"fields": {"parent": None}}
+            response = await client.put(f"/issue/{issue_key}", json=parent_update)
+            response.raise_for_status()
+            logger.info(f"Unlinked {issue_key} from parent")
+        except Exception as e:
+            logger.debug(f"Could not unlink parent for {issue_key} (may not be supported): {e}")
 
-        response = await client.put(f"/issue/{issue_key}", json=payload)
-        response.raise_for_status()
         logger.info(f"Archived issue {issue_key}")
 
     async def add_attachment(

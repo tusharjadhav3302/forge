@@ -7,6 +7,11 @@ from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
+from forge.api.routes.metrics import (
+    record_webhook_failed,
+    record_webhook_processed,
+    record_webhook_received,
+)
 from forge.config import get_settings
 from forge.integrations.jira.webhooks import (
     create_webhook_event,
@@ -101,6 +106,9 @@ async def receive_jira_webhook(
         span.set_attribute("forge.ticket_key", webhook_data.ticket_key)
         span.set_attribute("forge.event_type", webhook_data.event_type)
 
+        # Record webhook received metric
+        record_webhook_received(source="jira", event_type=webhook_data.event_type)
+
         # Filter: only process issues with forge:managed label
         issue_labels = payload.get("issue", {}).get("fields", {}).get("labels", [])
         has_forge_managed = "forge:managed" in issue_labels
@@ -187,6 +195,9 @@ async def receive_jira_webhook(
         span.set_attribute("forge.queued", True)
         logger.info(f"Queued Jira event {event_id} for {webhook_data.ticket_key}")
 
+        # Record webhook processed metric
+        record_webhook_processed(source="jira", event_type=webhook_data.event_type)
+
         return {
             "status": "accepted",
             "event_id": event_id,
@@ -199,6 +210,7 @@ async def receive_jira_webhook(
         span.set_attribute("error", True)
         span.set_attribute("error.type", "validation_error")
         logger.error(f"Failed to parse Jira webhook: {e}")
+        record_webhook_failed(source="jira", event_type="unknown", error_type="validation_error")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -207,6 +219,7 @@ async def receive_jira_webhook(
         span.set_attribute("error", True)
         span.set_attribute("error.type", "internal_error")
         logger.error(f"Failed to queue Jira event: {e}")
+        record_webhook_failed(source="jira", event_type="unknown", error_type="internal_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to queue event",

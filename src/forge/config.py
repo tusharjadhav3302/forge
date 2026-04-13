@@ -239,6 +239,16 @@ class Settings(BaseSettings):
         description="Container CPU limit",
     )
 
+    # Worker Metrics Configuration
+    worker_metrics_port: int = Field(
+        default=8001,
+        description="Port for worker Prometheus metrics endpoint",
+    )
+    worker_metrics_enabled: bool = Field(
+        default=True,
+        description="Enable Prometheus metrics endpoint in worker",
+    )
+
     # OpenTelemetry Configuration
     otlp_endpoint: str = Field(
         default="",

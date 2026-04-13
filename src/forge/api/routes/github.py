@@ -7,6 +7,11 @@ from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request, status
 
+from forge.api.routes.metrics import (
+    record_webhook_failed,
+    record_webhook_processed,
+    record_webhook_received,
+)
 from forge.config import get_settings
 from forge.integrations.github.webhooks import (
     create_github_webhook_event,
@@ -104,6 +109,9 @@ async def receive_github_webhook(
         # Parse webhook data
         webhook_data = parse_github_webhook(payload, x_github_event, event_id)
 
+        # Record webhook received metric
+        record_webhook_received(source="github", event_type=x_github_event)
+
         # Skip events without ticket association
         if not webhook_data.ticket_key:
             span.set_attribute("forge.skipped", True)
@@ -131,6 +139,9 @@ async def receive_github_webhook(
         span.set_attribute("forge.queued", True)
         logger.info(f"Queued GitHub event {event_id} for {webhook_data.ticket_key}")
 
+        # Record webhook processed metric
+        record_webhook_processed(source="github", event_type=x_github_event)
+
         return {
             "status": "accepted",
             "event_id": event_id,
@@ -143,6 +154,7 @@ async def receive_github_webhook(
         span.set_attribute("error", True)
         span.set_attribute("error.type", "validation_error")
         logger.error(f"Failed to parse GitHub webhook: {e}")
+        record_webhook_failed(source="github", event_type=x_github_event, error_type="validation_error")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
@@ -151,6 +163,7 @@ async def receive_github_webhook(
         span.set_attribute("error", True)
         span.set_attribute("error.type", "internal_error")
         logger.error(f"Failed to queue GitHub event: {e}")
+        record_webhook_failed(source="github", event_type=x_github_event, error_type="internal_error")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to queue event",

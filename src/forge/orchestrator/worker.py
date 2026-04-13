@@ -7,6 +7,11 @@ import sys
 import uuid
 from typing import Any
 
+from forge.api.routes.metrics import (
+    record_workflow_completed,
+    record_workflow_failed,
+    record_workflow_started,
+)
 from forge.config import get_settings
 from forge.models.events import EventSource
 from forge.orchestrator.checkpointer import get_checkpointer
@@ -117,19 +122,32 @@ class OrchestratorWorker:
                 state = self._build_initial_state(message)
                 logger.info(f"Starting new workflow for {ticket_key}")
 
+                # Record workflow started metric
+                ticket_type = state.get("ticket_type", "unknown")
+                record_workflow_started(ticket_type=ticket_type)
+
                 # Run the workflow from the beginning
                 result = await self.workflow.ainvoke(state, config=config)
 
+            final_node = result.get("current_node", "unknown")
+            is_paused = result.get("is_paused", False)
             logger.info(
                 f"Workflow completed for {ticket_key}, "
-                f"final node: {result.get('current_node')}, "
-                f"paused: {result.get('is_paused', False)}"
+                f"final node: {final_node}, "
+                f"paused: {is_paused}"
             )
+
+            # Record workflow completed metric (only if not paused - paused means waiting for approval)
+            if not is_paused:
+                ticket_type = result.get("ticket_type", "unknown")
+                record_workflow_completed(ticket_type=ticket_type, final_node=final_node)
 
         except Exception as e:
             import traceback
             logger.error(f"Workflow failed for {ticket_key}: {e}")
             logger.error(f"Traceback: {traceback.format_exc()}")
+            # Record workflow failed metric
+            record_workflow_failed(ticket_type="unknown", error_type=type(e).__name__)
             raise  # Let consumer handle retry logic
 
     async def _handle_resume_event(
@@ -462,6 +480,13 @@ class OrchestratorWorker:
     async def start(self) -> None:
         """Start the worker and begin processing events."""
         logger.info(f"Starting orchestrator worker: {self.consumer_name}")
+
+        # Start Prometheus metrics HTTP server
+        if self.settings.worker_metrics_enabled:
+            from prometheus_client import start_http_server
+            metrics_port = self.settings.worker_metrics_port
+            start_http_server(metrics_port)
+            logger.info(f"Worker metrics server started on port {metrics_port}")
 
         # Initialize checkpointer and workflow
         self._checkpointer = await get_checkpointer()
