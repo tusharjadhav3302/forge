@@ -290,6 +290,63 @@ class JiraClient:
         response.raise_for_status()
         logger.info(f"Deleted issue {issue_key}")
 
+    async def archive_issue(self, issue_key: str, archive_subtasks: bool = True) -> None:
+        """Archive a Jira issue by unlinking from parent and adding archive label.
+
+        Use this instead of delete_issue when deletion is not permitted.
+        The issue will be:
+        1. Unlinked from its parent (Epic/Feature)
+        2. Marked with 'forge:archived' label
+        3. Have all forge workflow labels removed
+
+        Args:
+            issue_key: The Jira issue key.
+            archive_subtasks: Whether to also archive subtasks/children.
+        """
+        client = await self._get_client()
+
+        # First, archive any subtasks if requested
+        if archive_subtasks:
+            try:
+                children = await self.get_epic_children(epic_key=issue_key)
+                for child in children:
+                    if child.key:
+                        await self.archive_issue(child.key, archive_subtasks=False)
+            except Exception as e:
+                logger.debug(f"No children to archive for {issue_key}: {e}")
+
+        # Get current issue to find existing forge labels
+        issue = await self.get_issue(issue_key)
+        current_labels = issue.labels or []
+        forge_labels = [lbl for lbl in current_labels if lbl.startswith("forge:")]
+
+        # Build update payload
+        update: dict = {
+            "labels": [
+                # Remove all forge workflow labels
+                *[{"remove": label} for label in forge_labels],
+                # Add archived label
+                {"add": "forge:archived"},
+            ]
+        }
+
+        # Try to unlink from parent by setting parent to null
+        # This may fail in some Jira configurations, so we handle gracefully
+        fields: dict = {}
+        try:
+            # Setting parent to null removes the parent link
+            fields["parent"] = None
+        except Exception:
+            pass  # Parent field may not be writable in all configurations
+
+        payload: dict = {"update": update}
+        if fields:
+            payload["fields"] = fields
+
+        response = await client.put(f"/issue/{issue_key}", json=payload)
+        response.raise_for_status()
+        logger.info(f"Archived issue {issue_key}")
+
     async def add_attachment(
         self,
         issue_key: str,

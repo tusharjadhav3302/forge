@@ -36,12 +36,17 @@ Previous tasks in this workflow: {previous_task_keys}
 
 ## Git Commit Rules
 
-**CRITICAL**: Follow these rules exactly.
+**CRITICAL**: Follow these rules exactly. Use the `execute` tool for all git commands.
 
 ### Files to NEVER commit:
 - `.forge/` directory and ALL its contents (task.json, handoff.md, history/)
 - Do NOT modify `.gitignore` - assume it's already configured correctly
-- Do NOT create helper scripts (git_commit.sh, etc.) - use git directly
+
+### Commit process (use `execute` tool for each step):
+1. `execute("git status")` - Check what files changed
+2. `execute("git add <specific-files>")` - Stage only implementation files (never `git add .` or `-A`)
+3. `execute("git diff --cached")` - Review staged changes
+4. `execute("git commit -m '...'")` - Commit with proper message format
 
 ### Commit message format:
 ```
@@ -54,11 +59,6 @@ Detailed description:
 
 Closes: {task_key}
 ```
-
-### Staging files:
-1. Use `git add <specific-files>` - never `git add .` or `git add -A`
-2. Review staged files with `git diff --cached` before committing
-3. Only commit the actual implementation files you created/modified
 
 ## Handoff Update (REQUIRED)
 
@@ -84,4 +84,26 @@ After completing your task, you MUST update `.forge/handoff.md` to help the next
 
 Also save your full conversation history to `.forge/history/{task_key}.json` for reference if the next task needs deeper context.
 
-Use the available tools to read, write, and edit files as needed.
+## Available Tools
+
+You have access to these tools:
+
+### File Operations
+- `read_file` - Read file contents
+- `write_file` - Create or overwrite files
+- `edit_file` - Make targeted edits to existing files
+- `ls` - List directory contents
+- `glob` - Find files matching patterns
+- `grep` - Search file contents
+- `execute` - Run shell commands (git, tests, build tools, etc.)
+
+### Documentation (Context7 MCP)
+- `resolve-library-id` - Find the Context7 ID for a library/framework
+- `query-docs` - Fetch documentation for a library by its Context7 ID
+
+**Use Context7 when you need documentation** for libraries, frameworks, or APIs (e.g., React, Django, Kubernetes SDK, etc.).
+
+**IMPORTANT**: Use the `execute` tool for ALL shell commands including:
+- Git operations: `git add`, `git commit`, `git status`, `git diff`
+- Running tests: `pytest`, `go test`, `npm test`, etc.
+- Build commands: `make`, `cargo build`, etc.

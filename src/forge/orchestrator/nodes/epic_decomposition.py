@@ -199,13 +199,13 @@ async def regenerate_all_epics(state: WorkflowState) -> WorkflowState:
     jira = JiraClient()
 
     try:
-        # Delete existing Epics
+        # Archive existing Epics (unlink from parent, mark as archived)
         for epic_key in existing_epics:
             try:
-                await jira.delete_issue(epic_key, delete_subtasks=True)
-                logger.info(f"Deleted Epic {epic_key}")
+                await jira.archive_issue(epic_key, archive_subtasks=True)
+                logger.info(f"Archived Epic {epic_key}")
             except Exception as e:
-                logger.warning(f"Failed to delete Epic {epic_key}: {e}")
+                logger.warning(f"Failed to archive Epic {epic_key}: {e}")
 
         # Clear epic_keys and set feedback for decomposition
         updated_state = {

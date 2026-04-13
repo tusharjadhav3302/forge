@@ -13,12 +13,14 @@ The orchestrator (outside container) handles git push and PR creation.
 """
 
 import argparse
+import asyncio
 import json
 import logging
 import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 # Configure logging
 logging.basicConfig(
@@ -33,6 +35,37 @@ EXIT_SUCCESS = 0
 EXIT_TASK_FAILED = 1
 EXIT_TESTS_FAILED = 2
 EXIT_CONFIG_ERROR = 3
+
+# Context7 MCP configuration for library documentation lookup
+CONTEXT7_MCP_CONFIG = {
+    "context7": {
+        "transport": "stdio",
+        "command": "npx",
+        "args": ["-y", "@upstash/context7-mcp"],
+    }
+}
+
+
+async def load_context7_tools() -> list[Any]:
+    """Load Context7 MCP tools for library documentation lookup.
+
+    Returns:
+        List of MCP tools, or empty list if loading fails.
+    """
+    try:
+        from langchain_mcp_adapters.client import MultiServerMCPClient
+
+        logger.info("Loading Context7 MCP tools...")
+        client = MultiServerMCPClient(CONTEXT7_MCP_CONFIG)
+        tools = await client.get_tools()
+        logger.info(f"Loaded {len(tools)} Context7 tools")
+        return tools
+    except ImportError:
+        logger.warning("langchain-mcp-adapters not installed, Context7 unavailable")
+        return []
+    except Exception as e:
+        logger.warning(f"Failed to load Context7 MCP: {e}")
+        return []
 
 
 def load_guardrails(workspace: Path) -> str:
@@ -235,7 +268,7 @@ def build_system_prompt(
     )
 
 
-def run_agent_task(
+async def run_agent_task(
     workspace: Path,
     task_key: str,
     task_summary: str,
@@ -318,11 +351,15 @@ def run_agent_task(
                 api_key=api_key,
             )
 
+        # Load Context7 MCP tools for library documentation
+        mcp_tools = await load_context7_tools()
+
         # Create and run the agent
         agent = create_deep_agent(
             model=model,
             backend=backend,
             system_prompt=system_prompt,
+            tools=mcp_tools if mcp_tools else None,
         )
 
         # Set up Langfuse tracing if credentials are available
@@ -464,13 +501,15 @@ def main():
     history_dir.mkdir(exist_ok=True)
 
     # Run agent to implement task
-    # The agent has full tool access (bash, file ops) and is responsible for:
+    # The agent has full tool access (bash, file ops, Context7 docs) and is responsible for:
     # - Reading/understanding the codebase
     # - Implementing the changes
     # - Running relevant tests as it sees fit
     # - Committing changes when ready
-    if not run_agent_task(
-        workspace, task_key, task_summary, task_description, guardrails, previous_task_keys
+    if not asyncio.run(
+        run_agent_task(
+            workspace, task_key, task_summary, task_description, guardrails, previous_task_keys
+        )
     ):
         logger.error("Task implementation failed")
         sys.exit(EXIT_TASK_FAILED)

@@ -326,13 +326,13 @@ async def regenerate_all_tasks(state: WorkflowState) -> WorkflowState:
     jira = JiraClient()
 
     try:
-        # Delete existing Tasks
+        # Archive existing Tasks (unlink from parent, mark as archived)
         for task_key in existing_tasks:
             try:
-                await jira.delete_issue(task_key, delete_subtasks=False)
-                logger.info(f"Deleted Task {task_key}")
+                await jira.archive_issue(task_key, archive_subtasks=False)
+                logger.info(f"Archived Task {task_key}")
             except Exception as e:
-                logger.warning(f"Failed to delete Task {task_key}: {e}")
+                logger.warning(f"Failed to archive Task {task_key}: {e}")
 
         # Clear task_keys and set feedback for regeneration
         updated_state = {
