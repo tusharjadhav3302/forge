@@ -71,3 +71,7 @@ dump.rdb
 
 # Forge local workflow state
 .forge/
+
+# Local agent configurations
+.claude/
+.specify/
