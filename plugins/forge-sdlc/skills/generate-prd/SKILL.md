@@ -24,6 +24,20 @@ Generate a Product Requirements Document using the template and guidelines below
 5. **Complete**: Fill all sections. Mark unknowns as "TBD - [clarification needed]".
 6. **No Implementation**: Focus on WHAT, not HOW. No technical solutions.
 
+## Markdown Formatting
+
+Output must be valid markdown. For tables:
+- Every row must start AND end with `|`
+- All rows must have the same number of columns
+- Include separator row after header: `|---|---|---|`
+
+Example:
+```markdown
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR-001 | Description | P1 |
+```
+
 ## Quality Checklist
 
 Before returning the PRD, verify:

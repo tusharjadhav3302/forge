@@ -31,6 +31,20 @@ Generate a Technical Specification using the template and guidelines below.
 - **P2 (Important)**: Required for full release - can ship MVP without
 - **P3 (Enhancement)**: Nice to have - can be deferred to future release
 
+## Markdown Formatting
+
+Output must be valid markdown. For tables:
+- Every row must start AND end with `|`
+- All rows must have the same number of columns
+- Include separator row after header: `|---|---|---|`
+
+Example:
+```markdown
+| Scenario | Priority | Status |
+|----------|----------|--------|
+| Happy path | P1 | Required |
+```
+
 ## Quality Checklist
 
 Before returning the specification:
