@@ -780,8 +780,8 @@ class JiraClient:
     def _text_to_adf(text: str) -> dict[str, Any]:
         """Convert markdown text to Atlassian Document Format.
 
-        Supports: headings, bold, italic, code blocks, inline code,
-        bullet lists, numbered lists, and links.
+        Uses md-to-adf library for robust markdown parsing including
+        tables, code blocks, lists, and inline formatting.
 
         Args:
             text: Markdown text content.
@@ -789,280 +789,30 @@ class JiraClient:
         Returns:
             ADF document structure.
         """
+        from md_to_adf import convert
 
-        # For extremely long texts, use simple paragraph mode to avoid regex issues
-        # Threshold set high since PRDs/specs need proper markdown rendering
-        if len(text) > 100000:
-            logger.debug(f"Using simple ADF for very long text ({len(text)} chars)")
-            return JiraClient._text_to_simple_adf(text)
+        if not text or not text.strip():
+            return {
+                "type": "doc",
+                "version": 1,
+                "content": [{"type": "paragraph", "content": []}],
+            }
 
-        # Wrap conversion in try-except to fallback on complex/malformed markdown
         try:
-            return JiraClient._text_to_adf_impl(text)
+            return convert(text)
         except Exception as e:
-            logger.warning(f"ADF conversion failed, using simple mode: {e}")
-            return JiraClient._text_to_simple_adf(text)
-
-    @staticmethod
-    def _text_to_adf_impl(text: str) -> dict[str, Any]:
-        """Internal ADF conversion implementation.
-
-        Args:
-            text: Markdown text content.
-
-        Returns:
-            ADF document structure.
-        """
-        import re
-
-        content: list[dict[str, Any]] = []
-        lines = text.split("\n") if text else []
-        i = 0
-
-        while i < len(lines):
-            line = lines[i]
-
-            # Code block
-            if line.startswith("```"):
-                code_lines = []
-                language = line[3:].strip() or None
-                i += 1
-                while i < len(lines) and not lines[i].startswith("```"):
-                    code_lines.append(lines[i])
-                    i += 1
-                content.append({
-                    "type": "codeBlock",
-                    "attrs": {"language": language} if language else {},
-                    "content": [{"type": "text", "text": "\n".join(code_lines)}] if code_lines else [],
-                })
-                i += 1
-                continue
-
-            # Heading
-            heading_match = re.match(r"^(#{1,6})\s+(.+)$", line)
-            if heading_match:
-                level = len(heading_match.group(1))
-                heading_text = heading_match.group(2)
-                content.append({
-                    "type": "heading",
-                    "attrs": {"level": level},
-                    "content": JiraClient._parse_inline_markdown(heading_text),
-                })
-                i += 1
-                continue
-
-            # Bullet list
-            if re.match(r"^[\-\*]\s+", line):
-                list_items = []
-                while i < len(lines) and re.match(r"^[\-\*]\s+", lines[i]):
-                    item_text = re.sub(r"^[\-\*]\s+", "", lines[i])
-                    list_items.append({
-                        "type": "listItem",
-                        "content": [{
-                            "type": "paragraph",
-                            "content": JiraClient._parse_inline_markdown(item_text),
-                        }],
-                    })
-                    i += 1
-                content.append({
-                    "type": "bulletList",
-                    "content": list_items,
-                })
-                continue
-
-            # Numbered list
-            if re.match(r"^\d+\.\s+", line):
-                list_items = []
-                while i < len(lines) and re.match(r"^\d+\.\s+", lines[i]):
-                    item_text = re.sub(r"^\d+\.\s+", "", lines[i])
-                    list_items.append({
-                        "type": "listItem",
-                        "content": [{
-                            "type": "paragraph",
-                            "content": JiraClient._parse_inline_markdown(item_text),
-                        }],
-                    })
-                    i += 1
-                content.append({
-                    "type": "orderedList",
-                    "content": list_items,
-                })
-                continue
-
-            # Table (lines starting with |)
-            if line.strip().startswith("|") and line.strip().endswith("|"):
-                table_rows: list[dict[str, Any]] = []
-                is_first_row = True
-                has_header = False
-
-                while i < len(lines) and lines[i].strip().startswith("|") and lines[i].strip().endswith("|"):
-                    row_line = lines[i].strip()
-
-                    # Check if this is a separator row (|---|---|)
-                    if re.match(r"^\|[\s\-:]+\|$", row_line.replace(" ", "")):
-                        has_header = True
-                        i += 1
-                        continue
-
-                    # Parse cells
-                    cells = [cell.strip() for cell in row_line.split("|")[1:-1]]
-                    cell_type = "tableHeader" if is_first_row and has_header is False else "tableCell"
-
-                    # After we've processed the first row and found a separator,
-                    # mark first row as header
-                    if is_first_row and i + 1 < len(lines):
-                        next_line = lines[i + 1].strip() if i + 1 < len(lines) else ""
-                        if re.match(r"^\|[\s\-:]+\|$", next_line.replace(" ", "")):
-                            cell_type = "tableHeader"
-
-                    row_content = []
-                    for cell in cells:
-                        row_content.append({
-                            "type": cell_type,
-                            "attrs": {},
-                            "content": [{
-                                "type": "paragraph",
-                                "content": JiraClient._parse_inline_markdown(cell),
-                            }],
-                        })
-
-                    if row_content:
-                        table_rows.append({
-                            "type": "tableRow",
-                            "content": row_content,
-                        })
-
-                    is_first_row = False
-                    i += 1
-
-                if table_rows:
+            logger.warning(f"ADF conversion failed, using simple fallback: {e}")
+            # Simple fallback - just paragraphs
+            content = []
+            for para in text.split("\n\n"):
+                para = para.strip()
+                if para:
                     content.append({
-                        "type": "table",
-                        "attrs": {
-                            "isNumberColumnEnabled": False,
-                            "layout": "default",
-                        },
-                        "content": table_rows,
+                        "type": "paragraph",
+                        "content": [{"type": "text", "text": para}],
                     })
-                continue
-
-            # Empty line - skip
-            if not line.strip():
-                i += 1
-                continue
-
-            # Regular paragraph - collect consecutive non-empty lines
-            para_lines = []
-            while i < len(lines) and lines[i].strip() and not re.match(r"^(#{1,6}\s|[\-\*]\s|\d+\.\s|```|\|)", lines[i]):
-                para_lines.append(lines[i])
-                i += 1
-
-            if para_lines:
-                content.append({
-                    "type": "paragraph",
-                    "content": JiraClient._parse_inline_markdown(" ".join(para_lines)),
-                })
-            else:
-                # Line matched exclusion pattern but not a known block type
-                # (e.g., starts with | but isn't a valid table)
-                # Treat as plain text and move on
-                content.append({
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": line}],
-                })
-                i += 1
-
-        return {
-            "type": "doc",
-            "version": 1,
-            "content": content or [{"type": "paragraph", "content": []}],
-        }
-
-    @staticmethod
-    def _parse_inline_markdown(text: str) -> list[dict[str, Any]]:
-        """Parse inline markdown (bold, italic, code, links) to ADF content.
-
-        Args:
-            text: Text with inline markdown.
-
-        Returns:
-            List of ADF inline content nodes.
-        """
-        import re
-
-        result: list[dict[str, Any]] = []
-        # Pattern matches: **bold**, *italic*, `code`, [text](url)
-        pattern = r"(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[(.+?)\]\((.+?)\))"
-
-        last_end = 0
-        for match in re.finditer(pattern, text):
-            # Add text before match
-            if match.start() > last_end:
-                result.append({"type": "text", "text": text[last_end:match.start()]})
-
-            full_match = match.group(0)
-            if full_match.startswith("**"):
-                # Bold
-                result.append({
-                    "type": "text",
-                    "text": match.group(2),
-                    "marks": [{"type": "strong"}],
-                })
-            elif full_match.startswith("*"):
-                # Italic
-                result.append({
-                    "type": "text",
-                    "text": match.group(3),
-                    "marks": [{"type": "em"}],
-                })
-            elif full_match.startswith("`"):
-                # Inline code
-                result.append({
-                    "type": "text",
-                    "text": match.group(4),
-                    "marks": [{"type": "code"}],
-                })
-            elif full_match.startswith("["):
-                # Link
-                result.append({
-                    "type": "text",
-                    "text": match.group(5),
-                    "marks": [{"type": "link", "attrs": {"href": match.group(6)}}],
-                })
-
-            last_end = match.end()
-
-        # Add remaining text
-        if last_end < len(text):
-            result.append({"type": "text", "text": text[last_end:]})
-
-        return result if result else [{"type": "text", "text": text}]
-
-    @staticmethod
-    def _text_to_simple_adf(text: str) -> dict[str, Any]:
-        """Convert text to simple ADF without markdown parsing.
-
-        Used for very long texts where regex parsing might be slow.
-
-        Args:
-            text: Plain text content.
-
-        Returns:
-            ADF document structure with simple paragraphs.
-        """
-        content: list[dict[str, Any]] = []
-        paragraphs = text.split("\n\n") if text else []
-
-        for para in paragraphs:
-            para = para.strip()
-            if para:
-                content.append({
-                    "type": "paragraph",
-                    "content": [{"type": "text", "text": para}],
-                })
-
-        return {
-            "type": "doc",
-            "version": 1,
-            "content": content or [{"type": "paragraph", "content": []}],
-        }
+            return {
+                "type": "doc",
+                "version": 1,
+                "content": content or [{"type": "paragraph", "content": []}],
+            }
