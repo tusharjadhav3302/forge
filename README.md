@@ -27,7 +27,7 @@ Forge orchestrates the complete SDLC workflow:
 ├─────────────────────────────────────────────────────────────┤
 │  FastAPI Gateway  │  Redis Queue  │  LangGraph Workflow     │
 ├─────────────────────────────────────────────────────────────┤
-│     Jira          │    GitHub     │   Claude (Anthropic)    │
+│     Jira          │    GitHub     │  Claude / Gemini (Vertex AI)  │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -94,15 +94,15 @@ GITHUB_TOKEN=github_pat_your_token
 GITHUB_KNOWN_REPOS=org/repo1,org/repo2
 GITHUB_DEFAULT_REPO=org/repo1
 
-# Anthropic Configuration (choose one)
-# Option 1: Direct API
+# LLM Configuration (choose one)
+# Option 1: Direct Anthropic API (Claude only)
 ANTHROPIC_API_KEY=sk-ant-your-api-key
-# Option 2: Google Vertex AI
+# Option 2: Google Vertex AI (Claude and Gemini)
 ANTHROPIC_VERTEX_PROJECT_ID=your-gcp-project
 ANTHROPIC_VERTEX_REGION=us-east5
 
-# Claude Model
-CLAUDE_MODEL=claude-opus-4-5@20251101
+# Model (Claude or Gemini on Vertex AI)
+LLM_MODEL=claude-opus-4-5@20251101
 
 # Redis Configuration
 REDIS_URL=redis://localhost:6380/0
@@ -267,7 +267,11 @@ All LLM calls are traced to Langfuse for monitoring and debugging:
 
 ### Metrics
 
-Prometheus metrics exposed at `GET /metrics`:
+Prometheus metrics are exposed on two endpoints:
+- **API server**: `GET http://localhost:8000/metrics`
+- **Worker**: `GET http://localhost:8001/metrics` (configurable via `WORKER_METRICS_PORT`)
+
+Available metrics:
 
 - `forge_webhooks_received_total` - Webhook events received (by source, event_type)
 - `forge_webhooks_processed_total` - Webhook events processed

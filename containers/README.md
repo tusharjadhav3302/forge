@@ -38,7 +38,8 @@ Based on `mcr.microsoft.com/devcontainers/universal:linux` which provides:
 Additional packages installed:
 - `deepagents` - AI agent framework
 - `anthropic`, `langchain-anthropic` - Claude API access
-- `langchain-google-vertexai` - Vertex AI support
+- `langchain-google-vertexai` - Vertex AI support (Claude and Gemini)
+- `langchain-mcp-adapters` - MCP server integration
 
 ## Image Configuration
 
@@ -97,11 +98,12 @@ Passed automatically by the orchestrator:
 | `ANTHROPIC_API_KEY` | Claude API key (direct API) |
 | `ANTHROPIC_VERTEX_PROJECT_ID` | GCP project for Vertex AI |
 | `ANTHROPIC_VERTEX_REGION` | Vertex AI region |
-| `CLAUDE_MODEL` | Model to use (e.g., `claude-sonnet-4-5-20250929`) |
+| `LLM_MODEL` | Model to use (Claude: `claude-sonnet-4-5-20250929`, Gemini: `gemini-2.5-pro`) |
 | `FORGE_SYSTEM_PROMPT_TEMPLATE` | System prompt template (interpolated by entrypoint) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to mounted gcloud credentials |
 | `GIT_USER_NAME` | Git author name for commits (default: `Forge`) |
 | `GIT_USER_EMAIL` | Git author email for commits (default: `forge@example.com`) |
+| `LANGFUSE_*` | Langfuse tracing credentials (optional) |
 
 ### System Prompt
 
@@ -125,11 +127,16 @@ Example: `forge-AISOS-189-installer-12345`
 
 ## Task Execution
 
-The entrypoint runs a Deep Agent with `LocalShellBackend`:
+The entrypoint runs a Deep Agent with `LocalShellBackend`. Supported models:
+- **Claude** (via Anthropic API or Vertex AI): `claude-sonnet-4-5-20250929`, `claude-opus-4-5@20251101`
+- **Gemini** (via Vertex AI): `gemini-2.5-pro`, `gemini-2.5-flash`
+
+The agent:
 1. Reads and understands the codebase
 2. Implements the required changes using file tools (`read`, `write`, `edit`, `glob`, `grep`)
 3. Runs shell commands via `execute` tool (including git, tests, builds)
-4. Commits changes when ready using git
+4. Queries library documentation via Context7 MCP
+5. Commits changes when ready using git
 
 The agent has full bash access via the `execute` tool and decides its own approach to implementation, including when and what tests to run.
 
@@ -141,6 +148,16 @@ The agent has full bash access via the `execute` tool and decides its own approa
 | 1 | `EXIT_TASK_FAILED` | Agent execution failed |
 | 2 | `EXIT_TESTS_FAILED` | Reserved (tests now agent-discretion) |
 | 3 | `EXIT_CONFIG_ERROR` | Configuration or setup error |
+
+## MCP Servers
+
+The container agent has access to MCP servers for external documentation:
+
+| Server | Description |
+|--------|-------------|
+| `context7` | Upstash Context7 for library/framework documentation lookup |
+
+The agent can use Context7 to fetch current documentation for libraries, frameworks, and APIs while implementing tasks.
 
 ## Guardrails
 
