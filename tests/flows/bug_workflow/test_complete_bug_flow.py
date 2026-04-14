@@ -83,7 +83,7 @@ class TestBugRCAApproval:
         # Workflow is resumed from pause on approval webhook
         rca_pending_state["is_paused"] = False
 
-        from forge.orchestrator.nodes.bug_workflow import route_rca_approval
+        from forge.orchestrator.nodes import route_rca_approval
         next_node = route_rca_approval(rca_pending_state)
 
         assert next_node == "implement_bug_fix"
@@ -96,7 +96,7 @@ class TestBugRCAApproval:
         rca_pending_state["feedback_comment"] = "Wrong root cause identified."
         rca_pending_state["revision_requested"] = True
 
-        from forge.orchestrator.nodes.bug_workflow import route_rca_approval
+        from forge.orchestrator.nodes import route_rca_approval
         next_node = route_rca_approval(rca_pending_state)
 
         assert next_node == "regenerate_rca"
@@ -128,7 +128,7 @@ class TestBugRCARevision:
             "labels": ["forge:managed", "forge:rca-pending"],
         }
 
-        from forge.orchestrator.nodes.bug_workflow import route_rca_approval
+        from forge.orchestrator.nodes import route_rca_approval
         next_node = route_rca_approval(rca_with_feedback)
 
         assert next_node == "regenerate_rca"

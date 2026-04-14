@@ -224,8 +224,8 @@ class TestFeatureWorkflowE2E:
                 ticket_type=TicketType.FEATURE,
             )
 
-            with patch("forge.orchestrator.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.prd_generation.ForgeAgent") as MockAgent:
+            with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -258,7 +258,7 @@ class TestFeatureWorkflowE2E:
         Note: Full workflow continuation is tested via routing functions directly,
         as LangGraph always starts from the entry point when invoking.
         """
-        from forge.orchestrator.gates.prd_approval import route_prd_approval
+        from forge.orchestrator.gates import route_prd_approval
 
         # State after user approves (not paused, no revision)
         state_approved: WorkflowState = {
@@ -310,8 +310,8 @@ class TestFeatureWorkflowE2E:
                 ticket_type=TicketType.FEATURE,
             )
 
-            with patch("forge.orchestrator.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.prd_generation.ForgeAgent") as MockAgent:
+            with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -350,8 +350,8 @@ class TestFeatureWorkflowE2E:
             )
             mock_failing_agent.close = AsyncMock()
 
-            with patch("forge.orchestrator.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.prd_generation.ForgeAgent") as MockAgent:
+            with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_failing_agent
@@ -387,8 +387,8 @@ class TestWorkflowCheckpointing:
                 ticket_type=TicketType.FEATURE,
             )
 
-            with patch("forge.orchestrator.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.prd_generation.ForgeAgent") as MockAgent:
+            with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -413,7 +413,7 @@ class TestWorkflowRouting:
 
     async def test_revision_requested_routes_to_regenerate(self, temp_checkpoint_db, mock_jira_client, mock_agent):
         """When revision is requested, workflow routes to regenerate node."""
-        from forge.orchestrator.gates.prd_approval import route_prd_approval
+        from forge.orchestrator.gates import route_prd_approval
 
         # State after user requests changes
         state_with_feedback: WorkflowState = {
@@ -429,7 +429,7 @@ class TestWorkflowRouting:
 
     async def test_approval_routes_to_next_stage(self, temp_checkpoint_db):
         """When approved, workflow routes to next generation stage."""
-        from forge.orchestrator.gates.prd_approval import route_prd_approval
+        from forge.orchestrator.gates import route_prd_approval
 
         # State after user approves
         state_approved: WorkflowState = {

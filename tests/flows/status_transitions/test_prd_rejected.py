@@ -6,8 +6,8 @@ from copy import deepcopy
 
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.state import create_initial_state
-from forge.orchestrator.gates.prd_approval import route_prd_approval
-from forge.orchestrator.nodes.prd_generation import regenerate_prd_with_feedback
+from forge.orchestrator.gates import route_prd_approval
+from forge.orchestrator.nodes import regenerate_prd_with_feedback
 
 
 class TestPrdRejectedOnce:
@@ -74,8 +74,8 @@ Revised PRD with user personas.
         )
         mock_agent.close = AsyncMock()
 
-        with patch("forge.orchestrator.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.orchestrator.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+        with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
+            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
                 result = await regenerate_prd_with_feedback(prd_pending_state)
 
         # Verify agent was called with feedback
@@ -100,8 +100,8 @@ Revised PRD with user personas.
         mock_agent.regenerate_with_feedback = AsyncMock(return_value="# Revised PRD")
         mock_agent.close = AsyncMock()
 
-        with patch("forge.orchestrator.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.orchestrator.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+        with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
+            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
                 result = await regenerate_prd_with_feedback(prd_pending_state)
 
         assert result["current_node"] == "prd_approval_gate"
@@ -168,8 +168,8 @@ class TestPrdRejectedMultiple:
         )
         mock_agent.close = AsyncMock()
 
-        with patch("forge.orchestrator.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.orchestrator.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+        with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
+            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
                 result = await regenerate_prd_with_feedback(prd_state_first_revision)
 
         # Error case increments retry count
@@ -208,8 +208,8 @@ class TestPrdRevisionPreservesContext:
         mock_agent.regenerate_with_feedback = AsyncMock(return_value="# Revised")
         mock_agent.close = AsyncMock()
 
-        with patch("forge.orchestrator.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.orchestrator.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+        with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
+            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
                 await regenerate_prd_with_feedback(prd_with_context)
 
         call_kwargs = mock_agent.regenerate_with_feedback.call_args.kwargs
@@ -228,8 +228,8 @@ class TestPrdRevisionPreservesContext:
         mock_agent.regenerate_with_feedback = AsyncMock(return_value="# Revised")
         mock_agent.close = AsyncMock()
 
-        with patch("forge.orchestrator.nodes.prd_generation.JiraClient", return_value=mock_jira):
-            with patch("forge.orchestrator.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
+        with patch("forge.workflow.nodes.prd_generation.JiraClient", return_value=mock_jira):
+            with patch("forge.workflow.nodes.prd_generation.ForgeAgent", return_value=mock_agent):
                 await regenerate_prd_with_feedback(prd_with_context)
 
         call_kwargs = mock_agent.regenerate_with_feedback.call_args.kwargs

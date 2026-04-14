@@ -43,7 +43,7 @@ class TestForgeDirectorySetup:
 
     async def test_workspace_setup_node_creates_forge_directory(self):
         """The setup_workspace node should create .forge directory structure."""
-        from forge.orchestrator.nodes.workspace_setup import setup_workspace
+        from forge.orchestrator.nodes import setup_workspace
 
         initial_state = create_initial_state(
             thread_id="TEST-123",
@@ -52,8 +52,8 @@ class TestForgeDirectorySetup:
         )
         initial_state["tasks_by_repo"] = {"test-org/test-repo": ["TASK-1", "TASK-2"]}
 
-        with patch("forge.orchestrator.nodes.workspace_setup.GitOperations") as MockGit, \
-             patch("forge.orchestrator.nodes.workspace_setup.GuardrailsLoader") as MockGuardrails:
+        with patch("forge.workflow.nodes.workspace_setup.GitOperations") as MockGit, \
+             patch("forge.workflow.nodes.workspace_setup.GuardrailsLoader") as MockGuardrails:
 
             mock_git = MagicMock()
             MockGit.return_value = mock_git
@@ -120,7 +120,7 @@ class TestPreviousTaskKeysPassing:
 
     async def test_implementation_node_passes_implemented_tasks(self):
         """Implementation node should pass implemented_tasks as previous_task_keys."""
-        from forge.orchestrator.nodes.implementation import implement_task
+        from forge.orchestrator.nodes import implement_task
         from forge.orchestrator.state import WorkflowState
 
         with tempfile.TemporaryDirectory() as workspace_dir:
@@ -135,9 +135,9 @@ class TestPreviousTaskKeysPassing:
                 "context": {"guardrails": ""},
             }
 
-            with patch("forge.orchestrator.nodes.implementation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.implementation.ContainerRunner") as MockRunner, \
-                 patch("forge.orchestrator.nodes.implementation.get_settings") as mock_settings:
+            with patch("forge.workflow.nodes.implementation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.implementation.ContainerRunner") as MockRunner, \
+                 patch("forge.workflow.nodes.implementation.get_settings") as mock_settings:
 
                 # Setup mocks
                 mock_jira = MagicMock()

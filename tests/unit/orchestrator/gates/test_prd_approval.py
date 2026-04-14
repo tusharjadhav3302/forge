@@ -4,7 +4,7 @@ import pytest
 from langgraph.graph import END
 
 from forge.models.workflow import TicketType
-from forge.orchestrator.gates.prd_approval import prd_approval_gate, route_prd_approval
+from forge.orchestrator.gates import prd_approval_gate, route_prd_approval
 from forge.orchestrator.state import create_initial_state
 
 

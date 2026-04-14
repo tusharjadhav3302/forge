@@ -154,8 +154,8 @@ class TestFeatureWorkflowExecution:
             )
 
             # Mock external dependencies
-            with patch("forge.orchestrator.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.prd_generation.ForgeAgent") as MockAgent:
+            with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -191,8 +191,8 @@ class TestFeatureWorkflowExecution:
                 ticket_type=TicketType.FEATURE,
             )
 
-            with patch("forge.orchestrator.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.prd_generation.ForgeAgent") as MockAgent:
+            with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -241,9 +241,9 @@ class TestBugWorkflowExecution:
                 ticket_type=TicketType.BUG,
             )
 
-            with patch("forge.orchestrator.nodes.bug_workflow.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.bug_workflow.ForgeAgent") as MockAgent, \
-                 patch("forge.orchestrator.nodes.bug_workflow.get_settings") as mock_settings:
+            with patch("forge.workflow.nodes.bug_workflow.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.bug_workflow.ForgeAgent") as MockAgent, \
+                 patch("forge.workflow.nodes.bug_workflow.get_settings") as mock_settings:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -278,8 +278,8 @@ class TestWorkflowResumption:
                 ticket_type=TicketType.FEATURE,
             )
 
-            with patch("forge.orchestrator.nodes.prd_generation.JiraClient") as MockJira, \
-                 patch("forge.orchestrator.nodes.prd_generation.ForgeAgent") as MockAgent:
+            with patch("forge.workflow.nodes.prd_generation.JiraClient") as MockJira, \
+                 patch("forge.workflow.nodes.prd_generation.ForgeAgent") as MockAgent:
 
                 MockJira.return_value = mock_jira_client
                 MockAgent.return_value = mock_agent
@@ -301,7 +301,7 @@ class TestConditionalEdges:
 
     async def test_prd_approval_routes_to_spec_on_approval(self):
         """PRD approval should route to spec generation when approved."""
-        from forge.orchestrator.gates.prd_approval import route_prd_approval
+        from forge.orchestrator.gates import route_prd_approval
 
         # State after approval (not paused, no revision requested)
         state: WorkflowState = {
@@ -316,7 +316,7 @@ class TestConditionalEdges:
 
     async def test_prd_approval_routes_to_regenerate_on_rejection(self):
         """PRD approval should route to regenerate when revision requested."""
-        from forge.orchestrator.gates.prd_approval import route_prd_approval
+        from forge.orchestrator.gates import route_prd_approval
 
         # State after rejection with feedback
         state: WorkflowState = {
@@ -332,7 +332,7 @@ class TestConditionalEdges:
 
     async def test_prd_approval_pauses_when_waiting(self):
         """PRD approval should return END when waiting for approval."""
-        from forge.orchestrator.gates.prd_approval import route_prd_approval
+        from forge.orchestrator.gates import route_prd_approval
         from langgraph.graph import END
 
         # State while waiting for approval

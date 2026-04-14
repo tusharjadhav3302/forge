@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.state import create_initial_state
-from forge.orchestrator.gates.spec_approval import route_spec_approval
+from forge.orchestrator.gates import route_spec_approval
 
 
 class TestSpecRejectedOnce:

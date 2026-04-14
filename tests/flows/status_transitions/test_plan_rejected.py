@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.state import create_initial_state
-from forge.orchestrator.gates.plan_approval import route_plan_approval
+from forge.orchestrator.gates import route_plan_approval
 
 
 class TestPlanRejectedFullRegen:
