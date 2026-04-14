@@ -22,4 +22,4 @@ This directory contains proposals for new Forge features and enhancements.
 
 | # | Title | Status | Author |
 |---|-------|--------|--------|
-| [001](001-qa-mode-for-generated-artifacts.md) | Q&A Mode for Generated Artifacts | Draft | eshulman |
+| - | No proposals yet | - | - |
