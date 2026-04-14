@@ -21,7 +21,7 @@ class BugWorkflow(BaseWorkflow):
         return BugState
 
     def matches(
-        self, ticket_type: TicketType, labels: list[str], event: dict[str, Any]
+        self, ticket_type: TicketType, _labels: list[str], _event: dict[str, Any]
     ) -> bool:
         return ticket_type == TicketType.BUG
 

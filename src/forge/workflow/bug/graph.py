@@ -146,7 +146,7 @@ def _route_after_pr_creation(
     return "teardown_workspace"
 
 
-def _route_after_teardown(state: BugState) -> Literal["ci_evaluator"]:
+def _route_after_teardown(_state: BugState) -> Literal["ci_evaluator"]:
     """Route after workspace teardown.
 
     For bug workflow, we always proceed to CI evaluation after teardown.
