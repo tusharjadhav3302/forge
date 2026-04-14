@@ -60,7 +60,7 @@ class TestWorkflowRouter:
         router = WorkflowRouter()
         router.register(MockWorkflow)
 
-        assert len(router._workflows) == 1
+        assert len(router.list_workflows()) == 1
 
     def test_resolve_returns_matching_workflow(self):
         """Resolve returns workflow that matches ticket."""
