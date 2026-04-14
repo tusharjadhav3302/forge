@@ -38,6 +38,7 @@ from forge.workflow.nodes import (
     regenerate_prd_with_feedback,
     regenerate_spec_with_feedback,
     route_human_review,
+    route_tasks_by_repo,
     route_tasks_parallel,
     setup_workspace,
     teardown_and_route,
@@ -355,7 +356,7 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("aggregate_pr_results", aggregate_parallel_results)
 
     # Execution nodes (US6)
-    graph.add_node("task_router", lambda state: state)  # Placeholder for routing logic
+    graph.add_node("task_router", route_tasks_by_repo)
     graph.add_node("setup_workspace", setup_workspace)
     graph.add_node("implement_task", implement_task)
     graph.add_node("create_pr", create_pull_request)
