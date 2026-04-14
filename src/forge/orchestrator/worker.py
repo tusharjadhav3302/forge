@@ -14,10 +14,13 @@ from forge.api.routes.metrics import (
 )
 from forge.config import get_settings
 from forge.models.events import EventSource
+from forge.models.workflow import TicketType
 from forge.orchestrator.checkpointer import get_checkpointer
 from forge.orchestrator.graph import get_workflow
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
+from forge.workflow.registry import create_default_router
+from forge.workflow.router import WorkflowRouter
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +28,25 @@ logger = logging.getLogger(__name__)
 class OrchestratorWorker:
     """Worker that processes workflow events from Redis queue."""
 
-    def __init__(self, consumer_name: str | None = None) -> None:
+    def __init__(
+        self,
+        consumer_name: str | None = None,
+        router: WorkflowRouter | None = None,
+    ) -> None:
         """Initialize the worker.
 
         Args:
             consumer_name: Unique name for this consumer. Auto-generated if not provided.
+            router: WorkflowRouter for selecting workflows. Uses default if not provided.
         """
         self.settings = get_settings()
         self.consumer_name = consumer_name or f"worker-{uuid.uuid4().hex[:8]}"
         self.consumer = QueueConsumer(self.consumer_name)
-        self.workflow = None  # Initialized async in start()
+        self.router = router or create_default_router()
+        self.workflow = None  # Initialized async in start() (legacy support)
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
+        self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
 
     async def _handle_jira_event(self, message: QueueMessage) -> None:
         """Handle a Jira webhook event.
@@ -64,10 +74,30 @@ class OrchestratorWorker:
         logger.info(f"Processing {message.source.value} event for {ticket_key}")
 
         try:
+            # Determine ticket type early to select workflow
+            ticket_type = self._extract_ticket_type(message)
+
+            # Use router to resolve which workflow to use
+            workflow_instance = self.router.resolve(
+                ticket_type=ticket_type,
+                labels=[],  # TODO: Extract labels from message payload
+                event=message.payload,
+            )
+
+            if workflow_instance is None:
+                logger.error(
+                    f"No workflow found for ticket {ticket_key} "
+                    f"(type={ticket_type}). Skipping."
+                )
+                return
+
+            # Get or compile the workflow graph
+            compiled_workflow = self._get_compiled_workflow(workflow_instance)
+
             config = {"configurable": {"thread_id": ticket_key}}
 
             # Check if there's an existing workflow state (paused workflow)
-            existing_state = await self.workflow.aget_state(config)
+            existing_state = await compiled_workflow.aget_state(config)
 
             # Debug logging for checkpoint state
             logger.debug(f"Existing state for {ticket_key}: {existing_state}")
@@ -112,22 +142,22 @@ class OrchestratorWorker:
                     logger.info(
                         f"Retrying workflow from error at {updated_values.get('current_node')}"
                     )
-                    result = await self.workflow.ainvoke(updated_values, config=config)
+                    result = await compiled_workflow.ainvoke(updated_values, config=config)
                 else:
                     # For normal resume (paused at gate): update state and continue
-                    await self.workflow.aupdate_state(config, updated_values)
-                    result = await self.workflow.ainvoke(None, config=config)
+                    await compiled_workflow.aupdate_state(config, updated_values)
+                    result = await compiled_workflow.ainvoke(None, config=config)
             else:
                 # New workflow - build initial state
                 state = self._build_initial_state(message)
                 logger.info(f"Starting new workflow for {ticket_key}")
 
                 # Record workflow started metric
-                ticket_type = state.get("ticket_type", "unknown")
-                record_workflow_started(ticket_type=ticket_type)
+                ticket_type_str = state.get("ticket_type", "unknown")
+                record_workflow_started(ticket_type=ticket_type_str)
 
                 # Run the workflow from the beginning
-                result = await self.workflow.ainvoke(state, config=config)
+                result = await compiled_workflow.ainvoke(state, config=config)
 
             final_node = result.get("current_node", "unknown")
             is_paused = result.get("is_paused", False)
@@ -437,6 +467,57 @@ class OrchestratorWorker:
             logger.info(f"Posted terminal error comment to {ticket_key}")
         except Exception as e:
             logger.warning(f"Failed to post terminal error comment to {ticket_key}: {e}")
+
+    def _extract_ticket_type(self, message: QueueMessage) -> TicketType:
+        """Extract ticket type from queue message.
+
+        Args:
+            message: The queue message.
+
+        Returns:
+            TicketType enum value.
+        """
+        if message.source == EventSource.JIRA:
+            issue_data = message.payload.get("issue", {})
+            fields = issue_data.get("fields", {})
+            issue_type = fields.get("issuetype", {})
+            ticket_type_str = issue_type.get("name", "Unknown")
+
+            # Map string to TicketType enum
+            try:
+                return TicketType(ticket_type_str.upper())
+            except ValueError:
+                logger.warning(
+                    f"Unknown ticket type '{ticket_type_str}' for {message.ticket_key}"
+                )
+                return TicketType.UNKNOWN
+
+        return TicketType.UNKNOWN
+
+    def _get_compiled_workflow(self, workflow_instance: Any) -> Any:
+        """Get or compile a workflow graph.
+
+        Args:
+            workflow_instance: A BaseWorkflow instance.
+
+        Returns:
+            Compiled workflow graph.
+        """
+        workflow_name = workflow_instance.name
+
+        # Check cache
+        if workflow_name in self._compiled_workflows:
+            return self._compiled_workflows[workflow_name]
+
+        # Build and compile the workflow graph
+        logger.info(f"Compiling workflow: {workflow_name}")
+        graph = workflow_instance.build_graph()
+        compiled = graph.compile(checkpointer=self._checkpointer)
+
+        # Cache it
+        self._compiled_workflows[workflow_name] = compiled
+
+        return compiled
 
     def _build_initial_state(self, message: QueueMessage) -> dict[str, Any]:
         """Build initial workflow state from queue message.

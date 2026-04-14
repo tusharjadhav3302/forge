@@ -136,6 +136,7 @@ class TicketType(StrEnum):
     TASK = "Task"
     BUG = "Bug"
     STORY = "Story"  # Treated as Feature
+    UNKNOWN = "Unknown"
 
 
 class WorkspaceStatus(StrEnum):
