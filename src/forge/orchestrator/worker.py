@@ -16,7 +16,6 @@ from forge.config import get_settings
 from forge.models.events import EventSource
 from forge.models.workflow import TicketType
 from forge.orchestrator.checkpointer import get_checkpointer
-from forge.orchestrator.graph import get_workflow
 from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.workflow.registry import create_default_router
@@ -43,7 +42,6 @@ class OrchestratorWorker:
         self.consumer_name = consumer_name or f"worker-{uuid.uuid4().hex[:8]}"
         self.consumer = QueueConsumer(self.consumer_name)
         self.router = router or create_default_router()
-        self.workflow = None  # Initialized async in start() (legacy support)
         self._shutdown_event = asyncio.Event()
         self._checkpointer = None
         self._compiled_workflows: dict[str, Any] = {}  # Cache compiled workflows by name
@@ -569,10 +567,9 @@ class OrchestratorWorker:
             start_http_server(metrics_port)
             logger.info(f"Worker metrics server started on port {metrics_port}")
 
-        # Initialize checkpointer and workflow
+        # Initialize checkpointer
         self._checkpointer = await get_checkpointer()
-        self.workflow = get_workflow(checkpointer=self._checkpointer)
-        logger.info("Workflow initialized with SQLite checkpointer")
+        logger.info("Checkpointer initialized")
 
         # Set up signal handlers
         loop = asyncio.get_event_loop()
@@ -614,17 +611,35 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
     jira = JiraClient()
     try:
         issue = await jira.get_issue(ticket_key)
-        ticket_type = issue.issue_type
+        ticket_type_str = issue.issue_type
+        # Convert string to TicketType enum
+        try:
+            ticket_type = TicketType(ticket_type_str)
+        except ValueError:
+            logger.warning(f"Unknown ticket type '{ticket_type_str}', using UNKNOWN")
+            ticket_type = TicketType.UNKNOWN
     finally:
         await jira.close()
 
-    # Create and run workflow with Redis checkpointing
+    # Create router and resolve workflow
+    router = create_default_router()
+    workflow_instance = router.resolve(
+        ticket_type=ticket_type,
+        labels=[],
+        event={},
+    )
+
+    if workflow_instance is None:
+        raise ValueError(f"No workflow found for ticket type: {ticket_type}")
+
+    # Build and compile workflow
     checkpointer = await get_checkpointer()
-    workflow = get_workflow(checkpointer=checkpointer)
+    graph = workflow_instance.build_graph()
+    compiled_workflow = graph.compile(checkpointer=checkpointer)
 
     initial_state = {
         "ticket_key": ticket_key,
-        "ticket_type": ticket_type,
+        "ticket_type": ticket_type_str,
         "event_type": "manual_trigger",
         "context": {},
         "current_node": "entry",
@@ -635,7 +650,7 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
     # Use ticket_key as thread_id for checkpointing
     config = {"configurable": {"thread_id": ticket_key}}
 
-    result = await workflow.ainvoke(initial_state, config=config)
+    result = await compiled_workflow.ainvoke(initial_state, config=config)
     logger.info(f"Workflow completed: {result.get('current_node')}")
     return result
 

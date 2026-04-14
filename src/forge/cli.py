@@ -18,6 +18,51 @@ def setup_logging(verbose: bool = False) -> None:
     )
 
 
+async def _get_compiled_workflow_for_ticket(ticket_key: str):
+    """Helper to get compiled workflow for a ticket (used by CLI commands).
+
+    Args:
+        ticket_key: The ticket key to get workflow for.
+
+    Returns:
+        Tuple of (compiled_workflow, checkpointer).
+    """
+    from forge.integrations.jira.client import JiraClient
+    from forge.models.workflow import TicketType
+    from forge.orchestrator.checkpointer import get_checkpointer
+    from forge.workflow.registry import create_default_router
+
+    # Fetch ticket to determine type
+    jira = JiraClient()
+    try:
+        issue = await jira.get_issue(ticket_key)
+        ticket_type_str = issue.issue_type
+        try:
+            ticket_type = TicketType(ticket_type_str)
+        except ValueError:
+            ticket_type = TicketType.FEATURE  # Default for unknown types
+    finally:
+        await jira.close()
+
+    # Resolve workflow
+    router = create_default_router()
+    workflow_instance = router.resolve(
+        ticket_type=ticket_type,
+        labels=[],
+        event={},
+    )
+
+    if workflow_instance is None:
+        raise ValueError(f"No workflow found for ticket type: {ticket_type}")
+
+    # Build and compile
+    checkpointer = await get_checkpointer()
+    graph = workflow_instance.build_graph()
+    compiled_workflow = graph.compile(checkpointer=checkpointer)
+
+    return compiled_workflow, checkpointer
+
+
 async def cmd_run(args: argparse.Namespace) -> int:
     """Run workflow for a single ticket."""
     from forge.orchestrator.worker import run_single_ticket
@@ -48,8 +93,8 @@ async def cmd_test_node(args: argparse.Namespace) -> int:
     """Test a single workflow node."""
     from forge.integrations.jira.client import JiraClient
 
-    # Import all nodes
-    from forge.orchestrator.nodes import (
+    # Import all nodes from workflow module
+    from forge.workflow.nodes import (
         bug_workflow,
         epic_decomposition,
         prd_generation,
@@ -166,8 +211,6 @@ async def cmd_approve(args: argparse.Namespace) -> int:
     """Approve PRD/Spec and continue workflow."""
     from forge.integrations.jira.client import JiraClient
     from forge.models.workflow import ForgeLabel
-    from forge.orchestrator.checkpointer import get_checkpointer
-    from forge.orchestrator.graph import get_workflow
 
     jira = JiraClient()
     try:
@@ -192,8 +235,7 @@ async def cmd_approve(args: argparse.Namespace) -> int:
             return 1
 
         # Resume workflow
-        checkpointer = await get_checkpointer()
-        workflow = get_workflow(checkpointer=checkpointer)
+        workflow, _ = await _get_compiled_workflow_for_ticket(args.ticket)
 
         config = {"configurable": {"thread_id": args.ticket}}
 
@@ -226,8 +268,6 @@ async def cmd_reject(args: argparse.Namespace) -> int:
     """Reject PRD/Spec with feedback and regenerate."""
     from forge.integrations.jira.client import JiraClient
     from forge.models.workflow import ForgeLabel
-    from forge.orchestrator.checkpointer import get_checkpointer
-    from forge.orchestrator.graph import get_workflow
 
     if not args.feedback:
         print("Error: --feedback is required for rejection", file=sys.stderr)
@@ -258,8 +298,7 @@ async def cmd_reject(args: argparse.Namespace) -> int:
         print(f"Feedback: {args.feedback}")
 
         # Resume workflow with rejection
-        checkpointer = await get_checkpointer()
-        workflow = get_workflow(checkpointer=checkpointer)
+        workflow, _ = await _get_compiled_workflow_for_ticket(args.ticket)
 
         config = {"configurable": {"thread_id": args.ticket}}
 
@@ -360,12 +399,8 @@ async def cmd_list(_args: argparse.Namespace) -> int:
 
 async def cmd_retry(args: argparse.Namespace) -> int:
     """Retry a failed or blocked workflow."""
-    from forge.orchestrator.checkpointer import get_checkpointer
-    from forge.orchestrator.graph import get_workflow
-
     try:
-        checkpointer = await get_checkpointer()
-        workflow = get_workflow(checkpointer=checkpointer)
+        workflow, _ = await _get_compiled_workflow_for_ticket(args.ticket)
         config = {"configurable": {"thread_id": args.ticket}}
 
         # Get current state

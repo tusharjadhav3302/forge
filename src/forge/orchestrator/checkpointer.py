@@ -157,13 +157,29 @@ async def get_checkpoint_state(thread_id: str) -> dict | None:
     Returns:
         Checkpoint state dict or None if no checkpoint exists.
     """
-    from forge.orchestrator.graph import get_workflow
+    from forge.models.workflow import TicketType
+    from forge.workflow.registry import create_default_router
 
     checkpointer = await get_checkpointer()
-    workflow = get_workflow(checkpointer=checkpointer)
+
+    # Create a minimal Feature workflow to retrieve state
+    # (This is just for state retrieval - actual type doesn't matter)
+    router = create_default_router()
+    workflow_instance = router.resolve(
+        ticket_type=TicketType.FEATURE,
+        labels=[],
+        event={},
+    )
+
+    if workflow_instance is None:
+        logger.error("Failed to resolve workflow for state retrieval")
+        return None
+
+    graph = workflow_instance.build_graph()
+    compiled_workflow = graph.compile(checkpointer=checkpointer)
 
     config = {"configurable": {"thread_id": thread_id}}
-    state = await workflow.aget_state(config)
+    state = await compiled_workflow.aget_state(config)
 
     if state and state.values:
         return dict(state.values)

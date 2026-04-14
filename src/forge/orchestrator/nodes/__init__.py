@@ -1,6 +1,18 @@
-"""Node implementations - re-exported from workflow.nodes for backward compatibility."""
+"""Node implementations - DEPRECATED, use forge.workflow.nodes directly.
+
+This module is maintained for backward compatibility only.
+New code should import directly from forge.workflow.nodes.
+"""
+
+import warnings
 
 # Re-export all nodes from workflow.nodes
+
+warnings.warn(
+    "forge.orchestrator.nodes is deprecated. Use forge.workflow.nodes directly.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 from forge.workflow.nodes.ai_reviewer import (
     check_constitution_compliance,
     check_spec_alignment,

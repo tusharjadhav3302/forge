@@ -1,4 +1,16 @@
-"""Gate implementations - re-exported from workflow.gates for backward compatibility."""
+"""Gate implementations - DEPRECATED, use forge.workflow.gates directly.
+
+This module is maintained for backward compatibility only.
+New code should import directly from forge.workflow.gates.
+"""
+
+import warnings
+
+warnings.warn(
+    "forge.orchestrator.gates is deprecated. Use forge.workflow.gates directly.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 from forge.workflow.gates.plan_approval import (
     plan_approval_gate,
