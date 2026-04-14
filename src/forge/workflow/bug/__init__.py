@@ -1,0 +1,35 @@
+"""Bug workflow implementation."""
+
+from typing import Any
+
+from langgraph.graph import StateGraph
+
+from forge.models.workflow import TicketType
+from forge.workflow.base import BaseWorkflow
+from forge.workflow.bug.graph import build_bug_graph
+from forge.workflow.bug.state import BugState, create_initial_bug_state
+
+
+class BugWorkflow(BaseWorkflow):
+    """Workflow for Bug tickets."""
+
+    name = "bug"
+    description = "Bug workflow: Analyze -> RCA -> Fix -> PR -> Review"
+
+    @property
+    def state_schema(self) -> type:
+        return BugState
+
+    def matches(
+        self, ticket_type: TicketType, labels: list[str], event: dict[str, Any]
+    ) -> bool:
+        return ticket_type == TicketType.BUG
+
+    def build_graph(self) -> StateGraph:
+        return build_bug_graph()
+
+    def create_initial_state(self, ticket_key: str, **kwargs: Any) -> BugState:
+        return create_initial_bug_state(ticket_key, **kwargs)
+
+
+__all__ = ["BugWorkflow", "BugState", "create_initial_bug_state"]
