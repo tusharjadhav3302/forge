@@ -1,8 +1,8 @@
 """Default workflow registry."""
 
-from forge.workflow.router import WorkflowRouter
-from forge.workflow.feature import FeatureWorkflow
 from forge.workflow.bug import BugWorkflow
+from forge.workflow.feature import FeatureWorkflow
+from forge.workflow.router import WorkflowRouter
 
 
 def create_default_router() -> WorkflowRouter:

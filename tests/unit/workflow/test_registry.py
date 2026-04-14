@@ -1,6 +1,5 @@
 """Tests for workflow registry."""
 
-import pytest
 
 from forge.models.workflow import TicketType
 
