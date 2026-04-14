@@ -18,7 +18,8 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from forge.integrations.jira.models import JiraIssue
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.orchestrator.graph import compile_workflow
-from forge.orchestrator.state import WorkflowState, create_initial_state
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
 
 # Realistic mock responses

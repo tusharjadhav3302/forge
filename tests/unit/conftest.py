@@ -8,7 +8,8 @@ import pytest_asyncio
 
 from forge.config import Settings
 from forge.models.workflow import TicketType
-from forge.orchestrator.state import WorkflowState, create_initial_state
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
 
 @pytest.fixture

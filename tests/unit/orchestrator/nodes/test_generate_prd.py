@@ -4,8 +4,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from forge.models.workflow import ForgeLabel, TicketType
-from forge.orchestrator.nodes import generate_prd, regenerate_prd_with_feedback
-from forge.orchestrator.state import create_initial_state
+from forge.workflow.nodes import generate_prd, regenerate_prd_with_feedback
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
 
 class TestGeneratePrd:

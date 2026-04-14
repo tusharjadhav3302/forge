@@ -4,9 +4,10 @@ import pytest
 from datetime import datetime
 
 from forge.models.workflow import TicketType
-from forge.orchestrator.state import (
-    WorkflowState,
-    create_initial_state,
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
+from forge.workflow.bug.state import create_initial_bug_state
+from forge.workflow.utils import (
     update_state_timestamp,
     set_paused,
     resume_state,
@@ -19,54 +20,34 @@ class TestCreateInitialState:
 
     def test_creates_state_with_required_fields(self):
         """Initial state has all required fields."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
-        assert state["thread_id"] == "thread-001"
+        assert state["thread_id"] == "TEST-123"
         assert state["ticket_key"] == "TEST-123"
         assert state["ticket_type"] == TicketType.FEATURE
 
     def test_initial_state_not_paused(self):
         """Initial state is not paused."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         assert state["is_paused"] is False
 
     def test_initial_state_at_start_node(self):
         """Initial state starts at 'start' node."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         assert state["current_node"] == "start"
 
     def test_initial_state_no_errors(self):
         """Initial state has no errors."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         assert state["last_error"] is None
         assert state["retry_count"] == 0
 
     def test_initial_state_empty_artifacts(self):
         """Initial state has empty artifact fields."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         assert state["prd_content"] == ""
         assert state["spec_content"] == ""
@@ -75,11 +56,7 @@ class TestCreateInitialState:
 
     def test_initial_state_has_timestamps(self):
         """Initial state has created_at and updated_at."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         assert "created_at" in state
         assert "updated_at" in state
@@ -87,11 +64,7 @@ class TestCreateInitialState:
 
     def test_initial_state_for_bug(self):
         """Initial state works for Bug ticket type."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-456",
-            ticket_type=TicketType.BUG,
-        )
+        state = create_initial_bug_state("TEST-456")
 
         assert state["ticket_type"] == TicketType.BUG
         assert state["rca_content"] is None
@@ -103,11 +76,7 @@ class TestUpdateStateTimestamp:
 
     def test_updates_timestamp(self):
         """Timestamp is updated."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         original_timestamp = state["updated_at"]
 
         updated = update_state_timestamp(state)
@@ -116,11 +85,7 @@ class TestUpdateStateTimestamp:
 
     def test_preserves_other_fields(self):
         """Other fields are preserved."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         state["prd_content"] = "Test PRD"
 
         updated = update_state_timestamp(state)
@@ -134,11 +99,7 @@ class TestSetPaused:
 
     def test_sets_paused_flag(self):
         """is_paused is set to True."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         paused = set_paused(state, "prd_approval_gate")
 
@@ -146,11 +107,7 @@ class TestSetPaused:
 
     def test_sets_current_node(self):
         """current_node is set to the pause node."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         paused = set_paused(state, "spec_approval_gate")
 
@@ -158,11 +115,7 @@ class TestSetPaused:
 
     def test_updates_timestamp(self):
         """Timestamp is updated when pausing."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         original = state["updated_at"]
 
         paused = set_paused(state, "plan_approval_gate")
@@ -175,11 +128,7 @@ class TestResumeState:
 
     def test_clears_paused_flag(self):
         """is_paused is set to False."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         state["is_paused"] = True
 
         resumed = resume_state(state)
@@ -188,11 +137,7 @@ class TestResumeState:
 
     def test_updates_timestamp(self):
         """Timestamp is updated when resuming."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         state["is_paused"] = True
         original = state["updated_at"]
 
@@ -206,11 +151,7 @@ class TestSetError:
 
     def test_sets_error_message(self):
         """last_error is set."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         errored = set_error(state, "Connection timeout")
 
@@ -218,11 +159,7 @@ class TestSetError:
 
     def test_increments_retry_count(self):
         """retry_count is incremented."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         assert state["retry_count"] == 0
 
         errored = set_error(state, "First error")
@@ -233,11 +170,7 @@ class TestSetError:
 
     def test_updates_timestamp(self):
         """Timestamp is updated on error."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         original = state["updated_at"]
 
         errored = set_error(state, "Error")
@@ -250,11 +183,7 @@ class TestWorkflowStateMutations:
 
     def test_add_epic_keys(self):
         """Epic keys can be added to state."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         state["epic_keys"] = ["TEST-124", "TEST-125"]
 
@@ -263,11 +192,7 @@ class TestWorkflowStateMutations:
 
     def test_add_tasks_by_repo(self):
         """Tasks can be grouped by repository."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         state["tasks_by_repo"] = {
             "org/backend": ["TEST-126", "TEST-127"],
@@ -279,11 +204,7 @@ class TestWorkflowStateMutations:
 
     def test_track_implemented_tasks(self):
         """Implemented tasks can be tracked."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
         state["task_keys"] = ["TEST-126", "TEST-127", "TEST-128"]
         state["implemented_tasks"] = []
 
@@ -295,11 +216,7 @@ class TestWorkflowStateMutations:
 
     def test_parallel_execution_tracking(self):
         """Parallel execution can be tracked."""
-        state = create_initial_state(
-            thread_id="thread-001",
-            ticket_key="TEST-123",
-            ticket_type=TicketType.FEATURE,
-        )
+        state = create_initial_state("TEST-123")
 
         state["parallel_execution_enabled"] = True
         state["parallel_branch_id"] = 1

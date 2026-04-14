@@ -13,7 +13,8 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from forge.models.workflow import TicketType
 from forge.orchestrator.graph import compile_workflow, create_workflow_graph
-from forge.orchestrator.state import WorkflowState, create_initial_state
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
 
 @pytest.fixture

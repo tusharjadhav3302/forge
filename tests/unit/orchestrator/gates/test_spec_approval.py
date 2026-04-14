@@ -4,8 +4,8 @@ import pytest
 from langgraph.graph import END
 
 from forge.models.workflow import TicketType
-from forge.orchestrator.gates import spec_approval_gate, route_spec_approval
-from forge.orchestrator.state import create_initial_state
+from forge.workflow.gates import spec_approval_gate, route_spec_approval
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
 
 class TestSpecApprovalGate:

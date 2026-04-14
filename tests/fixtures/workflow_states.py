@@ -5,7 +5,7 @@ from copy import deepcopy
 from datetime import datetime
 
 from forge.models.workflow import TicketType
-from forge.orchestrator.state import WorkflowState
+from forge.workflow.feature.state import FeatureState as WorkflowState
 
 
 def _timestamp() -> str:

@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from copy import deepcopy
 
 from forge.models.workflow import ForgeLabel, TicketType
-from forge.orchestrator.state import create_initial_state
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 from forge.orchestrator.gates import route_prd_approval
 from forge.orchestrator.nodes import regenerate_prd_with_feedback
 

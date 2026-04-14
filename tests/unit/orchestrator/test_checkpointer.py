@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from forge.models.workflow import TicketType
-from forge.orchestrator.state import create_initial_state
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
 
 def make_config(thread_id: str) -> dict:

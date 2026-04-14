@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from forge.models.workflow import TicketType
-from forge.orchestrator.state import create_initial_state
+from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
 
 
 class TestForgeDirectorySetup:
@@ -121,7 +121,7 @@ class TestPreviousTaskKeysPassing:
     async def test_implementation_node_passes_implemented_tasks(self):
         """Implementation node should pass implemented_tasks as previous_task_keys."""
         from forge.orchestrator.nodes import implement_task
-        from forge.orchestrator.state import WorkflowState
+        from forge.workflow.feature.state import FeatureState as WorkflowState
 
         with tempfile.TemporaryDirectory() as workspace_dir:
             state: WorkflowState = {
