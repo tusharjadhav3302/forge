@@ -1,14 +1,14 @@
 version: "3.9"
 
 services:
-  # Redis for state persistence and message queue
+  # Redis Stack for state persistence, message queue, and checkpoint indexing
+  # Redis Stack includes RediSearch module required by langgraph-checkpoint-redis
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     ports:
       - "6380:6379"
     volumes:
       - redis-data:/data
-    command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s

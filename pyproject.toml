@@ -22,7 +22,7 @@ classifiers = [
 ]
 dependencies = [
     "langgraph>=0.2.0",
-    "langgraph-checkpoint-sqlite>=2.0.0",
+    "langgraph-checkpoint-redis>=0.4.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "redis>=5.0.0",
@@ -55,6 +55,7 @@ dev = [
     "ruff>=0.7.0",
     "mypy>=1.13.0",
     "pre-commit>=4.0.0",
+    "langgraph-checkpoint-sqlite>=2.0.0",  # For tests using SQLite checkpointer
 ]
 
 [project.scripts]

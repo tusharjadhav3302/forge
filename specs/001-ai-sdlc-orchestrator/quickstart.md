@@ -31,7 +31,7 @@ pip install -e ".[dev]"
 ### 2. Start Infrastructure
 
 ```bash
-# Start Redis (for state persistence and message queue)
+# Start Redis Stack (includes RediSearch module for checkpoint indexing)
 podman-compose up -d redis
 
 # Verify Redis is running
@@ -57,8 +57,8 @@ GITHUB_WEBHOOK_SECRET=your-github-webhook-secret
 # Claude Configuration
 ANTHROPIC_API_KEY=your-anthropic-api-key
 
-# Redis Configuration
-REDIS_URL=redis://localhost:6379/0
+# Redis Configuration (port 6380 to avoid conflicts)
+REDIS_URL=redis://localhost:6380/0
 
 # Langfuse Configuration (optional)
 LANGFUSE_PUBLIC_KEY=your-public-key

@@ -1,8 +1,7 @@
 """Checkpointer for LangGraph workflow state persistence.
 
-Uses SQLite for checkpoint storage to enable workflow pause/resume
-across process restarts. For production deployments requiring Redis-based
-checkpointing, install Redis with RediSearch module enabled.
+Uses Redis for checkpoint storage to enable workflow pause/resume
+across process restarts. Shares the Redis instance used by the queue.
 
 ## Checkpoint Recovery Behavior
 
@@ -40,42 +39,42 @@ Use `clear_checkpoint(thread_id)` to reset a workflow. This is necessary when:
 - Cleaning up after failed test runs
 """
 
-from pathlib import Path
+import logging
 
 import redis.asyncio as redis
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
 from forge.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 # Global instances
-_checkpointer: AsyncSqliteSaver | None = None
+_checkpointer: AsyncRedisSaver | None = None
 _checkpointer_context = None
 _redis_pool: redis.ConnectionPool | None = None
 
-# Default checkpoint database path
-CHECKPOINT_DB_PATH = Path.home() / ".forge" / "checkpoints.db"
 
+async def get_checkpointer() -> AsyncRedisSaver:
+    """Get a configured Redis checkpointer instance.
 
-async def get_checkpointer() -> AsyncSqliteSaver:
-    """Get a configured SQLite checkpointer instance.
-
-    Uses AsyncSqliteSaver from langgraph-checkpoint-sqlite for proper
-    LangGraph checkpoint API compatibility. Stores checkpoints in
-    ~/.forge/checkpoints.db by default.
+    Uses AsyncRedisSaver from langgraph-checkpoint-redis for proper
+    LangGraph checkpoint API compatibility. Shares the Redis connection
+    with the queue system.
 
     Returns:
-        Configured AsyncSqliteSaver instance.
+        Configured AsyncRedisSaver instance.
     """
     global _checkpointer, _checkpointer_context
 
     if _checkpointer is None:
-        # Ensure parent directory exists
-        CHECKPOINT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        settings = get_settings()
 
         # from_conn_string returns an async context manager
-        _checkpointer_context = AsyncSqliteSaver.from_conn_string(str(CHECKPOINT_DB_PATH))
+        _checkpointer_context = AsyncRedisSaver.from_conn_string(settings.redis_url)
         # Manually enter the context manager for long-running use
         _checkpointer = await _checkpointer_context.__aenter__()
+        # Initialize Redis indices for checkpointing
+        await _checkpointer.asetup()
 
     return _checkpointer
 
@@ -130,26 +129,21 @@ async def clear_checkpoint(thread_id: str) -> bool:
     Returns:
         True if checkpoint was cleared, False if not found.
     """
-    import aiosqlite
+    checkpointer = await get_checkpointer()
 
-    if not CHECKPOINT_DB_PATH.exists():
+    # Check if checkpoint exists first
+    config = {"configurable": {"thread_id": thread_id}}
+    try:
+        checkpoint = await checkpointer.aget(config)
+        if checkpoint is None:
+            return False
+    except Exception:
         return False
 
-    async with aiosqlite.connect(str(CHECKPOINT_DB_PATH)) as db:
-        # LangGraph checkpoint tables: checkpoints, writes
-        cursor = await db.execute(
-            "DELETE FROM checkpoints WHERE thread_id = ?",
-            (thread_id,)
-        )
-        deleted = cursor.rowcount > 0
-
-        await db.execute(
-            "DELETE FROM writes WHERE thread_id = ?",
-            (thread_id,)
-        )
-
-        await db.commit()
-        return deleted
+    # Use the built-in delete method
+    await checkpointer.adelete_thread(thread_id)
+    logger.info(f"Cleared checkpoint for {thread_id}")
+    return True
 
 
 async def get_checkpoint_state(thread_id: str) -> dict | None:
@@ -194,10 +188,6 @@ async def verify_checkpoint_recovery(thread_id: str) -> dict:
         - context_keys: list of keys in context
         - last_updated: str or None
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     state = await get_checkpoint_state(thread_id)
 
     if state is None:
@@ -239,16 +229,18 @@ async def list_checkpoints(limit: int = 100) -> list[dict]:
     Returns:
         List of checkpoint summaries with thread_id and metadata.
     """
-    import aiosqlite
+    redis_client = await get_redis_client()
 
-    if not CHECKPOINT_DB_PATH.exists():
-        return []
+    # Find unique thread IDs by scanning checkpoint keys
+    # Keys are stored with prefix "checkpoint:" followed by thread_id
+    thread_ids: set[str] = set()
 
-    async with aiosqlite.connect(str(CHECKPOINT_DB_PATH)) as db:
-        cursor = await db.execute(
-            "SELECT DISTINCT thread_id FROM checkpoints LIMIT ?",
-            (limit,)
-        )
-        rows = await cursor.fetchall()
+    async for key in redis_client.scan_iter(match="checkpoint:*"):
+        # Keys are like: checkpoint:{thread_id}:{...}
+        parts = key.split(":")
+        if len(parts) >= 2:
+            thread_ids.add(parts[1])
+            if len(thread_ids) >= limit:
+                break
 
-        return [{"thread_id": row[0]} for row in rows]
+    return [{"thread_id": tid} for tid in sorted(thread_ids)]

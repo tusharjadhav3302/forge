@@ -194,15 +194,16 @@ def _container_runtime_available() -> bool:
 
 @pytest.fixture(scope="session")
 def redis_container():
-    """Start a Redis container for the test session.
+    """Start a Redis Stack container for the test session.
 
-    This fixture uses testcontainers to spin up a real Redis instance.
+    This fixture uses testcontainers to spin up a real Redis Stack instance.
+    Redis Stack includes RediSearch module required by langgraph-checkpoint-redis.
     The container is shared across all tests in the session for efficiency.
     """
     if not _container_runtime_available():
         pytest.skip("Podman/Docker not available - skipping testcontainers tests")
 
-    with RedisContainer("redis:7-alpine") as container:
+    with RedisContainer("redis/redis-stack-server:latest") as container:
         yield container
 
 

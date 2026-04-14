@@ -41,7 +41,7 @@ Forge orchestrates the complete SDLC workflow:
 ## Prerequisites
 
 - Python 3.11+
-- Redis 7.0+
+- Redis Stack (includes RediSearch module required for checkpoint indexing)
 - Jira Cloud account with API access
 - GitHub account with Personal Access Token
 - Anthropic API key (or Google Vertex AI access)

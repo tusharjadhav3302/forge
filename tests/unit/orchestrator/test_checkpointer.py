@@ -1,8 +1,8 @@
 """Unit tests for LangGraph checkpointer."""
 
-import pytest
-from unittest.mock import patch
 import uuid
+
+import pytest
 
 from forge.models.workflow import TicketType
 from forge.orchestrator.state import create_initial_state
@@ -31,25 +31,56 @@ def make_checkpoint(state: dict, checkpoint_id: str | None = None) -> dict:
     }
 
 
-class TestSqliteCheckpointer:
-    """Tests for SQLite checkpointer setup."""
+@pytest.mark.integration
+class TestRedisCheckpointer:
+    """Tests for Redis checkpointer setup.
+
+    These tests require a running Redis Stack instance (with RediSearch module)
+    and are marked as integration tests.
+    Run with: pytest -m integration
+    """
+
+    @staticmethod
+    def _should_skip(e: Exception) -> bool:
+        """Check if exception indicates Redis is unavailable."""
+        err_str = str(e).lower()
+        return (
+            "connection refused" in err_str
+            or "connect" in err_str
+            or "unknown command" in err_str  # RediSearch not available
+            or "ft._list" in err_str
+        )
 
     @pytest.mark.asyncio
     async def test_checkpointer_can_be_created(self):
         """Checkpointer can be instantiated."""
-        from forge.orchestrator.checkpointer import get_checkpointer
+        pytest.importorskip("redis")
+        try:
+            from forge.orchestrator.checkpointer import close_checkpointer, get_checkpointer
 
-        checkpointer = await get_checkpointer()
-        assert checkpointer is not None
+            checkpointer = await get_checkpointer()
+            assert checkpointer is not None
+            await close_checkpointer()
+        except Exception as e:
+            if self._should_skip(e):
+                pytest.skip("Redis Stack not available")
+            raise
 
     @pytest.mark.asyncio
     async def test_checkpointer_is_reusable(self):
         """Same checkpointer instance is returned."""
-        from forge.orchestrator.checkpointer import get_checkpointer
+        pytest.importorskip("redis")
+        try:
+            from forge.orchestrator.checkpointer import close_checkpointer, get_checkpointer
 
-        cp1 = await get_checkpointer()
-        cp2 = await get_checkpointer()
-        assert cp1 is cp2
+            cp1 = await get_checkpointer()
+            cp2 = await get_checkpointer()
+            assert cp1 is cp2
+            await close_checkpointer()
+        except Exception as e:
+            if self._should_skip(e):
+                pytest.skip("Redis Stack not available")
+            raise
 
 
 class TestCheckpointerOperations:
