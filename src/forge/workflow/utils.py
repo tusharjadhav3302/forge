@@ -1,7 +1,7 @@
 """Utility functions for workflow state management."""
 
 from datetime import datetime
-from typing import Any, TypedDict
+from typing import Any
 
 
 def update_state_timestamp(state: dict[str, Any]) -> dict[str, Any]:

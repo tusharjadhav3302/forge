@@ -16,9 +16,9 @@ from pathlib import Path
 
 from forge.config import get_settings
 from forge.integrations.jira.client import JiraClient
+from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
-from forge.sandbox import ContainerRunner
 
 logger = logging.getLogger(__name__)
 
