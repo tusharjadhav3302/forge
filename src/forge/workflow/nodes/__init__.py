@@ -1,6 +1,5 @@
-"""Node implementations - re-exported from workflow.nodes for backward compatibility."""
+"""LangGraph node implementations for workflow phases."""
 
-# Re-export all nodes from workflow.nodes
 from forge.workflow.nodes.ai_reviewer import (
     check_constitution_compliance,
     check_spec_alignment,
@@ -24,7 +23,6 @@ from forge.workflow.nodes.epic_decomposition import (
     regenerate_all_epics,
     update_single_epic,
 )
-from forge.workflow.nodes.error_handler import notify_error
 from forge.workflow.nodes.human_review import (
     aggregate_epic_status,
     aggregate_feature_status,
@@ -116,6 +114,4 @@ __all__ = [
     "rca_approval_gate",
     "regenerate_rca",
     "route_rca_approval",
-    # Error handling
-    "notify_error",
 ]
