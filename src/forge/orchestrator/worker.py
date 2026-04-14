@@ -485,7 +485,7 @@ class OrchestratorWorker:
 
             # Map string to TicketType enum
             try:
-                return TicketType(ticket_type_str.upper())
+                return TicketType(ticket_type_str)
             except ValueError:
                 logger.warning(
                     f"Unknown ticket type '{ticket_type_str}' for {message.ticket_key}"
