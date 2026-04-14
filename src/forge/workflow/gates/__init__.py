@@ -1,4 +1,8 @@
-"""Gate implementations - re-exported from workflow.gates for backward compatibility."""
+"""Human-in-the-loop pause gates for workflow approval.
+
+All gates use labels (not Jira statuses) for workflow tracking.
+See forge.models.workflow for label documentation.
+"""
 
 from forge.workflow.gates.plan_approval import (
     plan_approval_gate,
