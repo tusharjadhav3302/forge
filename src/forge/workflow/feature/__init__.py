@@ -6,7 +6,6 @@ from langgraph.graph import StateGraph
 
 from forge.models.workflow import TicketType
 from forge.workflow.base import BaseWorkflow
-from forge.workflow.feature.graph import build_feature_graph
 from forge.workflow.feature.state import FeatureState, create_initial_feature_state
 
 
@@ -24,6 +23,8 @@ class FeatureWorkflow(BaseWorkflow):
         return ticket_type in (TicketType.FEATURE, TicketType.STORY)
 
     def build_graph(self) -> StateGraph:
+        # Lazy import to avoid circular dependency
+        from forge.workflow.feature.graph import build_feature_graph
         return build_feature_graph()
 
     def create_initial_state(self, ticket_key: str, **kwargs: Any) -> FeatureState:

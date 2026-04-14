@@ -1,95 +1,20 @@
-"""Workflow state definitions for LangGraph orchestrator."""
-
-from datetime import datetime
-from typing import Annotated, Any, TypedDict
-
-from langgraph.graph.message import add_messages
+"""Workflow state definitions - re-exported from workflow module for backward compatibility."""
 
 from forge.models.workflow import TicketType
 
+# Re-export everything from workflow.base for backward compatibility
+from forge.workflow.base import BaseState
 
-class WorkflowState(TypedDict, total=False):
-    """State schema for LangGraph workflow execution.
+# Re-export FeatureState as WorkflowState for backward compatibility
+from forge.workflow.feature.state import FeatureState as WorkflowState
 
-    This TypedDict defines the structure of the state that flows
-    through the LangGraph orchestrator. It tracks the current ticket,
-    generated artifacts, and execution progress.
-    """
-
-    # Core identifiers
-    thread_id: str
-    ticket_key: str
-    ticket_type: TicketType
-
-    # Current execution state
-    current_node: str
-    is_paused: bool
-    retry_count: int
-    last_error: str | None
-
-    # Timestamps
-    created_at: str
-    updated_at: str
-
-    # Feature artifacts
-    prd_content: str
-    spec_content: str
-
-    # Epic tracking
-    epic_keys: list[str]
-    current_epic_key: str | None
-
-    # Task tracking
-    task_keys: list[str]
-    tasks_by_repo: dict[str, list[str]]  # repo_name -> task_keys
-
-    # Execution state
-    workspace_path: str | None
-    pr_urls: list[str]
-    ci_status: str | None
-    current_pr_url: str | None
-    current_pr_number: int | None
-
-    # Repository execution tracking
-    current_repo: str | None
-    repos_to_process: list[str]
-    repos_completed: list[str]
-    implemented_tasks: list[str]
-    current_task_key: str | None
-
-    # Parallel execution tracking (US10)
-    parallel_execution_enabled: bool
-    parallel_branch_id: int | None
-    parallel_total_branches: int | None
-
-    # CI/CD tracking (US7)
-    ci_failed_checks: list[dict[str, Any]]
-    ci_fix_attempts: int
-
-    # AI Review tracking (US8)
-    ai_review_status: str | None
-    ai_review_results: list[dict[str, Any]]
-
-    # Human Review tracking (US9)
-    human_review_status: str | None
-    pr_merged: bool
-    tasks_completed: bool
-    epics_completed: bool
-    feature_completed: bool
-
-    # Bug workflow (US11)
-    rca_content: str | None
-    bug_fix_implemented: bool
-
-    # Feedback and comments
-    feedback_comment: str | None
-    revision_requested: bool
-
-    # Message history for LangGraph
-    messages: Annotated[list[Any], add_messages]
-
-    # Arbitrary context data
-    context: dict[str, Any]
+# Re-export utility functions from workflow.utils for backward compatibility
+from forge.workflow.utils import (
+    resume_state,
+    set_error,
+    set_paused,
+    update_state_timestamp,
+)
 
 
 def create_initial_state(
@@ -99,127 +24,31 @@ def create_initial_state(
 ) -> WorkflowState:
     """Create initial workflow state for a new ticket.
 
+    DEPRECATED: Use workflow-specific state creation functions instead.
+    For backward compatibility, this routes to the appropriate workflow state creator.
+
     Args:
         thread_id: Unique workflow thread identifier.
         ticket_key: Jira ticket key.
         ticket_type: Type of ticket (Feature, Epic, Task, Bug).
 
     Returns:
-        Initialized WorkflowState.
+        Initialized WorkflowState (FeatureState or BugState).
     """
-    now = datetime.utcnow().isoformat()
-    return WorkflowState(
-        thread_id=thread_id,
-        ticket_key=ticket_key,
-        ticket_type=ticket_type,
-        current_node="start",
-        is_paused=False,
-        retry_count=0,
-        last_error=None,
-        created_at=now,
-        updated_at=now,
-        prd_content="",
-        spec_content="",
-        epic_keys=[],
-        current_epic_key=None,
-        task_keys=[],
-        tasks_by_repo={},
-        workspace_path=None,
-        pr_urls=[],
-        ci_status=None,
-        current_pr_url=None,
-        current_pr_number=None,
-        current_repo=None,
-        repos_to_process=[],
-        repos_completed=[],
-        implemented_tasks=[],
-        current_task_key=None,
-        # Parallel execution
-        parallel_execution_enabled=True,
-        parallel_branch_id=None,
-        parallel_total_branches=None,
-        # CI/CD
-        ci_failed_checks=[],
-        ci_fix_attempts=0,
-        # AI Review
-        ai_review_status=None,
-        ai_review_results=[],
-        # Human Review
-        human_review_status=None,
-        pr_merged=False,
-        tasks_completed=False,
-        epics_completed=False,
-        feature_completed=False,
-        # Bug workflow
-        rca_content=None,
-        bug_fix_implemented=False,
-        # Feedback
-        feedback_comment=None,
-        revision_requested=False,
-        messages=[],
-        context={},
-    )
+    if ticket_type == TicketType.BUG:
+        from forge.workflow.bug.state import create_initial_bug_state
+        return create_initial_bug_state(ticket_key, thread_id=thread_id)
+    else:
+        # Default to Feature workflow for FEATURE, STORY, EPIC, TASK
+        from forge.workflow.feature.state import create_initial_feature_state
+        return create_initial_feature_state(ticket_key, thread_id=thread_id, ticket_type=ticket_type)
 
 
-def update_state_timestamp(state: WorkflowState) -> WorkflowState:
-    """Update the state timestamp.
-
-    Args:
-        state: Current workflow state.
-
-    Returns:
-        State with updated timestamp.
-    """
-    return {**state, "updated_at": datetime.utcnow().isoformat()}
-
-
-def set_paused(state: WorkflowState, node_name: str) -> WorkflowState:
-    """Set the state to paused at a specific node.
-
-    Args:
-        state: Current workflow state.
-        node_name: Name of the node where paused.
-
-    Returns:
-        Updated state.
-    """
-    return {
-        **state,
-        "current_node": node_name,
-        "is_paused": True,
-        "updated_at": datetime.utcnow().isoformat(),
-    }
-
-
-def resume_state(state: WorkflowState) -> WorkflowState:
-    """Resume a paused state.
-
-    Args:
-        state: Current workflow state.
-
-    Returns:
-        Updated state with is_paused=False.
-    """
-    return {
-        **state,
-        "is_paused": False,
-        "updated_at": datetime.utcnow().isoformat(),
-    }
-
-
-def set_error(state: WorkflowState, error: str) -> WorkflowState:
-    """Record an error in the state.
-
-    Args:
-        state: Current workflow state.
-        error: Error message.
-
-    Returns:
-        Updated state with error recorded.
-    """
-    return {
-        **state,
-        "last_error": error,
-        "retry_count": state.get("retry_count", 0) + 1,
-        "updated_at": datetime.utcnow().isoformat(),
-    }
+__all__ = [
+    "WorkflowState",
+    "create_initial_state",
+    "update_state_timestamp",
+    "set_paused",
+    "resume_state",
+    "set_error",
+]

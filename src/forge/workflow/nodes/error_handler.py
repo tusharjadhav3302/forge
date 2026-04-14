@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 from forge.integrations.jira.client import JiraClient
-from forge.orchestrator.state import WorkflowState
+from forge.workflow.feature.state import FeatureState as WorkflowState
 
 logger = logging.getLogger(__name__)
 

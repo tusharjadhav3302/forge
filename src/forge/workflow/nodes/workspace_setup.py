@@ -3,7 +3,8 @@
 import logging
 from typing import Any
 
-from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.utils import update_state_timestamp
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.guardrails import GuardrailsLoader
 from forge.workspace.manager import WorkspaceManager

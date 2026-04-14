@@ -6,7 +6,6 @@ from langgraph.graph import StateGraph
 
 from forge.models.workflow import TicketType
 from forge.workflow.base import BaseWorkflow
-from forge.workflow.bug.graph import build_bug_graph
 from forge.workflow.bug.state import BugState, create_initial_bug_state
 
 
@@ -26,6 +25,8 @@ class BugWorkflow(BaseWorkflow):
         return ticket_type == TicketType.BUG
 
     def build_graph(self) -> StateGraph:
+        # Lazy import to avoid circular dependency
+        from forge.workflow.bug.graph import build_bug_graph
         return build_bug_graph()
 
     def create_initial_state(self, ticket_key: str, **kwargs: Any) -> BugState:

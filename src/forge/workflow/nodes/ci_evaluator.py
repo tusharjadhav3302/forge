@@ -8,7 +8,8 @@ from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
-from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.utils import update_state_timestamp
 from forge.prompts import load_prompt
 
 logger = logging.getLogger(__name__)

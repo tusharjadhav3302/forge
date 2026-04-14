@@ -9,8 +9,9 @@ from forge.config import get_settings
 from forge.integrations.agents import ForgeAgent
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
-from forge.orchestrator.state import WorkflowState, set_paused, update_state_timestamp
 from forge.prompts import load_prompt
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.utils import set_paused, update_state_timestamp
 
 logger = logging.getLogger(__name__)
 

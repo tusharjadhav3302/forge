@@ -9,7 +9,8 @@ from typing import Literal
 
 from langgraph.types import Send
 
-from forge.orchestrator.state import WorkflowState, update_state_timestamp
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.utils import update_state_timestamp
 
 logger = logging.getLogger(__name__)
 

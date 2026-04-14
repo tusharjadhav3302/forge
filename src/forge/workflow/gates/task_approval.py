@@ -13,7 +13,8 @@ import logging
 from langgraph.graph import END
 
 from forge.api.routes.metrics import record_approval, record_revision_requested
-from forge.orchestrator.state import WorkflowState, set_paused
+from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.utils import set_paused
 
 logger = logging.getLogger(__name__)
 

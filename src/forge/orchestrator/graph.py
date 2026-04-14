@@ -1,78 +1,85 @@
-"""LangGraph workflow definition for SDLC orchestration."""
+"""LangGraph workflow definition for SDLC orchestration.
+
+DEPRECATED: This module is deprecated. Use forge.workflow.feature.graph instead.
+The orchestrator/graph.py module is maintained for backward compatibility only.
+"""
 
 import logging
+import warnings
 from typing import Literal
 
 from langgraph.graph import END, StateGraph
 
 from forge.models.workflow import TicketType
-from forge.orchestrator.gates.plan_approval import (
+from forge.orchestrator.state import WorkflowState
+
+# Import from workflow module (nodes and gates have been moved)
+from forge.workflow.gates.plan_approval import (
     plan_approval_gate,
     route_plan_approval,
 )
-from forge.orchestrator.gates.prd_approval import (
+from forge.workflow.gates.prd_approval import (
     prd_approval_gate,
     route_prd_approval,
 )
-from forge.orchestrator.gates.spec_approval import (
+from forge.workflow.gates.spec_approval import (
     route_spec_approval,
     spec_approval_gate,
 )
-from forge.orchestrator.gates.task_approval import (
+from forge.workflow.gates.task_approval import (
     route_task_approval,
     task_approval_gate,
 )
-from forge.orchestrator.nodes.ai_reviewer import review_code
-from forge.orchestrator.nodes.bug_workflow import (
+from forge.workflow.nodes.ai_reviewer import review_code
+from forge.workflow.nodes.bug_workflow import (
     analyze_bug,
     implement_bug_fix,
     rca_approval_gate,
     regenerate_rca,
     route_rca_approval,
 )
-from forge.orchestrator.nodes.ci_evaluator import (
+from forge.workflow.nodes.ci_evaluator import (
     attempt_ci_fix,
     escalate_to_blocked,
     evaluate_ci_status,
 )
-from forge.orchestrator.nodes.epic_decomposition import (
+from forge.workflow.nodes.epic_decomposition import (
     decompose_epics,
     regenerate_all_epics,
     update_single_epic,
 )
-from forge.orchestrator.nodes.human_review import (
+from forge.workflow.nodes.human_review import (
     aggregate_epic_status,
     aggregate_feature_status,
     complete_tasks,
     human_review_gate,
     route_human_review,
 )
-from forge.orchestrator.nodes.implementation import implement_task
-from forge.orchestrator.nodes.pr_creation import (
+from forge.workflow.nodes.implementation import implement_task
+from forge.workflow.nodes.pr_creation import (
     create_pull_request,
     teardown_and_route,
 )
-from forge.orchestrator.nodes.prd_generation import (
+from forge.workflow.nodes.prd_generation import (
     generate_prd,
     regenerate_prd_with_feedback,
 )
-from forge.orchestrator.nodes.spec_generation import (
+from forge.workflow.nodes.spec_generation import (
     generate_spec,
     regenerate_spec_with_feedback,
 )
-from forge.orchestrator.nodes.task_generation import (
+from forge.workflow.nodes.task_generation import (
     generate_tasks,
     regenerate_all_tasks,
     update_single_task,
 )
-from forge.orchestrator.nodes.task_router import (
+from forge.workflow.nodes.task_router import (
     aggregate_parallel_results,
     route_tasks_by_repo,
     route_tasks_parallel,
     should_use_parallel_execution,
 )
-from forge.orchestrator.nodes.workspace_setup import setup_workspace
-from forge.orchestrator.state import WorkflowState
+from forge.workflow.nodes.workspace_setup import setup_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -692,10 +699,18 @@ def compile_workflow(checkpointer=None):
 def get_workflow(checkpointer=None):
     """Get a compiled workflow instance.
 
+    DEPRECATED: Use forge.workflow.router.WorkflowRouter instead.
+
     Args:
         checkpointer: Optional checkpointer for persistence.
 
     Returns:
         Compiled workflow.
     """
+    warnings.warn(
+        "forge.orchestrator.graph.get_workflow() is deprecated. "
+        "Use forge.workflow.router.WorkflowRouter instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     return compile_workflow(checkpointer)
