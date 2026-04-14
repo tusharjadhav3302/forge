@@ -7,8 +7,8 @@ from forge.workflow.base import (
     PRIntegrationState,
     ReviewIntegrationState,
 )
-from forge.workflow.router import WorkflowRouter
 from forge.workflow.registry import create_default_router
+from forge.workflow.router import WorkflowRouter
 
 __all__ = [
     "BaseState",
