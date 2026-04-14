@@ -1,0 +1,89 @@
+"""Feature workflow state definition."""
+
+from datetime import datetime
+from typing import Any
+
+from forge.models.workflow import TicketType
+from forge.workflow.base import (
+    BaseState,
+    CIIntegrationState,
+    PRIntegrationState,
+    ReviewIntegrationState,
+)
+
+
+class FeatureState(
+    BaseState, PRIntegrationState, CIIntegrationState, ReviewIntegrationState, total=False
+):
+    """State specific to Feature workflow."""
+
+    ticket_type: TicketType
+
+    # Artifacts
+    prd_content: str
+    spec_content: str
+
+    # Epic/Task tracking
+    epic_keys: list[str]
+    current_epic_key: str | None
+    task_keys: list[str]
+    tasks_by_repo: dict[str, list[str]]
+
+    # Completion tracking
+    tasks_completed: bool
+    epics_completed: bool
+    feature_completed: bool
+
+    # Parallel execution
+    parallel_execution_enabled: bool
+    parallel_branch_id: int | None
+    parallel_total_branches: int | None
+
+
+def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState:
+    """Create initial state for a new Feature workflow run."""
+    now = datetime.utcnow().isoformat()
+    return FeatureState(
+        thread_id=ticket_key,
+        ticket_key=ticket_key,
+        ticket_type=TicketType.FEATURE,
+        current_node="start",
+        is_paused=False,
+        retry_count=0,
+        last_error=None,
+        created_at=now,
+        updated_at=now,
+        prd_content="",
+        spec_content="",
+        epic_keys=[],
+        current_epic_key=None,
+        task_keys=[],
+        tasks_by_repo={},
+        workspace_path=None,
+        pr_urls=[],
+        ci_status=None,
+        current_pr_url=None,
+        current_pr_number=None,
+        current_repo=None,
+        repos_to_process=[],
+        repos_completed=[],
+        implemented_tasks=[],
+        current_task_key=None,
+        parallel_execution_enabled=True,
+        parallel_branch_id=None,
+        parallel_total_branches=None,
+        ci_failed_checks=[],
+        ci_fix_attempts=0,
+        ai_review_status=None,
+        ai_review_results=[],
+        human_review_status=None,
+        pr_merged=False,
+        tasks_completed=False,
+        epics_completed=False,
+        feature_completed=False,
+        feedback_comment=None,
+        revision_requested=False,
+        messages=[],
+        context={},
+        **kwargs,
+    )
