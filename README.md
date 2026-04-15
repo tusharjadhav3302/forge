@@ -116,6 +116,15 @@ Use these labels in Jira to control the workflow:
 
 Add a comment to the Jira ticket with your feedback. Forge will regenerate the current artifact incorporating your feedback.
 
+### Asking Questions (Q&A Mode)
+
+While reviewing a PRD or Spec, you can ask clarifying questions without triggering regeneration:
+
+- Start your comment with `?` — e.g., `?Why did you choose REST over GraphQL?`
+- Or use `@forge ask` — e.g., `@forge ask explain the auth approach`
+
+Forge will answer based on the artifact content and generation context, then keep the workflow paused for your approval decision. When you approve, a summary of Q&A exchanges is posted to the ticket for future reference.
+
 ### Handling Failures
 
 When a workflow fails:
