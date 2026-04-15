@@ -147,6 +147,7 @@ class ContainerRunner:
             env["LANGFUSE_PUBLIC_KEY"] = self.settings.langfuse_public_key
             env["LANGFUSE_SECRET_KEY"] = self.settings.langfuse_secret_key.get_secret_value()
             env["LANGFUSE_HOST"] = self.settings.langfuse_host
+            logger.debug("Container Langfuse tracing enabled")
 
         # Pass system prompt template (unformatted - entrypoint will interpolate)
         # Load raw template without interpolation by passing empty values
@@ -156,8 +157,8 @@ class ContainerRunner:
         # Pass debug/verbose settings for container agent
         if self.settings.container_langchain_verbose:
             env["LANGCHAIN_VERBOSE"] = "true"
-        if os.environ.get("LOG_LEVEL"):
-            env["LOG_LEVEL"] = os.environ["LOG_LEVEL"]
+        # Pass log level from settings
+        env["LOG_LEVEL"] = self.settings.log_level
 
         # Merge with any custom env vars from config
         env.update(config.env_vars)
@@ -375,12 +376,17 @@ class ContainerRunner:
 
             logger.info(f"Container exited with code {exit_code}")
 
-            # Log output on failure for debugging
+            # Log container output
             if exit_code != EXIT_SUCCESS:
-                if stdout_str:
-                    logger.error(f"Container stdout: {stdout_str[:2000]}")
+                # Failure: stderr at INFO, stdout at DEBUG
                 if stderr_str:
-                    logger.warning(f"Container stderr: {stderr_str[:2000]}")
+                    logger.info(f"Container stderr:\n{stderr_str}")
+                if stdout_str:
+                    logger.debug(f"Container stdout:\n{stdout_str}")
+            else:
+                # Success: stderr at DEBUG only
+                if stderr_str:
+                    logger.debug(f"Container stderr:\n{stderr_str}")
 
             # Determine result
             if exit_code == EXIT_SUCCESS:

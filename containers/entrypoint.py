@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Enable LangChain debug/verbose mode if requested
 if os.environ.get("LANGCHAIN_VERBOSE", "").lower() in ("true", "1", "yes"):
     try:
-        from langchain.globals import set_verbose, set_debug
+        from langchain_core.globals import set_verbose, set_debug
         set_verbose(True)
         set_debug(True)
         logger.info("LangChain verbose/debug mode enabled")

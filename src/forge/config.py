@@ -160,6 +160,11 @@ class Settings(BaseSettings):
         return "anthropic"
 
     # Langfuse Configuration
+    langfuse_enabled_setting: bool = Field(
+        default=True,
+        alias="langfuse_enabled",
+        description="Enable Langfuse tracing (also requires keys to be set)",
+    )
     langfuse_public_key: str = Field(default="", description="Langfuse public key")
     langfuse_secret_key: SecretStr = Field(default=SecretStr(""), description="Langfuse secret key")
     langfuse_host: str = Field(
@@ -204,7 +209,7 @@ class Settings(BaseSettings):
         description="Skill directories for container agent (empty = no skills)",
     )
     container_langchain_verbose: bool = Field(
-        default=True,
+        default=False,
         description="Enable LangChain verbose/debug logging in container",
     )
     agent_backend: str = Field(
@@ -277,8 +282,12 @@ class Settings(BaseSettings):
 
     @property
     def langfuse_enabled(self) -> bool:
-        """Check if Langfuse tracing is configured."""
-        return bool(self.langfuse_public_key and self.langfuse_secret_key.get_secret_value())
+        """Check if Langfuse tracing is enabled and configured."""
+        return bool(
+            self.langfuse_enabled_setting
+            and self.langfuse_public_key
+            and self.langfuse_secret_key.get_secret_value()
+        )
 
     @property
     def use_vertex_ai(self) -> bool:
