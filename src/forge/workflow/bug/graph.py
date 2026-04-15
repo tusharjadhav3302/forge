@@ -25,6 +25,7 @@ from forge.workflow.nodes import (
     teardown_and_route,
 )
 from forge.workflow.nodes.ai_reviewer import review_code
+from forge.workflow.nodes.qa_handler import answer_question
 
 logger = logging.getLogger(__name__)
 
@@ -177,6 +178,14 @@ def _route_ai_review(state: BugState) -> Literal["human_review_gate", "implement
     return "human_review_gate"
 
 
+def _route_after_answer(state: BugState) -> str:
+    """Route back to RCA gate after answering a question."""
+    current_node = state.get("current_node", "")
+    if current_node == "rca_approval_gate":
+        return "rca_approval_gate"
+    return "rca_approval_gate"  # Bug workflow only has one gate
+
+
 def build_bug_graph() -> StateGraph:
     """Create the Bug workflow graph.
 
@@ -221,6 +230,9 @@ def build_bug_graph() -> StateGraph:
     # Review nodes
     graph.add_node("ai_review", review_code)
     graph.add_node("human_review_gate", human_review_gate)
+
+    # Q&A node
+    graph.add_node("answer_question", answer_question)
 
     # Set entry point
     graph.set_entry_point("route_entry")
@@ -319,6 +331,13 @@ def build_bug_graph() -> StateGraph:
             "implement_bug_fix": "implement_bug_fix",
             END: END,  # Complete or paused for review
         },
+    )
+
+    # Q&A routing: answer_question returns to the gate it came from
+    graph.add_conditional_edges(
+        "answer_question",
+        _route_after_answer,
+        {"rca_approval_gate": "rca_approval_gate"},
     )
 
     return graph

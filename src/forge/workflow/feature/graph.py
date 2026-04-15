@@ -45,6 +45,7 @@ from forge.workflow.nodes import (
     update_single_epic,
 )
 from forge.workflow.nodes.ai_reviewer import review_code
+from forge.workflow.nodes.qa_handler import answer_question
 from forge.workflow.nodes.task_generation import regenerate_all_tasks, update_single_task
 
 logger = logging.getLogger(__name__)
@@ -294,6 +295,19 @@ def _route_ai_review(state: FeatureState) -> Literal["human_review_gate", "imple
     return "human_review_gate"
 
 
+def _route_after_answer(state: FeatureState) -> str:
+    """Route back to the original gate after answering a question.
+
+    The answer_question node preserves current_node as the gate to return to.
+    """
+    current_node = state.get("current_node", "")
+    # current_node contains the gate we came from
+    if current_node and "gate" in current_node:
+        return current_node
+    # Fallback to PRD gate
+    return "prd_approval_gate"
+
+
 def build_feature_graph() -> StateGraph:
     """Create the Feature workflow graph.
 
@@ -375,6 +389,9 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("complete_tasks", complete_tasks)
     graph.add_node("aggregate_epic_status", aggregate_epic_status)
     graph.add_node("aggregate_feature_status", aggregate_feature_status)
+
+    # Q&A node
+    graph.add_node("answer_question", answer_question)
 
     # Set entry point
     graph.set_entry_point("route_entry")
@@ -560,5 +577,17 @@ def build_feature_graph() -> StateGraph:
     graph.add_edge("complete_tasks", "aggregate_epic_status")
     graph.add_edge("aggregate_epic_status", "aggregate_feature_status")
     graph.add_edge("aggregate_feature_status", END)
+
+    # Q&A routing: answer_question returns to the gate it came from
+    graph.add_conditional_edges(
+        "answer_question",
+        _route_after_answer,
+        {
+            "prd_approval_gate": "prd_approval_gate",
+            "spec_approval_gate": "spec_approval_gate",
+            "plan_approval_gate": "plan_approval_gate",
+            "task_approval_gate": "task_approval_gate",
+        },
+    )
 
     return graph
