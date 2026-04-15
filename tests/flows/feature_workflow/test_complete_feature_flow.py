@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.workflow.feature.state import create_initial_feature_state as create_initial_state
-from forge.orchestrator.graph import route_by_ticket_type
+from forge.workflow.feature.graph import route_by_ticket_type
 
 from tests.fixtures.workflow_states import (
     STATE_NEW_FEATURE,
