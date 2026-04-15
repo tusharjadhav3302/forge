@@ -1,5 +1,6 @@
 """CI/CD evaluator node for monitoring and responding to CI results."""
 
+import asyncio
 import logging
 from typing import Any
 
@@ -41,6 +42,14 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             "ci_status": "no_prs",
             "current_node": "complete",
         })
+
+    # On initial check or after CI fix, wait for GitHub to register/update checks
+    # GitHub Actions can take 30-60 seconds to start check runs
+    ci_status = state.get("ci_status")
+    if ci_status in (None, "", "fixing"):
+        ci_startup_delay = 75
+        logger.info(f"Waiting {ci_startup_delay}s for GitHub to start CI checks for {ticket_key}")
+        await asyncio.sleep(ci_startup_delay)
 
     logger.info(f"Evaluating CI status for {ticket_key}")
 
