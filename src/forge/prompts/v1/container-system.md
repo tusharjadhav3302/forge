@@ -107,3 +107,22 @@ You have access to these tools:
 - Git operations: `git add`, `git commit`, `git status`, `git diff`
 - Running tests: `pytest`, `go test`, `npm test`, etc.
 - Build commands: `make`, `cargo build`, etc.
+
+## Build Validation Guidelines
+
+**AVOID full project builds** - they are slow and often unnecessary for validating your changes.
+
+Instead, use fast validation methods appropriate to the language:
+
+| Language | Fast Validation | Avoid |
+|----------|-----------------|-------|
+| Go | `go build ./...` or `go vet ./...` | `make`, `hack/build.sh`, full binary builds |
+| Python | `python -m py_compile file.py` or `ruff check` | Full test suites unless task requires |
+| TypeScript | `tsc --noEmit` | `npm run build`, webpack builds |
+| Rust | `cargo check` | `cargo build --release` |
+
+**When to run full builds:**
+- Only if the task explicitly requires building a binary/artifact
+- Only if fast validation passes and you need to verify runtime behavior
+
+**Default timeout is 120 seconds** - full project builds will likely timeout. If a command times out, do NOT retry with a longer timeout. Instead, use a faster validation method.
