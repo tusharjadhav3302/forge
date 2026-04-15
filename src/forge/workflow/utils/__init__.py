@@ -1,7 +1,9 @@
-"""Utility functions for workflow state management."""
+"""Utility functions for workflow state management and comment classification."""
 
 from datetime import datetime
 from typing import Any
+
+from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 
 
 def update_state_timestamp(state: dict[str, Any]) -> dict[str, Any]:
@@ -66,3 +68,13 @@ def set_error(state: dict[str, Any], error: str) -> dict[str, Any]:
         "retry_count": state.get("retry_count", 0) + 1,
         "updated_at": datetime.utcnow().isoformat(),
     }
+
+
+__all__ = [
+    "CommentType",
+    "classify_comment",
+    "resume_state",
+    "set_error",
+    "set_paused",
+    "update_state_timestamp",
+]
