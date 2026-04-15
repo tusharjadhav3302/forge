@@ -2,6 +2,15 @@
 
 The container sandbox provides an isolated environment for AI-powered code implementation. Tasks are executed inside ephemeral Podman containers with full tool access.
 
+## Quick Start
+
+```bash
+# Build the container image
+podman build -t forge-dev:latest -f containers/Containerfile containers/
+
+# The orchestrator uses this image automatically when implementing tasks
+```
+
 ## Architecture
 
 ```
@@ -98,7 +107,7 @@ Passed automatically by the orchestrator:
 | `ANTHROPIC_API_KEY` | Claude API key (direct API) |
 | `ANTHROPIC_VERTEX_PROJECT_ID` | GCP project for Vertex AI |
 | `ANTHROPIC_VERTEX_REGION` | Vertex AI region |
-| `LLM_MODEL` | Model to use (Claude: `claude-sonnet-4-5-20250929`, Gemini: `gemini-2.5-pro`) |
+| `LLM_MODEL` | Model to use (e.g., `claude-opus-4-5@20251101`, `gemini-2.5-pro`) |
 | `FORGE_SYSTEM_PROMPT_TEMPLATE` | System prompt template (interpolated by entrypoint) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to mounted gcloud credentials |
 | `GIT_USER_NAME` | Git author name for commits (default: `Forge`) |
@@ -128,8 +137,8 @@ Example: `forge-AISOS-189-installer-12345`
 ## Task Execution
 
 The entrypoint runs a Deep Agent with `LocalShellBackend`. Supported models:
-- **Claude** (via Anthropic API or Vertex AI): `claude-sonnet-4-5-20250929`, `claude-opus-4-5@20251101`
-- **Gemini** (via Vertex AI): `gemini-2.5-pro`, `gemini-2.5-flash`
+- **Claude** (via Anthropic API or Vertex AI): `claude-opus-4-5@20251101`, `claude-sonnet-4-5@20250929`
+- **Gemini** (via Vertex AI): `gemini-2.5-pro`, `gemini-2.5-flash`, `gemini-3.1-pro-preview`
 
 The agent:
 1. Reads and understands the codebase
