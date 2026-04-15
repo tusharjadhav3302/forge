@@ -20,6 +20,7 @@ from forge.queue.consumer import QueueConsumer
 from forge.queue.models import QueueMessage
 from forge.workflow.registry import create_default_router
 from forge.workflow.router import WorkflowRouter
+from forge.workflow.utils.comment_classifier import CommentType, classify_comment
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +206,7 @@ class OrchestratorWorker:
         is_approved = False
         is_rejected = False
         is_retry = False
+        is_question = False
         feedback = None
 
         current_node = current_state.get("current_node", "")
@@ -274,65 +276,78 @@ class OrchestratorWorker:
                 comment_body = self._extract_text_from_adf(comment_body)
 
             if comment_body.strip():
-                # Treat any new comment as feedback for rejection
-                is_rejected = True
-                feedback = comment_body
+                comment_type = classify_comment(comment_body)
 
-                # Determine workflow phase from current_node
-                workflow_ticket_key = current_state.get("ticket_key", "")
-                epic_keys = current_state.get("epic_keys", [])
-                task_keys = current_state.get("task_keys", [])
+                if comment_type == CommentType.QUESTION:
+                    is_question = True
+                    feedback = comment_body
+                    logger.info(f"Detected question comment: {feedback[:100]}...")
+                elif comment_type == CommentType.APPROVAL:
+                    # Approval via comment (not label) - set approved flag
+                    is_approved = True
+                    logger.info(f"Detected approval comment: {comment_body[:100]}...")
+                else:
+                    # Treat as feedback for rejection
+                    is_rejected = True
+                    feedback = comment_body
 
-                # Determine which phase we're in based on current_node
-                plan_phase_nodes = (
-                    "plan_approval_gate", "decompose_epics",
-                    "regenerate_all_epics", "update_single_epic",
-                )
-                task_phase_nodes = (
-                    "task_approval_gate", "generate_tasks",
-                    "regenerate_all_tasks", "update_single_task",
-                )
+                # Determine workflow phase from current_node for feedback/questions
+                # (skip for approvals since they don't have feedback)
+                if feedback:
+                    workflow_ticket_key = current_state.get("ticket_key", "")
+                    epic_keys = current_state.get("epic_keys", [])
+                    task_keys = current_state.get("task_keys", [])
 
-                if message.ticket_key != workflow_ticket_key:
-                    # Comment is on a child ticket - determine type by phase
-                    if current_node in plan_phase_nodes:
-                        # In plan phase - check if it's an Epic
-                        if message.ticket_key in epic_keys:
-                            comment_ticket_key = message.ticket_key
-                            comment_ticket_type = "epic"
-                            logger.info(
-                                f"Detected Epic-level comment on {comment_ticket_key}: "
-                                f"{feedback[:100]}..."
-                            )
+                    # Determine which phase we're in based on current_node
+                    plan_phase_nodes = (
+                        "plan_approval_gate", "decompose_epics",
+                        "regenerate_all_epics", "update_single_epic",
+                    )
+                    task_phase_nodes = (
+                        "task_approval_gate", "generate_tasks",
+                        "regenerate_all_tasks", "update_single_task",
+                    )
+
+                    if message.ticket_key != workflow_ticket_key:
+                        # Comment is on a child ticket - determine type by phase
+                        if current_node in plan_phase_nodes:
+                            # In plan phase - check if it's an Epic
+                            if message.ticket_key in epic_keys:
+                                comment_ticket_key = message.ticket_key
+                                comment_ticket_type = "epic"
+                                logger.info(
+                                    f"Detected Epic-level comment on {comment_ticket_key}: "
+                                    f"{feedback[:100]}..."
+                                )
+                            else:
+                                logger.info(
+                                    f"Detected comment on child ticket {message.ticket_key} "
+                                    f"(not in epic_keys): {feedback[:100]}..."
+                                )
+                        elif current_node in task_phase_nodes:
+                            # In task phase - check if it's a Task
+                            if message.ticket_key in task_keys:
+                                comment_ticket_key = message.ticket_key
+                                comment_ticket_type = "task"
+                                logger.info(
+                                    f"Detected Task-level comment on {comment_ticket_key}: "
+                                    f"{feedback[:100]}..."
+                                )
+                            else:
+                                logger.info(
+                                    f"Detected comment on child ticket {message.ticket_key} "
+                                    f"(not in task_keys): {feedback[:100]}..."
+                                )
                         else:
+                            # Not in a phase that handles child comments
                             logger.info(
                                 f"Detected comment on child ticket {message.ticket_key} "
-                                f"(not in epic_keys): {feedback[:100]}..."
-                            )
-                    elif current_node in task_phase_nodes:
-                        # In task phase - check if it's a Task
-                        if message.ticket_key in task_keys:
-                            comment_ticket_key = message.ticket_key
-                            comment_ticket_type = "task"
-                            logger.info(
-                                f"Detected Task-level comment on {comment_ticket_key}: "
-                                f"{feedback[:100]}..."
-                            )
-                        else:
-                            logger.info(
-                                f"Detected comment on child ticket {message.ticket_key} "
-                                f"(not in task_keys): {feedback[:100]}..."
+                                f"at unexpected node {current_node}: {feedback[:100]}..."
                             )
                     else:
-                        # Not in a phase that handles child comments
                         logger.info(
-                            f"Detected comment on child ticket {message.ticket_key} "
-                            f"at unexpected node {current_node}: {feedback[:100]}..."
+                            f"Detected Feature-level comment: {feedback[:100]}..."
                         )
-                else:
-                    logger.info(
-                        f"Detected Feature-level comment: {feedback[:100]}..."
-                    )
 
         # Build updated state
         updated_state = {
@@ -384,6 +399,11 @@ class OrchestratorWorker:
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
             updated_state["last_error"] = None
+        elif is_question:
+            updated_state["is_question"] = True
+            updated_state["feedback_comment"] = feedback
+            updated_state["revision_requested"] = False
+            # Keep is_paused=False so workflow can process the question
         elif is_rejected and feedback:
             updated_state["revision_requested"] = True
             updated_state["feedback_comment"] = feedback
