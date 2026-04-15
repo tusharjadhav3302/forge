@@ -49,6 +49,8 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
 
     all_task_keys: list[str] = []
     tasks_by_repo: dict[str, list[str]] = {}
+    # Track created tasks to provide context for subsequent epics (avoid duplication)
+    created_tasks_context: list[dict[str, str]] = []
     jira_error = None
 
     try:
@@ -86,8 +88,10 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
             }
 
             # Generate Tasks using Deep Agents - primary operation
+            # Pass existing tasks from previous epics to avoid duplication
             tasks_data = await _generate_tasks_for_epic(
-                agent, epic_plan, epic_summary, context
+                agent, epic_plan, epic_summary, context,
+                existing_tasks=created_tasks_context if created_tasks_context else None,
             )
 
             # Create Tasks in Jira - secondary operation
@@ -133,6 +137,14 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                     if repo not in tasks_by_repo:
                         tasks_by_repo[repo] = []
                     tasks_by_repo[repo].append(task_key)
+
+                    # Track for context in subsequent epic task generation
+                    created_tasks_context.append({
+                        "epic_key": epic_key,
+                        "epic_summary": epic_summary,
+                        "task_key": task_key,
+                        "summary": summary,
+                    })
 
                     logger.info(f"Created Task {task_key}: {summary} (repo: {repo})")
                 except Exception as e:
@@ -195,6 +207,7 @@ async def _generate_tasks_for_epic(
     epic_plan: str,
     epic_summary: str,
     context: dict[str, Any],
+    existing_tasks: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     """Generate Tasks for a single Epic.
 
@@ -203,14 +216,19 @@ async def _generate_tasks_for_epic(
         epic_plan: Epic implementation plan.
         epic_summary: Epic title/summary.
         context: Additional context.
+        existing_tasks: Tasks already created for sibling epics (to avoid duplication).
 
     Returns:
         List of Task dicts with summary, description, repo.
     """
+    # Build existing tasks section for prompt
+    existing_tasks_section = _format_existing_tasks(existing_tasks)
+
     prompt = load_prompt(
         "generate-tasks",
         epic_summary=epic_summary,
         epic_plan=epic_plan,
+        existing_tasks_section=existing_tasks_section,
     )
 
     result = await agent.run_task(
@@ -220,6 +238,37 @@ async def _generate_tasks_for_epic(
     )
 
     return _parse_tasks_response(result)
+
+
+def _format_existing_tasks(existing_tasks: list[dict[str, str]] | None) -> str:
+    """Format existing tasks from sibling epics for prompt context.
+
+    Args:
+        existing_tasks: List of task dicts with epic_key, task_key, summary.
+
+    Returns:
+        Formatted string for prompt, or empty string if no existing tasks.
+    """
+    if not existing_tasks:
+        return ""
+
+    # Group tasks by epic
+    tasks_by_epic: dict[str, list[dict[str, str]]] = {}
+    for task in existing_tasks:
+        epic_key = task.get("epic_key", "Unknown")
+        if epic_key not in tasks_by_epic:
+            tasks_by_epic[epic_key] = []
+        tasks_by_epic[epic_key].append(task)
+
+    lines = ["## Existing Tasks from Other Epics", ""]
+    for epic_key, tasks in tasks_by_epic.items():
+        epic_summary = tasks[0].get("epic_summary", "")
+        lines.append(f"{epic_key} ({epic_summary}):")
+        for task in tasks:
+            lines.append(f"- {task.get('task_key', '???')}: {task.get('summary', 'Untitled')}")
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def _parse_tasks_response(response: str) -> list[dict[str, str]]:

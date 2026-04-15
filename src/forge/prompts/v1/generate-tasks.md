@@ -5,7 +5,16 @@ EPIC: {epic_summary}
 IMPLEMENTATION PLAN:
 {epic_plan}
 
+{existing_tasks_section}
+
 Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
+
+## Avoiding Duplication
+
+If existing tasks are listed above:
+- Do NOT create tasks that duplicate work already assigned to other Epics
+- Cross-cutting concerns (e.g., "add tests", "update docs") should only appear once across all Epics
+- If this Epic needs integration with work from another Epic, reference it rather than recreating it
 
 ## Output Format
 
