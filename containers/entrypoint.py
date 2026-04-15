@@ -23,12 +23,23 @@ from pathlib import Path
 from typing import Any
 
 # Configure logging
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.INFO),
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger(__name__)
+
+# Enable LangChain debug/verbose mode if requested
+if os.environ.get("LANGCHAIN_VERBOSE", "").lower() in ("true", "1", "yes"):
+    try:
+        from langchain.globals import set_verbose, set_debug
+        set_verbose(True)
+        set_debug(True)
+        logger.info("LangChain verbose/debug mode enabled")
+    except ImportError:
+        pass
 
 # Exit codes
 EXIT_SUCCESS = 0
