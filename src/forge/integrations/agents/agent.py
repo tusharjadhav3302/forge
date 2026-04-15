@@ -375,11 +375,9 @@ class ForgeAgent:
         """
         root_dir = self._get_root_dir()
         skill_paths = self._get_skill_paths()
-        allowed_tools = self._get_allowed_tools()
 
         # Log configuration for visibility
         logger.info(f"Agent config: root_dir={root_dir}, skills={skill_paths}")
-        logger.info(f"Agent tools: {'all' if allowed_tools is None else allowed_tools}")
 
         # Create filesystem backend
         backend = FilesystemBackend(root_dir=str(root_dir))
@@ -389,6 +387,13 @@ class ForgeAgent:
 
         # Load MCP tools if enabled
         mcp_tools = await self._load_mcp_tools() if include_tools else []
+        if not include_tools:
+            logger.info("Agent tools: disabled (include_tools=False)")
+        elif mcp_tools:
+            mode = "read-only" if self.settings.agent_mcp_read_only else "full access"
+            logger.info(f"Agent tools: {len(mcp_tools)} MCP tools ({mode})")
+        else:
+            logger.info("Agent tools: none (no MCP tools loaded)")
 
         # Create the agent with MCP tools
         agent = create_deep_agent(
@@ -419,13 +424,11 @@ class ForgeAgent:
         """
         root_dir = self._get_root_dir()
         skill_paths = self._get_skill_paths()
-        allowed_tools = self._get_allowed_tools()
         mcp_config = self._load_mcp_config()
 
         # Log configuration for visibility
         logger.info(f"Agent config: root_dir={root_dir}, skills={skill_paths}")
-        logger.info(f"Agent tools: {'all' if allowed_tools is None else allowed_tools}")
-        logger.info(f"Agent MCP servers: {list(mcp_config.keys())}")
+        logger.info(f"Agent MCP servers: {list(mcp_config.keys())} (sync - no tools loaded)")
 
         # Create filesystem backend
         backend = FilesystemBackend(root_dir=str(root_dir))
@@ -1080,7 +1083,7 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
                 "artifact_type": artifact_type,
                 "ticket_key": context.get("ticket_key", ""),
             },
-            include_tools=False,  # Q&A doesn't need tools
+            # Q&A gets read-only MCP tools for lookups (filtered by agent_mcp_read_only)
         )
 
         logger.info(f"Generated answer ({len(result)} chars)")
