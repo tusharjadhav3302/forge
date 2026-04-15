@@ -318,7 +318,13 @@ async def run_agent_task(
 
         # Create the agent with local shell backend (enables git commands)
         # virtual_mode=False: we want real filesystem access, not virtual paths
-        backend = LocalShellBackend(root_dir=str(workspace), inherit_env=True, virtual_mode=False)
+        # timeout=240: allow longer commands (default 120s too short for large project builds)
+        backend = LocalShellBackend(
+            root_dir=str(workspace),
+            inherit_env=True,
+            virtual_mode=False,
+            timeout=240,
+        )
 
         # Build system prompt from template
         system_prompt = build_system_prompt(
@@ -427,32 +433,21 @@ async def run_agent_task(
                 logger.warning(f"Failed to initialize Langfuse: {e}")
 
         # Run the agent (with Langfuse session context if enabled)
+        initial_message = {
+            "messages": [
+                {"role": "user", "content": f"Implement this task:\n\n{task_description}"}
+            ]
+        }
+
         if langfuse_enabled:
             with propagate_attributes(
                 session_id=task_key,
                 tags=["forge-container", "task-implementation"],
                 metadata={"task_summary": task_summary},
             ):
-                agent.invoke(
-                    {
-                        "messages": [
-                            {
-                                "role": "user",
-                                "content": f"Implement this task:\n\n{task_description}",
-                            }
-                        ]
-                    },
-                    config=config,
-                )
+                result = agent.invoke(initial_message, config=config)
         else:
-            agent.invoke(
-                {
-                    "messages": [
-                        {"role": "user", "content": f"Implement this task:\n\n{task_description}"}
-                    ]
-                },
-                config=config,
-            )
+            result = agent.invoke(initial_message, config=config)
 
         # Flush Langfuse traces before exit
         if langfuse_enabled:
@@ -462,6 +457,31 @@ async def run_agent_task(
                 get_client().flush()
             except Exception:
                 pass
+
+        # Save conversation history to .forge/history/{task_key}.json
+        try:
+            history_dir = workspace / ".forge" / "history"
+            history_dir.mkdir(parents=True, exist_ok=True)
+            history_file = history_dir / f"{task_key}.json"
+
+            # Extract messages from result and serialize
+            messages = result.get("messages", [])
+            history_data = {
+                "task_key": task_key,
+                "task_summary": task_summary,
+                "messages": [
+                    {
+                        "role": getattr(msg, "type", "unknown"),
+                        "content": getattr(msg, "content", str(msg)),
+                        "tool_calls": getattr(msg, "tool_calls", None),
+                    }
+                    for msg in messages
+                ],
+            }
+            history_file.write_text(json.dumps(history_data, indent=2, default=str))
+            logger.info(f"Saved conversation history to {history_file}")
+        except Exception as e:
+            logger.warning(f"Failed to save conversation history: {e}")
 
         logger.info("Agent completed task execution")
         return True

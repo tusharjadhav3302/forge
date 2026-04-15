@@ -29,10 +29,12 @@ Previous tasks in this workflow: {previous_task_keys}
 2. Read and understand the existing codebase structure
 3. Implement the task following the repository's coding standards
 4. Write clean, well-documented code
-5. Run tests to verify your changes work
-6. **Update handoff for next task** (see format below)
-7. Commit your changes with a descriptive message
+5. Run targeted validation to verify your changes (see Build Validation Guidelines)
+6. **REQUIRED: Update `.forge/handoff.md`** (see Handoff Update section below)
+7. Commit your implementation with a descriptive message
 8. Do NOT push to git - only commit your changes locally
+
+**IMPORTANT**: Step 6 (handoff update) is REQUIRED even if the task fails. Always document what you attempted and any blockers encountered.
 
 ## Git Commit Rules
 
@@ -60,14 +62,16 @@ Detailed description:
 Closes: {task_key}
 ```
 
-## Handoff Update (REQUIRED)
+## Handoff Update (REQUIRED - DO NOT SKIP)
 
-After completing your task, you MUST update `.forge/handoff.md` to help the next task:
+**You MUST update `.forge/handoff.md` before committing.** This is critical for task continuity.
 
 **Append** your task summary using this format:
 
 ```markdown
 ## {task_key}: {task_summary}
+
+**Status:** [Completed | Partial | Blocked]
 
 **Changes Made:**
 - [List key files created/modified]
@@ -76,13 +80,14 @@ After completing your task, you MUST update `.forge/handoff.md` to help the next
 **Key Context:**
 - [Important patterns established]
 - [Dependencies added]
-- [Test files created]
+- [Validation performed]
 
 **For Next Task:**
 - [Any specific guidance for subsequent work]
+- [Known issues or blockers if any]
 ```
 
-Also save your full conversation history to `.forge/history/{task_key}.json` for reference if the next task needs deeper context.
+**Note:** Conversation history is saved automatically to `.forge/history/{task_key}.json`.
 
 ## Available Tools
 
@@ -110,19 +115,21 @@ You have access to these tools:
 
 ## Build Validation Guidelines
 
-**AVOID full project builds** - they are slow and often unnecessary for validating your changes.
+**Prefer targeted validation** - validate only the packages/files you changed, not the entire project.
 
-Instead, use fast validation methods appropriate to the language:
+| Language | Targeted (preferred) | Project-wide (slower) |
+|----------|---------------------|----------------------|
+| Go | `go build ./pkg/changed/...` | `go build ./...` |
+| Go | `gofmt -d file.go` (syntax) | `go vet ./...` |
+| Python | `python -m py_compile file.py` | `pytest` |
+| TypeScript | `tsc --noEmit src/file.ts` | `npm run build` |
+| Rust | `cargo check -p crate_name` | `cargo check` |
 
-| Language | Fast Validation | Avoid |
-|----------|-----------------|-------|
-| Go | `go build ./...` or `go vet ./...` | `make`, `hack/build.sh`, full binary builds |
-| Python | `python -m py_compile file.py` or `ruff check` | Full test suites unless task requires |
-| TypeScript | `tsc --noEmit` | `npm run build`, webpack builds |
-| Rust | `cargo check` | `cargo build --release` |
+**Avoid entirely:**
+- Full project builds: `make`, `hack/build.sh`, `npm run build`
+- These will likely timeout even with extended limits
 
-**When to run full builds:**
-- Only if the task explicitly requires building a binary/artifact
-- Only if fast validation passes and you need to verify runtime behavior
-
-**Default timeout is 120 seconds** - full project builds will likely timeout. If a command times out, do NOT retry with a longer timeout. Instead, use a faster validation method.
+**Command timeout is 240 seconds.** If a command times out:
+1. Do NOT retry with the same command
+2. Use a more targeted validation (specific package, not `./...`)
+3. For simple changes (adding fields, imports), syntax validation is sufficient
