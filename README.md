@@ -175,8 +175,8 @@ Create Bug → Analyze (RCA) → [Approval] → Implement Fix → PR → CI → 
 │                                                              │              │
 │                                                              v              │
 │                                                     ┌──────────────────┐    │
-│                                                     │  Claude / Gemini │    │
-│                                                     │  (via Vertex AI) │    │
+│                                                     │   Deep Agents    │    │
+│                                                     │  (Claude/Gemini) │    │
 │                                                     └──────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -187,7 +187,7 @@ Create Bug → Analyze (RCA) → [Approval] → Implement Fix → PR → CI → 
 - **Redis Queue** - FIFO message queue using Redis Streams for reliable event processing
 - **LangGraph Workflows** - State machines for Feature and Bug workflows with checkpointing
 - **Podman Containers** - Ephemeral execution environments for code implementation
-- **AI Agents** - Claude or Gemini for PRD/Spec generation and code implementation
+- **[Deep Agents](https://github.com/deepagents/deepagents)** - AI agent framework powering code implementation, with full tool access (file operations, shell, search). Supports Claude and Gemini as the underlying LLM.
 
 ## Configuration
 
