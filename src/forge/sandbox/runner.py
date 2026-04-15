@@ -102,10 +102,17 @@ class ContainerRunner:
             cpu_limit=self.settings.container_cpus,
         )
 
-    def _build_env_vars(self, config: ContainerConfig) -> dict[str, str]:
+    def _build_env_vars(
+        self, config: ContainerConfig, container_skill_paths: str = ""
+    ) -> dict[str, str]:
         """Build environment variables to pass to container.
 
-        Only passes LLM credentials - no other secrets.
+        Args:
+            config: Container configuration.
+            container_skill_paths: Skill paths inside container (from _get_skill_mounts).
+
+        Returns:
+            Dict of environment variables.
         """
         env = {}
 
@@ -127,9 +134,9 @@ class ContainerRunner:
         env["LLM_MODEL"] = self.settings.container_model
         env["LLM_MAX_TOKENS"] = str(self.settings.llm_max_tokens)
 
-        # Pass skill paths for agent (uses container-specific or falls back to orchestrator)
-        if self.settings.container_skills:
-            env["AGENT_SKILL_PATHS"] = self.settings.container_skills
+        # Pass skill paths for agent (only if explicitly configured)
+        if container_skill_paths:
+            env["AGENT_SKILL_PATHS"] = container_skill_paths
 
         # Pass git configuration for commits
         env["GIT_USER_NAME"] = self.settings.git_user_name
@@ -157,6 +164,43 @@ class ContainerRunner:
         if adc_path.exists():
             return adc_path
         return None
+
+    def _get_skill_mounts(self) -> tuple[list[tuple[Path, str]], str]:
+        """Get skill directory mounts and container paths.
+
+        Returns:
+            Tuple of (mounts, container_paths) where:
+            - mounts: List of (host_path, container_path) tuples
+            - container_paths: Comma-separated paths for AGENT_SKILL_PATHS env var
+        """
+        skill_paths_str = self.settings.container_skill_paths
+        if not skill_paths_str:
+            return [], ""
+
+        mounts = []
+        container_paths = []
+
+        for i, path_str in enumerate(skill_paths_str.split(",")):
+            path_str = path_str.strip()
+            if not path_str:
+                continue
+
+            # Resolve to absolute path
+            host_path = Path(path_str)
+            if not host_path.is_absolute():
+                # Relative paths are relative to current working directory
+                host_path = Path.cwd() / path_str
+
+            if not host_path.exists():
+                logger.warning(f"Skill path does not exist: {host_path}")
+                continue
+
+            # Mount to /skills/skill_N/ in container
+            container_path = f"/skills/skill_{i}"
+            mounts.append((host_path.resolve(), container_path))
+            container_paths.append(f"{container_path}/")
+
+        return mounts, ",".join(container_paths)
 
     def _build_podman_command(
         self,
@@ -216,8 +260,13 @@ class ContainerRunner:
                     ]
                 )
 
+        # Mount skill directories
+        skill_mounts, container_skill_paths = self._get_skill_mounts()
+        for host_path, container_path in skill_mounts:
+            cmd.extend(["-v", f"{host_path}:{container_path}:ro,Z"])
+
         # Add environment variables
-        for key, value in self._build_env_vars(config).items():
+        for key, value in self._build_env_vars(config, container_skill_paths).items():
             cmd.extend(["-e", f"{key}={value}"])
 
         # Add timeout

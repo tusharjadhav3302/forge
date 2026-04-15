@@ -201,14 +201,8 @@ class Settings(BaseSettings):
     )
     container_skill_paths: str = Field(
         default="",
-        description="Skill directories for container agent (empty = use agent_skill_paths)",
+        description="Skill directories for container agent (empty = no skills)",
     )
-
-    @property
-    def container_skills(self) -> str:
-        """Get skill paths for container, falling back to orchestrator skills."""
-        return self.container_skill_paths or self.agent_skill_paths
-
     agent_backend: str = Field(
         default="filesystem",
         description="Deep Agents backend type: filesystem, state, or store",
