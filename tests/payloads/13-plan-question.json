@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for Q&A flow",
+      "labels": ["forge:managed", "forge:plan-pending"]
+    }
+  },
+  "comment": {
+    "body": "?Why are the epics structured this way? Could we parallelize the first two?",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Engineering Manager"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Engineering Manager"
+  }
+}

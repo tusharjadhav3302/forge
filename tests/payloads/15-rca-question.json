@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-456",
+    "fields": {
+      "issuetype": {"name": "Bug"},
+      "status": {"name": "To Do"},
+      "summary": "Login fails with special characters in password",
+      "labels": ["forge:managed", "forge:rca-pending"]
+    }
+  },
+  "comment": {
+    "body": "?Are there any other input validation issues we should check while fixing this?",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Security Engineer"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Security Engineer"
+  }
+}

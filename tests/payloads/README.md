@@ -52,6 +52,55 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 | 8 | `08-task-revision-requested.json` | Comment with feedback | Tasks regenerated |
 | 9 | `09-task-approved.json` | Label change | Implementation starts |
 
+## Q&A Mode Payloads
+
+Ask questions about generated artifacts without triggering regeneration:
+
+| # | File | Description |
+|---|------|-------------|
+| 10 | `10-prd-question.json` | Question about PRD using `?` prefix |
+| 11 | `11-spec-question.json` | Question about Spec using `?` prefix |
+| 12 | `12-forge-ask-question.json` | Question using `@forge ask` syntax |
+| 13 | `13-plan-question.json` | Question about Epic plan using `?` prefix |
+| 14 | `14-task-question.json` | Question about Tasks using `@Forge Ask` syntax |
+| 15 | `15-rca-question.json` | Question about Bug RCA using `?` prefix |
+
+```bash
+# Ask a question about the PRD (stays paused, no regeneration)
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/10-prd-question.json
+
+# Ask a question about the Spec
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/11-spec-question.json
+
+# Use @forge ask syntax
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/12-forge-ask-question.json
+
+# Ask about epic plan structure
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/13-plan-question.json
+
+# Ask about task testing strategy
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/14-task-question.json
+
+# Ask about bug RCA (Bug workflow)
+curl -X POST http://localhost:8000/api/v1/webhooks/jira \
+  -H "Content-Type: application/json" \
+  -d @tests/payloads/15-rca-question.json
+```
+
+Questions are detected by:
+- Starting with `?` (e.g., `?Why did you choose this approach?`)
+- Starting with `@forge ask` (case-insensitive, e.g., `@forge ask explain the auth flow`)
+
 ## Label Reference
 
 | Stage | Pending | Approved |

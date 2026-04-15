@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for Q&A flow",
+      "labels": ["forge:managed", "forge:task-pending"]
+    }
+  },
+  "comment": {
+    "body": "@Forge Ask what testing strategy will be used for the database migration task?",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "QA Lead"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "QA Lead"
+  }
+}

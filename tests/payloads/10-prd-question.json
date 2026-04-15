@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for Q&A flow",
+      "labels": ["forge:managed", "forge:prd-pending"]
+    }
+  },
+  "comment": {
+    "body": "?Why did you choose a microservices architecture instead of a monolith for this feature?",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Product Manager"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Product Manager"
+  }
+}

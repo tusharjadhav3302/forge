@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for Q&A flow",
+      "labels": ["forge:managed", "forge:spec-pending"]
+    }
+  },
+  "comment": {
+    "body": "?How does the error handling work in the authentication flow?",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Tech Lead"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Tech Lead"
+  }
+}

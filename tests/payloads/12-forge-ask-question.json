@@ -1,0 +1,23 @@
+{
+  "webhookEvent": "comment_created",
+  "issue": {
+    "key": "TEST-123",
+    "fields": {
+      "issuetype": {"name": "Feature"},
+      "status": {"name": "To Do"},
+      "summary": "Test feature for Q&A flow",
+      "labels": ["forge:managed", "forge:prd-pending"]
+    }
+  },
+  "comment": {
+    "body": "@forge ask can you explain the rationale behind using Redis instead of PostgreSQL for session storage?",
+    "author": {
+      "accountId": "reviewer-456",
+      "displayName": "Product Manager"
+    }
+  },
+  "user": {
+    "accountId": "reviewer-456",
+    "displayName": "Product Manager"
+  }
+}
