@@ -39,6 +39,11 @@ class FeatureState(
     parallel_branch_id: int | None
     parallel_total_branches: int | None
 
+    # Q&A mode
+    qa_history: list[dict[str, str]]  # List of {question, answer, artifact_type, timestamp}
+    generation_context: dict[str, Any]  # Stored context from generation
+    is_question: bool  # Current comment is a question (not feedback)
+
 
 def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState:
     """Create initial state for a new Feature workflow run."""
@@ -87,6 +92,9 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "revision_requested": False,
         "messages": [],
         "context": {},
+        "qa_history": [],
+        "generation_context": {},
+        "is_question": False,
     }
 
     # Merge with kwargs, letting kwargs override defaults

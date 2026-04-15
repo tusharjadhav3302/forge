@@ -23,6 +23,11 @@ class BugState(
     rca_content: str | None
     bug_fix_implemented: bool
 
+    # Q&A mode
+    qa_history: list[dict[str, str]]  # List of {question, answer, artifact_type, timestamp}
+    generation_context: dict[str, Any]  # Stored context from generation
+    is_question: bool  # Current comment is a question (not feedback)
+
 
 def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
     """Create initial state for a new Bug workflow run."""
@@ -61,6 +66,9 @@ def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
         "revision_requested": False,
         "messages": [],
         "context": {},
+        "qa_history": [],
+        "generation_context": {},
+        "is_question": False,
     }
 
     # Merge with kwargs, letting kwargs override defaults
