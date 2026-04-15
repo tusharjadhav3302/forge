@@ -128,3 +128,59 @@ class TestPrdRevisionCycle:
         result = route_prd_approval(state_with_feedback)
 
         assert result == "regenerate_prd"
+
+
+class TestPrdQuestionRouting:
+    """Tests for Q&A routing in PRD approval gate."""
+
+    @pytest.fixture
+    def prd_pending_state(self):
+        """State with PRD pending."""
+        state = create_initial_state(
+            thread_id="test-thread",
+            ticket_key="TEST-123",
+            ticket_type=TicketType.FEATURE,
+        )
+        state["prd_content"] = "# PRD"
+        state["current_node"] = "prd_approval_gate"
+        state["is_paused"] = False
+        return state
+
+    def test_routes_to_answer_question_when_is_question(self, prd_pending_state):
+        """Questions route to answer_question node."""
+        prd_pending_state["is_question"] = True
+        prd_pending_state["feedback_comment"] = "?Why REST instead of GraphQL?"
+
+        result = route_prd_approval(prd_pending_state)
+
+        assert result == "answer_question"
+
+    def test_question_takes_priority_over_revision(self, prd_pending_state):
+        """Question routing takes priority over revision routing."""
+        prd_pending_state["is_question"] = True
+        prd_pending_state["revision_requested"] = True
+        prd_pending_state["feedback_comment"] = "?Why REST?"
+
+        result = route_prd_approval(prd_pending_state)
+
+        assert result == "answer_question"
+
+    def test_routes_to_regenerate_when_feedback_not_question(self, prd_pending_state):
+        """Normal feedback routes to regenerate."""
+        prd_pending_state["is_question"] = False
+        prd_pending_state["revision_requested"] = True
+        prd_pending_state["feedback_comment"] = "Add more detail about the API"
+
+        result = route_prd_approval(prd_pending_state)
+
+        assert result == "regenerate_prd"
+
+    def test_question_without_feedback_does_not_route_to_answer(self, prd_pending_state):
+        """is_question alone without feedback_comment doesn't route to answer."""
+        prd_pending_state["is_question"] = True
+        prd_pending_state["feedback_comment"] = ""
+
+        result = route_prd_approval(prd_pending_state)
+
+        # Should proceed to spec generation since not paused
+        assert result == "generate_spec"

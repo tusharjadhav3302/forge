@@ -43,6 +43,7 @@ def route_prd_approval(state: WorkflowState) -> str:
     """Route based on PRD approval status.
 
     This routing function determines the next node after PRD approval gate:
+    - If question (Q&A mode) -> answer_question
     - If feedback provided (revision requested) -> regenerate PRD
     - If still paused -> END (wait for next webhook to resume)
     - Otherwise (approved) -> proceed to spec generation
@@ -53,6 +54,11 @@ def route_prd_approval(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
+    # Check if this is a question (Q&A mode) - check FIRST
+    if state.get("is_question") and state.get("feedback_comment"):
+        logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
+        return "answer_question"
+
     # Check if revision was requested via comment
     if state.get("revision_requested") and state.get("feedback_comment"):
         logger.info(f"PRD revision requested for {state['ticket_key']}")

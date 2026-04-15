@@ -66,6 +66,7 @@ def route_task_approval(state: WorkflowState) -> str:
     """Route based on task approval status.
 
     Routing logic:
+    - Question (Q&A mode) -> answer_question
     - Comment on specific Task ticket -> update_single_task
     - Comment on Feature ticket -> regenerate_all_tasks
     - Label changed to approved -> task_router
@@ -78,6 +79,11 @@ def route_task_approval(state: WorkflowState) -> str:
         Next node name or END.
     """
     ticket_key = state["ticket_key"]
+
+    # Check if this is a question (Q&A mode) - check FIRST
+    if state.get("is_question") and state.get("feedback_comment"):
+        logger.info(f"Q&A mode: routing to answer_question for {ticket_key}")
+        return "answer_question"
 
     # Check if revision requested (feedback comment added)
     if state.get("revision_requested"):

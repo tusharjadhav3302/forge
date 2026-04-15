@@ -166,3 +166,61 @@ class TestPlanRevisionScenarios:
         result = route_plan_approval(state_with_epics)
 
         assert result == "update_single_epic"
+
+
+class TestPlanQuestionRouting:
+    """Tests for Q&A routing in Plan approval gate."""
+
+    @pytest.fixture
+    def plan_pending_state(self):
+        """State with Plan pending."""
+        state = create_initial_state(
+            thread_id="test-thread",
+            ticket_key="TEST-123",
+            ticket_type=TicketType.FEATURE,
+        )
+        state["prd_content"] = "# PRD"
+        state["spec_content"] = "# Spec"
+        state["epic_keys"] = ["TEST-124", "TEST-125"]
+        state["current_node"] = "plan_approval_gate"
+        state["is_paused"] = False
+        return state
+
+    def test_routes_to_answer_question_when_is_question(self, plan_pending_state):
+        """Questions route to answer_question node."""
+        plan_pending_state["is_question"] = True
+        plan_pending_state["feedback_comment"] = "?Why split into two epics?"
+
+        result = route_plan_approval(plan_pending_state)
+
+        assert result == "answer_question"
+
+    def test_question_takes_priority_over_revision(self, plan_pending_state):
+        """Question routing takes priority over revision routing."""
+        plan_pending_state["is_question"] = True
+        plan_pending_state["revision_requested"] = True
+        plan_pending_state["feedback_comment"] = "?What's the dependency order?"
+
+        result = route_plan_approval(plan_pending_state)
+
+        assert result == "answer_question"
+
+    def test_routes_to_regenerate_all_when_feedback_not_question(self, plan_pending_state):
+        """Normal feedback routes to regenerate all epics."""
+        plan_pending_state["is_question"] = False
+        plan_pending_state["revision_requested"] = True
+        plan_pending_state["feedback_comment"] = "Rethink the epic breakdown"
+
+        result = route_plan_approval(plan_pending_state)
+
+        assert result == "regenerate_all_epics"
+
+    def test_question_without_feedback_does_not_route_to_answer(self, plan_pending_state):
+        """is_question alone without feedback_comment doesn't route to answer."""
+        plan_pending_state["is_question"] = True
+        plan_pending_state["feedback_comment"] = ""
+
+        result = route_plan_approval(plan_pending_state)
+
+        # Should proceed to generate_tasks since not paused
+        assert result == "generate_tasks"

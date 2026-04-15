@@ -48,6 +48,11 @@ def route_spec_approval(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
+    # Check if this is a question (Q&A mode) - check FIRST
+    if state.get("is_question") and state.get("feedback_comment"):
+        logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
+        return "answer_question"
+
     # Check if revision was requested
     if state.get("revision_requested") and state.get("feedback_comment"):
         logger.info(f"Spec revision requested for {state['ticket_key']}")

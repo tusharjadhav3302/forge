@@ -66,6 +66,11 @@ def route_plan_approval(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
+    # Check if this is a question (Q&A mode) - check FIRST
+    if state.get("is_question") and state.get("feedback_comment"):
+        logger.info(f"Q&A mode: routing to answer_question for {state['ticket_key']}")
+        return "answer_question"
+
     # Check if revision requested
     if state.get("revision_requested"):
         feedback = state.get("feedback_comment", "")

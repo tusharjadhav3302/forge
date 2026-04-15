@@ -117,3 +117,60 @@ class TestSpecRevisionWithPrdContext:
         result = route_spec_approval(state_with_spec_feedback)
 
         assert result == "regenerate_spec"
+
+
+class TestSpecQuestionRouting:
+    """Tests for Q&A routing in Spec approval gate."""
+
+    @pytest.fixture
+    def spec_pending_state(self):
+        """State with Spec pending."""
+        state = create_initial_state(
+            thread_id="test-thread",
+            ticket_key="TEST-123",
+            ticket_type=TicketType.FEATURE,
+        )
+        state["prd_content"] = "# PRD"
+        state["spec_content"] = "# Spec"
+        state["current_node"] = "spec_approval_gate"
+        state["is_paused"] = False
+        return state
+
+    def test_routes_to_answer_question_when_is_question(self, spec_pending_state):
+        """Questions route to answer_question node."""
+        spec_pending_state["is_question"] = True
+        spec_pending_state["feedback_comment"] = "?Why did you choose this architecture?"
+
+        result = route_spec_approval(spec_pending_state)
+
+        assert result == "answer_question"
+
+    def test_question_takes_priority_over_revision(self, spec_pending_state):
+        """Question routing takes priority over revision routing."""
+        spec_pending_state["is_question"] = True
+        spec_pending_state["revision_requested"] = True
+        spec_pending_state["feedback_comment"] = "?What about security?"
+
+        result = route_spec_approval(spec_pending_state)
+
+        assert result == "answer_question"
+
+    def test_routes_to_regenerate_when_feedback_not_question(self, spec_pending_state):
+        """Normal feedback routes to regenerate."""
+        spec_pending_state["is_question"] = False
+        spec_pending_state["revision_requested"] = True
+        spec_pending_state["feedback_comment"] = "Add acceptance criteria"
+
+        result = route_spec_approval(spec_pending_state)
+
+        assert result == "regenerate_spec"
+
+    def test_question_without_feedback_does_not_route_to_answer(self, spec_pending_state):
+        """is_question alone without feedback_comment doesn't route to answer."""
+        spec_pending_state["is_question"] = True
+        spec_pending_state["feedback_comment"] = ""
+
+        result = route_spec_approval(spec_pending_state)
+
+        # Should proceed to decompose since not paused
+        assert result == "decompose_epics"
