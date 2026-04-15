@@ -127,6 +127,10 @@ class ContainerRunner:
         env["LLM_MODEL"] = self.settings.container_model
         env["LLM_MAX_TOKENS"] = str(self.settings.llm_max_tokens)
 
+        # Pass skill paths for agent (uses container-specific or falls back to orchestrator)
+        if self.settings.container_skills:
+            env["AGENT_SKILL_PATHS"] = self.settings.container_skills
+
         # Pass git configuration for commits
         env["GIT_USER_NAME"] = self.settings.git_user_name
         env["GIT_USER_EMAIL"] = self.settings.git_user_email

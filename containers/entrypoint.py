@@ -361,12 +361,26 @@ async def run_agent_task(
         # Load Context7 MCP tools for library documentation
         mcp_tools = await load_context7_tools()
 
+        # Parse skill paths from environment (comma-separated, relative to workspace)
+        skill_paths = []
+        skill_paths_env = os.environ.get("AGENT_SKILL_PATHS", "")
+        if skill_paths_env:
+            for path in skill_paths_env.split(","):
+                path = path.strip()
+                if path:
+                    # Ensure trailing slash for directory paths
+                    if not path.endswith("/"):
+                        path = f"{path}/"
+                    skill_paths.append(path)
+            logger.info(f"Agent skills: {skill_paths}")
+
         # Create and run the agent
         agent = create_deep_agent(
             model=model,
             backend=backend,
             system_prompt=system_prompt,
             tools=mcp_tools if mcp_tools else None,
+            skills=skill_paths if skill_paths else None,
         )
 
         # Set up Langfuse tracing if credentials are available

@@ -197,8 +197,18 @@ class Settings(BaseSettings):
     )
     agent_skill_paths: str = Field(
         default="plugins/forge-sdlc/skills/",
-        description="Comma-separated list of skill directories (relative to working dir)",
+        description="Comma-separated list of skill directories for orchestrator agent",
     )
+    container_skill_paths: str = Field(
+        default="",
+        description="Skill directories for container agent (empty = use agent_skill_paths)",
+    )
+
+    @property
+    def container_skills(self) -> str:
+        """Get skill paths for container, falling back to orchestrator skills."""
+        return self.container_skill_paths or self.agent_skill_paths
+
     agent_backend: str = Field(
         default="filesystem",
         description="Deep Agents backend type: filesystem, state, or store",
