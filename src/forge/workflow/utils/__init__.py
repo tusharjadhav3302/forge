@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from forge.workflow.utils.comment_classifier import CommentType, classify_comment
+from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 
 
 def update_state_timestamp(state: dict[str, Any]) -> dict[str, Any]:
@@ -73,6 +74,7 @@ def set_error(state: dict[str, Any], error: str) -> dict[str, Any]:
 __all__ = [
     "CommentType",
     "classify_comment",
+    "post_qa_summary_if_needed",
     "resume_state",
     "set_error",
     "set_paused",

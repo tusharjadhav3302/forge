@@ -10,6 +10,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,11 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
     prd_content = state.get("prd_content", "")
 
     logger.info(f"Generating specification for {ticket_key}")
+
+    # Post Q&A summary for PRD if any
+    qa_history = state.get("qa_history", [])
+    if qa_history:
+        await post_qa_summary_if_needed(ticket_key, qa_history, "prd")
 
     jira = JiraClient()
     agent = ForgeAgent()

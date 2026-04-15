@@ -9,6 +9,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workflow.utils.qa_summary import post_qa_summary_if_needed
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,11 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
     spec_content = state.get("spec_content", "")
 
     logger.info(f"Decomposing spec into Epics for {ticket_key}")
+
+    # Post Q&A summary for spec if any
+    qa_history = state.get("qa_history", [])
+    if qa_history:
+        await post_qa_summary_if_needed(ticket_key, qa_history, "spec")
 
     jira = JiraClient()
     agent = ForgeAgent()
