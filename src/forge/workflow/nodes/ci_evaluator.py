@@ -309,6 +309,8 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
             **state,
             "ci_status": "blocked",
             "current_node": "complete",
+            "generation_context": {},  # Clear - no longer needed
+            "qa_history": [],  # Clear - workflow ending
         })
 
     except Exception as e:

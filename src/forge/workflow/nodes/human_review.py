@@ -230,6 +230,8 @@ async def aggregate_feature_status(state: WorkflowState) -> WorkflowState:
             **state,
             "feature_completed": True,
             "current_node": "complete",
+            "generation_context": {},  # Clear - no longer needed
+            "qa_history": [],  # Clear - already posted as summary
         })
 
     except Exception as e:
