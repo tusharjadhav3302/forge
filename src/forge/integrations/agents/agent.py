@@ -116,7 +116,7 @@ class ForgeAgent:
                 # Gemini models via ChatGoogleGenerativeAI with Vertex AI backend
                 logger.info(
                     f"Creating ChatGoogleGenerativeAI (Gemini) model: {model} "
-                    f"in {self.settings.anthropic_vertex_region}"
+                    f"in {self.settings.anthropic_vertex_region}, max_output_tokens={self.settings.llm_max_tokens}"
                 )
                 return ChatGoogleGenerativeAI(
                     model=model,

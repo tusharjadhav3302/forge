@@ -317,27 +317,32 @@ async def run_agent_task(
         # Determine model type (Gemini vs Claude)
         is_gemini = model_name.lower().startswith(("gemini", "models/gemini"))
 
+        # Get max tokens from env (default 16384)
+        max_tokens = int(os.environ.get("LLM_MAX_TOKENS", "16384"))
+
         if vertex_project:
             if is_gemini:
                 # Gemini models via ChatGoogleGenerativeAI with Vertex AI backend
                 from langchain_google_genai import ChatGoogleGenerativeAI
 
-                logger.info(f"Using Gemini model: {model_name}")
+                logger.info(f"Using Gemini model: {model_name}, max_output_tokens={max_tokens}")
                 model = ChatGoogleGenerativeAI(
                     model=model_name,
                     project=vertex_project,
                     location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
                     vertexai=True,
+                    max_output_tokens=max_tokens,
                 )
             else:
                 # Claude models via ChatAnthropicVertex
                 from langchain_google_vertexai.model_garden import ChatAnthropicVertex
 
-                logger.info(f"Using Claude model: {model_name}")
+                logger.info(f"Using Claude model: {model_name}, max_tokens={max_tokens}")
                 model = ChatAnthropicVertex(
                     model_name=model_name,
                     project=vertex_project,
                     location=os.environ.get("ANTHROPIC_VERTEX_REGION", "us-east5"),
+                    max_tokens=max_tokens,
                 )
         else:
             if is_gemini:
@@ -346,9 +351,11 @@ async def run_agent_task(
 
             from langchain_anthropic import ChatAnthropic
 
+            logger.info(f"Using Claude model: {model_name}, max_tokens={max_tokens}")
             model = ChatAnthropic(
                 model=model_name,
                 api_key=api_key,
+                max_tokens=max_tokens,
             )
 
         # Load Context7 MCP tools for library documentation

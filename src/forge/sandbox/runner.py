@@ -125,6 +125,7 @@ class ContainerRunner:
         # Pass model configuration
         # Use container-specific model if configured, otherwise fall back to default
         env["LLM_MODEL"] = self.settings.container_model
+        env["LLM_MAX_TOKENS"] = str(self.settings.llm_max_tokens)
 
         # Pass git configuration for commits
         env["GIT_USER_NAME"] = self.settings.git_user_name
