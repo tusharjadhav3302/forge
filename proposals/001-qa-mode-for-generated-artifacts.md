@@ -2,7 +2,14 @@
 
 **Author:** eshulman2
 **Date:** 2026-04-14
-**Status:** Draft
+**Status:** Accepted
+
+## Open Questions (Resolved)
+
+- **How long to retain generation history?** Delete on workflow completion
+- **Store Q&A exchanges?** Yes, as structured Jira comment on approval
+- **Summarize Q&A option?** No (MVP)
+- **Prefix?** Support both `?` and `@forge ask`
 
 ## Summary
 
