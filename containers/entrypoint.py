@@ -361,7 +361,7 @@ async def run_agent_task(
         # Load Context7 MCP tools for library documentation
         mcp_tools = await load_context7_tools()
 
-        # Parse skill paths from environment (comma-separated, relative to workspace)
+        # Parse skill paths from environment (comma-separated)
         skill_paths = []
         skill_paths_env = os.environ.get("AGENT_SKILL_PATHS", "")
         if skill_paths_env:
@@ -372,6 +372,21 @@ async def run_agent_task(
                     if not path.endswith("/"):
                         path = f"{path}/"
                     skill_paths.append(path)
+
+        # Auto-discover skill directories in the workspace
+        # Check common locations for project-specific skills
+        workspace_skill_dirs = [
+            workspace / ".claude" / "skills",
+            workspace / ".agents" / "skills",
+        ]
+        for skill_dir in workspace_skill_dirs:
+            if skill_dir.is_dir():
+                skill_path = f"{skill_dir}/"
+                if skill_path not in skill_paths:
+                    skill_paths.append(skill_path)
+                    logger.info(f"Auto-discovered workspace skills: {skill_dir}")
+
+        if skill_paths:
             logger.info(f"Agent skills: {skill_paths}")
 
         # Create and run the agent
