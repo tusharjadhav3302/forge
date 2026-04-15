@@ -41,6 +41,7 @@ from forge.workflow.nodes.prd_generation import (
     generate_prd,
     regenerate_prd_with_feedback,
 )
+from forge.workflow.nodes.qa_handler import answer_question, extract_question_text
 from forge.workflow.nodes.spec_generation import (
     generate_spec,
     regenerate_spec_with_feedback,
@@ -117,4 +118,7 @@ __all__ = [
     "route_rca_approval",
     # Error handling
     "notify_error",
+    # Q&A handling
+    "answer_question",
+    "extract_question_text",
 ]
