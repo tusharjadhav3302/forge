@@ -123,6 +123,7 @@ class ForgeAgent:
                     project=self.settings.anthropic_vertex_project_id,
                     location=self.settings.anthropic_vertex_region,
                     vertexai=True,
+                    max_output_tokens=self.settings.llm_max_tokens,
                 )
             else:
                 # Claude models via ChatAnthropicVertex
@@ -134,6 +135,7 @@ class ForgeAgent:
                     model_name=model,
                     project=self.settings.anthropic_vertex_project_id,
                     location=self.settings.anthropic_vertex_region,
+                    max_tokens=self.settings.llm_max_tokens,
                 )
         else:
             if provider == "google":
@@ -145,6 +147,7 @@ class ForgeAgent:
             return ChatAnthropic(
                 model=model,
                 api_key=self.settings.anthropic_api_key.get_secret_value(),
+                max_tokens=self.settings.llm_max_tokens,
             )
 
     def _get_skill_paths(self) -> list[str]:

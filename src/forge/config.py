@@ -130,6 +130,10 @@ class Settings(BaseSettings):
         default="",
         description="Model for container tasks (empty = use llm_model)",
     )
+    llm_max_tokens: int = Field(
+        default=16384,
+        description="Maximum output tokens for LLM responses (default 16384)",
+    )
 
     @property
     def container_model(self) -> str:
