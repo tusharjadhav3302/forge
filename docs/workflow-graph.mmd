@@ -35,6 +35,7 @@ graph TD;
 	complete_tasks(complete_tasks)
 	aggregate_epic_status(aggregate_epic_status)
 	aggregate_feature_status(aggregate_feature_status)
+	answer_question(answer_question)
 	analyze_bug(analyze_bug)
 	rca_approval_gate(rca_approval_gate)
 	regenerate_rca(regenerate_rca)
@@ -71,12 +72,15 @@ graph TD;
 	plan_approval_gate -.-> generate_tasks;
 	plan_approval_gate -.-> regenerate_all_epics;
 	plan_approval_gate -.-> update_single_epic;
+	plan_approval_gate -.-> answer_question;
 	prd_approval_gate -.-> __end__;
 	prd_approval_gate -.-> generate_spec;
 	prd_approval_gate -.-> regenerate_prd;
+	prd_approval_gate -.-> answer_question;
 	rca_approval_gate -.-> __end__;
 	rca_approval_gate -.-> implement_bug_fix;
 	rca_approval_gate -.-> regenerate_rca;
+	rca_approval_gate -.-> answer_question;
 	regenerate_all_epics --> plan_approval_gate;
 	regenerate_all_tasks --> task_approval_gate;
 	regenerate_prd --> prd_approval_gate;
@@ -100,14 +104,21 @@ graph TD;
 	spec_approval_gate -.-> __end__;
 	spec_approval_gate -.-> decompose_epics;
 	spec_approval_gate -.-> regenerate_spec;
+	spec_approval_gate -.-> answer_question;
 	task_approval_gate -.-> __end__;
 	task_approval_gate -.-> regenerate_all_tasks;
 	task_approval_gate -.-> task_router;
 	task_approval_gate -.-> update_single_task;
+	task_approval_gate -.-> answer_question;
 	teardown_workspace -.-> ci_evaluator;
 	teardown_workspace -.-> setup_workspace;
 	update_single_epic --> plan_approval_gate;
 	update_single_task --> task_approval_gate;
+	answer_question -.-> prd_approval_gate;
+	answer_question -.-> spec_approval_gate;
+	answer_question -.-> plan_approval_gate;
+	answer_question -.-> task_approval_gate;
+	answer_question -.-> rca_approval_gate;
 	aggregate_feature_status --> __end__;
 	escalate_blocked --> __end__;
 	task_router --> __end__;

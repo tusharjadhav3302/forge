@@ -21,6 +21,7 @@ Forge listens for Jira and github webhooks and orchestrates a multi-stage workfl
 │  └──────────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘              │
 │                       │               │               │                     │
 │                  [Approval]      [Approval]      [Approval]                 │
+│                    ↕ Q&A           ↕ Q&A           ↕ Q&A                    │
 │                       │               │               │                     │
 │                       v               v               v                     │
 │                                                                              │
@@ -30,13 +31,15 @@ Forge listens for Jira and github webhooks and orchestrates a multi-stage workfl
 │  └────┬─────┘    └──────────┘    └──────────┘    └────┬─────┘              │
 │       │                                               │                     │
 │  [Approval]                                      [AI Review]                │
-│       │                                               │                     │
-│       v                                               v                     │
-│                                                  ┌──────────┐              │
+│    ↕ Q&A                                              │                     │
+│       │                                               v                     │
+│       v                                          ┌──────────┐              │
 │                                                  │  Human   │───> Done     │
 │                                                  │  Review  │              │
 │                                                  └──────────┘              │
 └─────────────────────────────────────────────────────────────────────────────┘
+
+Q&A: At any approval gate, ask questions with "?" or "@forge ask" prefix
 ```
 
 ## Quick Start
@@ -137,7 +140,7 @@ When a workflow fails:
 Bugs follow a simpler workflow:
 
 ```
-Create Bug → Analyze (RCA) → [Approval] → Implement Fix → PR → CI → Review → Done
+Create Bug → Analyze (RCA) → [Approval + Q&A] → Implement Fix → PR → CI → Review → Done
 ```
 
 ## Workflow Details
@@ -146,10 +149,10 @@ Create Bug → Analyze (RCA) → [Approval] → Implement Fix → PR → CI → 
 
 | Stage | What Happens | Human Action |
 |-------|--------------|--------------|
-| **PRD Generation** | AI transforms ticket description into structured PRD | Review PRD, approve or request changes |
-| **Spec Generation** | AI creates behavioral spec with Given/When/Then criteria | Review spec, approve or request changes |
-| **Epic Decomposition** | AI breaks feature into logical Epics with plans | Review epic structure, approve or request changes |
-| **Task Generation** | AI creates implementation Tasks per repository | Review tasks, approve or request changes |
+| **PRD Generation** | AI transforms ticket description into structured PRD | Review, ask questions (?), approve or request changes |
+| **Spec Generation** | AI creates behavioral spec with Given/When/Then criteria | Review, ask questions (?), approve or request changes |
+| **Epic Decomposition** | AI breaks feature into logical Epics with plans | Review, ask questions (?), approve or request changes |
+| **Task Generation** | AI creates implementation Tasks per repository | Review, ask questions (?), approve or request changes |
 | **Implementation** | Code executed in ephemeral containers | (Automatic) |
 | **PR Creation** | Pull request created with AI-generated description | (Automatic) |
 | **CI Validation** | Monitors CI, attempts autonomous fixes (up to 5 retries) | (Automatic) |
@@ -160,7 +163,7 @@ Create Bug → Analyze (RCA) → [Approval] → Implement Fix → PR → CI → 
 
 | Stage | What Happens | Human Action |
 |-------|--------------|--------------|
-| **RCA Analysis** | AI analyzes bug and generates root cause analysis | Review RCA, approve or request changes |
+| **RCA Analysis** | AI analyzes bug and generates root cause analysis | Review, ask questions (?), approve or request changes |
 | **Implementation** | Fix implemented in ephemeral container | (Automatic) |
 | **PR → CI → Review** | Same as Feature workflow | Merge or request changes |
 
