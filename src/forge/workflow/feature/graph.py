@@ -431,6 +431,7 @@ def build_feature_graph() -> StateGraph:
         {
             "generate_spec": "generate_spec",
             "regenerate_prd": "regenerate_prd",
+            "answer_question": "answer_question",  # Q&A mode
             END: END,  # Pause workflow until next webhook
         },
     )
@@ -451,6 +452,7 @@ def build_feature_graph() -> StateGraph:
         {
             "decompose_epics": "decompose_epics",
             "regenerate_spec": "regenerate_spec",
+            "answer_question": "answer_question",  # Q&A mode
             END: END,  # Pause workflow until next webhook
         },
     )
@@ -472,6 +474,7 @@ def build_feature_graph() -> StateGraph:
             "generate_tasks": "generate_tasks",
             "regenerate_all_epics": "regenerate_all_epics",
             "update_single_epic": "update_single_epic",
+            "answer_question": "answer_question",  # Q&A mode
             END: END,  # Pause workflow until next webhook
         },
     )
@@ -494,6 +497,7 @@ def build_feature_graph() -> StateGraph:
             "task_router": "task_router",
             "regenerate_all_tasks": "regenerate_all_tasks",  # Feature-level rejection
             "update_single_task": "update_single_task",  # Task-level rejection
+            "answer_question": "answer_question",  # Q&A mode
             END: END,  # Pause workflow until approval webhook
         },
     )

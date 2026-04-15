@@ -263,6 +263,7 @@ def build_bug_graph() -> StateGraph:
         {
             "implement_bug_fix": "setup_workspace",  # RCA approved, setup workspace
             "regenerate_rca": "regenerate_rca",
+            "answer_question": "answer_question",  # Q&A mode
             END: END,  # Pause workflow until approval webhook
         },
     )
