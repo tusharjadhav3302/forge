@@ -1044,6 +1044,48 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
 
         return epics
 
+    async def answer_question(
+        self,
+        question: str,
+        artifact_content: str,
+        context: dict[str, Any],
+    ) -> str:
+        """Answer a question about a generated artifact.
+
+        Args:
+            question: The user's question.
+            artifact_content: The content of the artifact being discussed.
+            context: Additional context including generation history.
+
+        Returns:
+            The answer to the question.
+        """
+        artifact_type = context.get("artifact_type", "document")
+        generation_context = context.get("generation_context", {})
+        raw_requirements = generation_context.get("raw_requirements", "Not available")
+
+        prompt = load_prompt(
+            "answer-question",
+            artifact_type=artifact_type,
+            artifact_content=artifact_content,
+            raw_requirements=raw_requirements,
+            question=question,
+        )
+
+        logger.info(f"Answering question about {artifact_type}")
+        result = await self.run_task(
+            task="answer-question",
+            prompt=prompt,
+            context={
+                "artifact_type": artifact_type,
+                "ticket_key": context.get("ticket_key", ""),
+            },
+            include_tools=False,  # Q&A doesn't need tools
+        )
+
+        logger.info(f"Generated answer ({len(result)} chars)")
+        return result.strip() if result else ""
+
     async def close(self) -> None:
         """Close the agent and cleanup resources."""
         pass
