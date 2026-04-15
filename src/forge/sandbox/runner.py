@@ -209,17 +209,15 @@ class ContainerRunner:
 
         return mounts, ",".join(container_paths)
 
-    def _build_podman_command(
+    def _build_container_name(
         self,
-        workspace_path: Path,
-        task_file: Path,
-        config: ContainerConfig,
         ticket_key: str | None = None,
         repo_name: str | None = None,
-    ) -> list[str]:
-        """Build the podman run command."""
-        # Build container name with ticket key and repo for easier identification
-        # Format: forge-{ticket}-{repo}-{pid} e.g., forge-AISOS-189-installer-12345
+    ) -> str:
+        """Build container name for identification.
+
+        Format: forge-{ticket}-{repo}-{pid} e.g., forge-AISOS-189-installer-12345
+        """
         name_parts = ["forge"]
         if ticket_key:
             name_parts.append(ticket_key)
@@ -228,7 +226,16 @@ class ContainerRunner:
             short_repo = repo_name.split("/")[-1] if "/" in repo_name else repo_name
             name_parts.append(short_repo)
         name_parts.append(str(os.getpid()))
-        container_name = "-".join(name_parts)
+        return "-".join(name_parts)
+
+    def _build_podman_command(
+        self,
+        workspace_path: Path,
+        task_file: Path,
+        config: ContainerConfig,
+        container_name: str,
+    ) -> list[str]:
+        """Build the podman run command."""
 
         cmd = [
             "podman",
@@ -338,12 +345,13 @@ class ContainerRunner:
         task_file.write_text(json.dumps(task_data, indent=2))
 
         try:
-            # Build command
+            # Build container name and command
+            container_name = self._build_container_name(ticket_key, repo_name)
             cmd = self._build_podman_command(
-                workspace_path, task_file, config, ticket_key, repo_name
+                workspace_path, task_file, config, container_name
             )
 
-            logger.info(f"Starting container for task: {task_summary}")
+            logger.info(f"Starting container {container_name} for task: {task_summary}")
             logger.debug(f"Command: {' '.join(cmd)}")
 
             # Run container
@@ -369,6 +377,27 @@ class ContainerRunner:
                     stderr="Container execution timed out",
                     error_message="Timeout exceeded",
                 )
+            except asyncio.CancelledError:
+                logger.warning(f"Container execution cancelled, stopping {container_name}")
+                # Stop the container via podman (more reliable than killing process)
+                stop_process = await asyncio.create_subprocess_exec(
+                    "podman", "stop", "-t", "10", container_name,
+                    stdout=asyncio.subprocess.DEVNULL,
+                    stderr=asyncio.subprocess.DEVNULL,
+                )
+                try:
+                    await asyncio.wait_for(stop_process.wait(), timeout=15.0)
+                except TimeoutError:
+                    logger.warning(f"Container {container_name} didn't stop, killing")
+                    kill_process = await asyncio.create_subprocess_exec(
+                        "podman", "kill", container_name,
+                        stdout=asyncio.subprocess.DEVNULL,
+                        stderr=asyncio.subprocess.DEVNULL,
+                    )
+                    await kill_process.wait()
+                # Wait for the original process to finish
+                await process.wait()
+                raise  # Re-raise CancelledError
 
             exit_code = process.returncode or 0
             stdout_str = stdout.decode("utf-8", errors="replace")
