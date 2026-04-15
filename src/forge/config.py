@@ -203,6 +203,10 @@ class Settings(BaseSettings):
         default="",
         description="Skill directories for container agent (empty = no skills)",
     )
+    container_langchain_verbose: bool = Field(
+        default=True,
+        description="Enable LangChain verbose/debug logging in container",
+    )
     agent_backend: str = Field(
         default="filesystem",
         description="Deep Agents backend type: filesystem, state, or store",

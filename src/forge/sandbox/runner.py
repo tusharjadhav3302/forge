@@ -153,9 +153,9 @@ class ContainerRunner:
         prompt_template = load_prompt("container-system")
         env["FORGE_SYSTEM_PROMPT_TEMPLATE"] = prompt_template
 
-        # Pass debug/verbose settings if set in host environment
-        if os.environ.get("LANGCHAIN_VERBOSE"):
-            env["LANGCHAIN_VERBOSE"] = os.environ["LANGCHAIN_VERBOSE"]
+        # Pass debug/verbose settings for container agent
+        if self.settings.container_langchain_verbose:
+            env["LANGCHAIN_VERBOSE"] = "true"
         if os.environ.get("LOG_LEVEL"):
             env["LOG_LEVEL"] = os.environ["LOG_LEVEL"]
 
