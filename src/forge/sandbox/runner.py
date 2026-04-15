@@ -26,7 +26,8 @@ from forge.prompts import load_prompt
 logger = logging.getLogger(__name__)
 
 # Default container image (can be overridden via CONTAINER_IMAGE env var)
-DEFAULT_IMAGE = "forge-dev:latest"
+# Use localhost/ prefix to avoid podman short-name resolution prompts
+DEFAULT_IMAGE = "localhost/forge-dev:latest"
 
 # Exit codes from entrypoint.py
 EXIT_SUCCESS = 0

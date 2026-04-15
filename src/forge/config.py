@@ -240,7 +240,7 @@ class Settings(BaseSettings):
 
     # Container Configuration
     container_image: str = Field(
-        default="forge-dev:latest",
+        default="localhost/forge-dev:latest",
         description="Container image for task execution (local or registry URL)",
     )
     container_timeout: int = Field(
