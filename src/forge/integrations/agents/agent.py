@@ -129,7 +129,7 @@ class ForgeAgent:
                 # Claude models via ChatAnthropicVertex
                 logger.info(
                     f"Creating ChatAnthropicVertex model: {model} "
-                    f"in {self.settings.anthropic_vertex_region}"
+                    f"in {self.settings.anthropic_vertex_region}, max_tokens={self.settings.llm_max_tokens}"
                 )
                 return ChatAnthropicVertex(
                     model_name=model,
@@ -143,7 +143,7 @@ class ForgeAgent:
                     f"Gemini model '{model}' requires Vertex AI. "
                     "Set ANTHROPIC_VERTEX_PROJECT_ID or use a Claude model."
                 )
-            logger.info(f"Creating ChatAnthropic model: {model}")
+            logger.info(f"Creating ChatAnthropic model: {model}, max_tokens={self.settings.llm_max_tokens}")
             return ChatAnthropic(
                 model=model,
                 api_key=self.settings.anthropic_api_key.get_secret_value(),
