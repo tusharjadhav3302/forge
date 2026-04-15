@@ -1,6 +1,7 @@
 """Specification generation node for LangGraph workflow."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from forge.config import get_settings
@@ -96,9 +97,17 @@ async def generate_spec(state: WorkflowState) -> WorkflowState:
 
         logger.info(f"Spec generated for {ticket_key} ({len(spec_content)} chars)")
 
+        # Store generation context for Q&A mode
+        generation_context = state.get("generation_context", {})
+        generation_context["spec"] = {
+            "prd_content": prd_content,
+            "generated_at": datetime.now(UTC).isoformat(),
+        }
+
         return update_state_timestamp({
             **state,
             "spec_content": spec_content,
+            "generation_context": generation_context,
             "current_node": "spec_approval_gate",
             "last_error": f"Jira update pending: {jira_error}" if jira_error else None,
         })

@@ -1,6 +1,7 @@
 """PRD generation node for LangGraph workflow."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 from forge.config import get_settings
@@ -87,10 +88,19 @@ async def generate_prd(state: WorkflowState) -> WorkflowState:
             f"PRD generated for {ticket_key} ({len(prd_content)} chars)"
         )
 
+        # Store generation context for Q&A mode
+        generation_context = state.get("generation_context", {})
+        generation_context["prd"] = {
+            "raw_requirements": raw_requirements,
+            "summary": issue.summary,
+            "generated_at": datetime.now(UTC).isoformat(),
+        }
+
         # If Jira failed, set a warning but still advance (content exists)
         return update_state_timestamp({
             **state,
             "prd_content": prd_content,
+            "generation_context": generation_context,
             "current_node": "prd_approval_gate",
             "last_error": f"Jira update pending: {jira_error}" if jira_error else None,
         })
