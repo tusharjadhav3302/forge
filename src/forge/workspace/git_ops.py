@@ -176,14 +176,28 @@ class GitOperations:
             f"from {base_branch}"
         )
 
-    def checkout_branch(self, branch_name: str | None = None) -> None:
-        """Checkout an existing branch.
+    def checkout_branch(
+        self, branch_name: str | None = None, remote: str = "origin"
+    ) -> None:
+        """Checkout an existing branch, tracking the remote if needed.
+
+        On a fresh clone the branch may only exist on the remote. This
+        method tries a plain checkout first (works when the local branch
+        already exists) and falls back to ``-b branch remote/branch`` so
+        the remote tracking branch is set up correctly.
 
         Args:
             branch_name: Branch to checkout. Uses workspace branch if None.
+            remote: Remote to track when creating the local branch (default: "origin").
         """
         branch = branch_name or self.workspace.branch_name
-        self._run_git("checkout", branch)
+
+        # Try a plain checkout; if the branch doesn't exist locally yet,
+        # create it tracking the specified remote.
+        result = self._run_git("checkout", branch, check=False)
+        if result.returncode != 0:
+            self._run_git("checkout", "-b", branch, f"{remote}/{branch}")
+
         logger.info(f"Checked out branch {branch}")
 
     def stage_all(self) -> None:
@@ -222,6 +236,21 @@ class GitOperations:
         )
         logger.info(f"Committed: {message[:50]}...")
         return True
+
+    def remote_branch_exists(self, branch_name: str, remote: str = "origin") -> bool:
+        """Check whether a branch exists on the given remote.
+
+        Args:
+            branch_name: Branch name to check.
+            remote: Remote name to query (default: "origin").
+
+        Returns:
+            True if the branch exists on the remote.
+        """
+        result = self._run_git(
+            "ls-remote", "--heads", remote, branch_name, check=False
+        )
+        return bool(result.stdout.strip())
 
     def check_for_conflicts(self, target_branch: str = "main") -> tuple[bool, list[str]]:
         """Check if pushing would cause conflicts with remote.

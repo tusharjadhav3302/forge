@@ -206,6 +206,8 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
             "pr_urls": pr_urls,
             "current_pr_url": pr_url,
             "current_pr_number": pr_number,
+            "fork_owner": fork_owner,
+            "fork_repo": fork_repo,
             "current_node": "teardown_workspace",
             "last_error": None,
         })
@@ -437,9 +439,9 @@ async def teardown_and_route(state: WorkflowState) -> WorkflowState:
             "current_node": "setup_workspace",
         })
 
-    # All repos done
+    # All repos done — pause until GitHub delivers CI webhook
     return update_state_timestamp({
         **state,
         "repos_completed": repos_completed,
-        "current_node": "ci_evaluator",
+        "current_node": "wait_for_ci_gate",
     })

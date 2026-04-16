@@ -90,8 +90,28 @@ async def setup_workspace(state: WorkflowState) -> WorkflowState:
         git.clone()
         logger.info(f"Clone completed successfully for {current_repo}")
 
-        # Create feature branch
-        git.create_branch()
+        # Set up feature branch.
+        # If the workflow already created a PR (fork_owner/fork_repo in state),
+        # the branch lives on the fork. Add the fork remote, check whether the
+        # branch exists there, and check it out so we don't lose history.
+        fork_owner = state.get("fork_owner", "")
+        fork_repo_name = state.get("fork_repo", "")
+
+        if fork_owner and fork_repo_name:
+            git.add_fork_remote(fork_owner, fork_repo_name)
+            branch_exists_on_fork = git.remote_branch_exists(
+                workspace.branch_name, remote="fork"
+            )
+            if branch_exists_on_fork:
+                logger.info(
+                    f"Branch '{workspace.branch_name}' exists on fork "
+                    f"{fork_owner}/{fork_repo_name} — checking it out"
+                )
+                git.checkout_branch(workspace.branch_name, remote="fork")
+            else:
+                git.create_branch()
+        else:
+            git.create_branch()
 
         # Create .forge directory for task handoff
         forge_dir = workspace.path / ".forge"
