@@ -43,6 +43,7 @@ from forge.workflow.nodes import (
     setup_workspace,
     teardown_and_route,
     update_single_epic,
+    wait_for_ci_gate,
 )
 from forge.workflow.nodes.ai_reviewer import review_code
 from forge.workflow.nodes.qa_handler import answer_question
@@ -92,6 +93,9 @@ def route_by_ticket_type(state: FeatureState) -> str:
             return "generate_tasks"
         elif current_node == "task_approval_gate":
             return "task_approval_gate"
+        # CI gate pauses here waiting for GitHub webhook
+        elif current_node == "wait_for_ci_gate":
+            return "wait_for_ci_gate"
         # CI/review stages that wait for external events - resume directly
         elif current_node in ("ci_evaluator", "attempt_ci_fix"):
             return "ci_evaluator"
@@ -264,7 +268,7 @@ def _route_after_pr_creation(
     return "teardown_workspace"
 
 
-def _route_after_teardown(state: FeatureState) -> Literal["setup_workspace", "ci_evaluator"]:
+def _route_after_teardown(state: FeatureState) -> Literal["setup_workspace", "wait_for_ci_gate"]:
     """Route after workspace teardown."""
     repos_to_process = state.get("repos_to_process", [])
     repos_completed = state.get("repos_completed", [])
@@ -272,7 +276,7 @@ def _route_after_teardown(state: FeatureState) -> Literal["setup_workspace", "ci
     remaining = [r for r in repos_to_process if r not in repos_completed]
     if remaining:
         return "setup_workspace"
-    return "ci_evaluator"
+    return "wait_for_ci_gate"
 
 
 def _route_ci_evaluation(
@@ -380,6 +384,7 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("teardown_workspace", teardown_and_route)
 
     # CI/CD Validation nodes (US7)
+    graph.add_node("wait_for_ci_gate", wait_for_ci_gate)
     graph.add_node("ci_evaluator", evaluate_ci_status)
     graph.add_node("attempt_ci_fix", attempt_ci_fix)
     graph.add_node("escalate_blocked", escalate_to_blocked)
@@ -417,6 +422,7 @@ def build_feature_graph() -> StateGraph:
             # Resume routing for Feature workflow - execution stages
             "task_router": "task_router",
             # Resume routing for CI/review stages that wait for external events
+            "wait_for_ci_gate": "wait_for_ci_gate",
             "ci_evaluator": "ci_evaluator",
             "ai_review": "ai_review",
             "human_review_gate": "human_review_gate",
@@ -547,11 +553,16 @@ def build_feature_graph() -> StateGraph:
         _route_after_teardown,
         {
             "setup_workspace": "setup_workspace",
-            "ci_evaluator": "ci_evaluator",
+            "wait_for_ci_gate": "wait_for_ci_gate",
         },
     )
 
     # CI/CD flow (US7)
+    graph.add_conditional_edges(
+        "wait_for_ci_gate",
+        lambda s: END if s.get("is_paused") else "ci_evaluator",
+        {END: END, "ci_evaluator": "ci_evaluator"},
+    )
     graph.add_conditional_edges(
         "ci_evaluator",
         _route_ci_evaluation,
@@ -559,10 +570,14 @@ def build_feature_graph() -> StateGraph:
             "ai_review": "ai_review",
             "attempt_ci_fix": "attempt_ci_fix",
             "escalate_blocked": "escalate_blocked",
-            END: END,  # Pause workflow until CI webhook
+            END: END,  # Pause: CI still running, wait for next webhook
         },
     )
-    graph.add_edge("attempt_ci_fix", "ci_evaluator")
+    graph.add_conditional_edges(
+        "attempt_ci_fix",
+        lambda s: s.get("current_node", "wait_for_ci_gate"),
+        {"wait_for_ci_gate": "wait_for_ci_gate", "escalate_blocked": "escalate_blocked"},
+    )
     graph.add_edge("escalate_blocked", END)
 
     # AI Review flow (US8)

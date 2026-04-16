@@ -16,6 +16,7 @@ from forge.workflow.nodes.ci_evaluator import (
     attempt_ci_fix,
     escalate_to_blocked,
     evaluate_ci_status,
+    wait_for_ci_gate,
 )
 from forge.workflow.nodes.epic_decomposition import (
     check_all_epics_approved,
@@ -99,6 +100,7 @@ __all__ = [
     "attempt_ci_fix",
     "escalate_to_blocked",
     "evaluate_ci_status",
+    "wait_for_ci_gate",
     # AI review
     "check_constitution_compliance",
     "check_spec_alignment",

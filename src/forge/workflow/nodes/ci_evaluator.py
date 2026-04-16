@@ -1,6 +1,5 @@
 """CI/CD evaluator node for monitoring and responding to CI results."""
 
-import asyncio
 import logging
 from typing import Any
 
@@ -42,14 +41,6 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             "ci_status": "no_prs",
             "current_node": "complete",
         })
-
-    # On initial check or after CI fix, wait for GitHub to register/update checks
-    # GitHub Actions can take 30-60 seconds to start check runs
-    ci_status = state.get("ci_status")
-    if ci_status in (None, "", "fixing"):
-        ci_startup_delay = 75
-        logger.info(f"Waiting {ci_startup_delay}s for GitHub to start CI checks for {ticket_key}")
-        await asyncio.sleep(ci_startup_delay)
 
     logger.info(f"Evaluating CI status for {ticket_key}")
 
@@ -188,12 +179,17 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         # Collect error information
         error_info = _collect_error_info(failed_checks)
 
-        # If we don't have a workspace, we need to set one up
+        # If we don't have a workspace, escalate — workspace may have been lost
+        # (e.g. machine restart). Use forge:retry on the ticket to re-run.
         if not workspace_path:
-            logger.warning("No workspace available for CI fix")
+            logger.warning(f"No workspace available for CI fix on {ticket_key}")
             return update_state_timestamp({
                 **state,
-                "current_node": "setup_workspace",
+                "last_error": (
+                    "Workspace not available for CI fix — it may have been deleted "
+                    "(e.g. after a restart). Add the forge:retry label to re-run."
+                ),
+                "current_node": "escalate_blocked",
             })
 
         # Generate fix using Deep Agents
@@ -234,9 +230,10 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         else:
             logger.warning("No files modified by CI fix")
 
+        # Fix pushed — pause and wait for GitHub to re-run CI
         return update_state_timestamp({
             **state,
-            "current_node": "ci_evaluator",
+            "current_node": "wait_for_ci_gate",
             "last_error": None,
         })
 
@@ -247,10 +244,44 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(e),
-            "current_node": "ci_evaluator",
+            "current_node": "escalate_blocked",
         }
     finally:
         await github.close()
+
+
+async def wait_for_ci_gate(state: WorkflowState) -> WorkflowState:
+    """Pause the workflow until a GitHub CI webhook arrives.
+
+    Inserted after PR creation and after each CI fix push. The workflow
+    resumes when GitHub sends a check_run or check_suite webhook, at which
+    point ci_evaluator re-checks the actual CI results without any
+    polling delay.
+
+    Args:
+        state: Current workflow state.
+
+    Returns:
+        Updated state with is_paused=True.
+    """
+    ticket_key = state["ticket_key"]
+    ci_fix_attempts = state.get("ci_fix_attempts", 0)
+
+    if ci_fix_attempts > 0:
+        logger.info(
+            f"Pausing {ticket_key} after CI fix attempt {ci_fix_attempts}, "
+            "waiting for GitHub CI webhook"
+        )
+    else:
+        logger.info(
+            f"Pausing {ticket_key} after PR creation, waiting for GitHub CI webhook"
+        )
+
+    return update_state_timestamp({
+        **state,
+        "is_paused": True,
+        "current_node": "wait_for_ci_gate",
+    })
 
 
 async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
