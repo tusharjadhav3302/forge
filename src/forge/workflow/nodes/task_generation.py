@@ -51,20 +51,37 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
     tasks_by_repo: dict[str, list[str]] = {}
     # Track created tasks to provide context for subsequent epics (avoid duplication)
     created_tasks_context: list[dict[str, str]] = []
+    # Pre-fetch all epic details so each epic can see its siblings' plans
+    all_epics_details: list[dict[str, str]] = []
     jira_error = None
+
+    spec_content = state.get("spec_content", "")
 
     try:
         # Get project key from parent Feature
         parent_issue = await jira.get_issue(ticket_key)
         project_key = parent_issue.project_key
 
+        # Pre-fetch all epic details upfront for sibling context
+        for ek in epic_keys:
+            try:
+                epic_issue = await jira.get_issue(ek)
+                all_epics_details.append({
+                    "epic_key": ek,
+                    "epic_summary": epic_issue.summary,
+                    "epic_plan": epic_issue.description or "",
+                })
+            except Exception as e:
+                logger.warning(f"Failed to pre-fetch Epic {ek}: {e}")
+                all_epics_details.append({"epic_key": ek, "epic_summary": ek, "epic_plan": ""})
+
         for epic_key in epic_keys:
             logger.info(f"Generating Tasks for Epic {epic_key}")
 
-            # Get Epic details
-            epic_issue = await jira.get_issue(epic_key)
-            epic_plan = epic_issue.description or ""
-            epic_summary = epic_issue.summary
+            # Get Epic details from pre-fetched data
+            epic_detail = next((e for e in all_epics_details if e["epic_key"] == epic_key), {})
+            epic_plan = epic_detail.get("epic_plan", "")
+            epic_summary = epic_detail.get("epic_summary", epic_key)
 
             if not epic_plan.strip():
                 logger.warning(f"Epic {epic_key} has no implementation plan")
@@ -87,10 +104,14 @@ async def generate_tasks(state: WorkflowState) -> WorkflowState:
                 "epic_repo": epic_repo,
             }
 
+            # Sibling epics = all epics except the current one
+            sibling_epics = [e for e in all_epics_details if e["epic_key"] != epic_key]
+
             # Generate Tasks using Deep Agents - primary operation
-            # Pass existing tasks from previous epics to avoid duplication
             tasks_data = await _generate_tasks_for_epic(
                 agent, epic_plan, epic_summary, context,
+                spec_content=spec_content,
+                sibling_epics=sibling_epics if sibling_epics else None,
                 existing_tasks=created_tasks_context if created_tasks_context else None,
             )
 
@@ -207,6 +228,8 @@ async def _generate_tasks_for_epic(
     epic_plan: str,
     epic_summary: str,
     context: dict[str, Any],
+    spec_content: str = "",
+    sibling_epics: list[dict[str, str]] | None = None,
     existing_tasks: list[dict[str, str]] | None = None,
 ) -> list[dict[str, str]]:
     """Generate Tasks for a single Epic.
@@ -216,18 +239,22 @@ async def _generate_tasks_for_epic(
         epic_plan: Epic implementation plan.
         epic_summary: Epic title/summary.
         context: Additional context.
+        spec_content: Full approved specification for the feature.
+        sibling_epics: Other epics in this feature (summary + plan) for context.
         existing_tasks: Tasks already created for sibling epics (to avoid duplication).
 
     Returns:
         List of Task dicts with summary, description, repo.
     """
-    # Build existing tasks section for prompt
     existing_tasks_section = _format_existing_tasks(existing_tasks)
+    sibling_epics_section = _format_sibling_epics(sibling_epics)
 
     prompt = load_prompt(
         "generate-tasks",
         epic_summary=epic_summary,
         epic_plan=epic_plan,
+        spec_content=spec_content[:4000] if spec_content else "Not available.",
+        sibling_epics_section=sibling_epics_section,
         existing_tasks_section=existing_tasks_section,
     )
 
@@ -238,6 +265,32 @@ async def _generate_tasks_for_epic(
     )
 
     return _parse_tasks_response(result)
+
+
+def _format_sibling_epics(sibling_epics: list[dict[str, str]] | None) -> str:
+    """Format sibling epics for prompt context.
+
+    Args:
+        sibling_epics: List of dicts with epic_key, epic_summary, epic_plan.
+
+    Returns:
+        Formatted string, or empty string if no siblings.
+    """
+    if not sibling_epics:
+        return "None — this is the only Epic in the feature."
+
+    lines = []
+    for epic in sibling_epics:
+        key = epic.get("epic_key", "")
+        summary = epic.get("epic_summary", "")
+        plan = epic.get("epic_plan", "")
+        lines.append(f"### {key}: {summary}")
+        if plan:
+            # Include up to 500 chars of each sibling plan to keep prompt size reasonable
+            lines.append(plan[:500] + ("..." if len(plan) > 500 else ""))
+        lines.append("")
+
+    return "\n".join(lines)
 
 
 def _format_existing_tasks(existing_tasks: list[dict[str, str]] | None) -> str:

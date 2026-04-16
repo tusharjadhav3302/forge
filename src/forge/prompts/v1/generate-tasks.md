@@ -1,18 +1,29 @@
-Please break down the following Epic into implementation Tasks:
+Please break down the following Epic into implementation Tasks.
+
+## Specification
+
+{spec_content}
+
+## Full Epic Plan
 
 EPIC: {epic_summary}
 
-IMPLEMENTATION PLAN:
 {epic_plan}
+
+## Other Epics in This Feature
+
+{sibling_epics_section}
+
+## Already Created Tasks (from other Epics)
 
 {existing_tasks_section}
 
 Generate 3-8 concrete Tasks that can be completed in 2-8 hours each.
 
-## Avoiding Duplication
+## Guidance
 
-If existing tasks are listed above:
-- Do NOT create tasks that duplicate work already assigned to other Epics
+- Use the Specification above to ensure tasks cover all acceptance criteria relevant to this Epic
+- Use the Other Epics section to understand what neighbouring Epics are responsible for — do not duplicate their work
 - Cross-cutting concerns (e.g., "add tests", "update docs") should only appear once across all Epics
 - If this Epic needs integration with work from another Epic, reference it rather than recreating it
 
