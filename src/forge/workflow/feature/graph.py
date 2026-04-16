@@ -92,7 +92,14 @@ def route_by_ticket_type(state: FeatureState) -> str:
             return "generate_tasks"
         elif current_node == "task_approval_gate":
             return "task_approval_gate"
-        # Execution stages (implementation, PR, CI, review) - route to task_router
+        # CI/review stages that wait for external events - resume directly
+        elif current_node in ("ci_evaluator", "attempt_ci_fix"):
+            return "ci_evaluator"
+        elif current_node == "ai_review":
+            return "ai_review"
+        elif current_node == "human_review_gate":
+            return "human_review_gate"
+        # Execution stages (implementation, PR) - re-route through task_router
         elif current_node in (
             "task_router",
             "setup_workspace",
@@ -100,10 +107,6 @@ def route_by_ticket_type(state: FeatureState) -> str:
             "implementation",
             "create_pr",
             "teardown_workspace",
-            "ci_evaluator",
-            "attempt_ci_fix",
-            "ai_review",
-            "human_review_gate",
             "blocked",
             "escalate_blocked",
         ):
@@ -413,6 +416,10 @@ def build_feature_graph() -> StateGraph:
             "task_approval_gate": "task_approval_gate",
             # Resume routing for Feature workflow - execution stages
             "task_router": "task_router",
+            # Resume routing for CI/review stages that wait for external events
+            "ci_evaluator": "ci_evaluator",
+            "ai_review": "ai_review",
+            "human_review_gate": "human_review_gate",
         },
     )
 

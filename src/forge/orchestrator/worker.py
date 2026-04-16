@@ -159,15 +159,25 @@ class OrchestratorWorker:
                     and existing_state.values.get("last_error") is not None
                 )
 
-                if was_errored:
-                    # For error retry: invoke fresh with updated state
-                    # This allows route_by_ticket_type to route to the correct node
+                # Nodes that wait for external events (CI webhooks, human review)
+                # must be re-invoked fresh so route_by_ticket_type re-runs them.
+                # ainvoke(None) only replays the routing edge after the node, not
+                # the node itself, so CI status would never be re-checked.
+                needs_fresh_invoke = updated_values.get("current_node") in (
+                    "ci_evaluator",
+                    "attempt_ci_fix",
+                    "ai_review",
+                    "human_review_gate",
+                )
+
+                if was_errored or needs_fresh_invoke:
                     logger.info(
-                        f"Retrying workflow from error at {updated_values.get('current_node')}"
+                        f"{'Retrying' if was_errored else 'Re-invoking'} workflow "
+                        f"from {updated_values.get('current_node')}"
                     )
                     result = await compiled_workflow.ainvoke(updated_values, config=config)
                 else:
-                    # For normal resume (paused at gate): update state and continue
+                    # For normal resume (paused at approval gate): update state and continue
                     await compiled_workflow.aupdate_state(config, updated_values)
                     result = await compiled_workflow.ainvoke(None, config=config)
             else:
