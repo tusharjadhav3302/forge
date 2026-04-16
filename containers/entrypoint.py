@@ -318,12 +318,12 @@ async def run_agent_task(
 
         # Create the agent with local shell backend (enables git commands)
         # virtual_mode=False: we want real filesystem access, not virtual paths
-        # timeout=240: allow longer commands (default 120s too short for large project builds)
+        # timeout=600: 10 minutes — allows long builds, test suites, and codegen
         backend = LocalShellBackend(
             root_dir=str(workspace),
             inherit_env=True,
             virtual_mode=False,
-            timeout=240,
+            timeout=600,
         )
 
         # Build system prompt from template
