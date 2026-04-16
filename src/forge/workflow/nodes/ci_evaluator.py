@@ -174,6 +174,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     settings = get_settings()
     github = GitHubClient()
     agent = ForgeAgent(settings)
+    fork_owner = state.get("fork_owner", "")
+    fork_repo = state.get("fork_repo", "")
 
     try:
         # Collect error information
@@ -225,8 +227,17 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         if files_modified > 0:
             git.stage_all()
             git.commit(f"[{ticket_key}] Fix CI failures (attempt)")
-            git.push(force=False)
-            logger.info(f"CI fix applied for {ticket_key}")
+
+            # Push to fork (same remote as the original PR), not to origin
+            if fork_owner and fork_repo:
+                git.add_fork_remote(fork_owner, fork_repo)
+                git.push_to_fork(force=False)
+            else:
+                # Fallback if fork info is missing (shouldn't happen in normal flow)
+                logger.warning("Fork info not in state — pushing to origin instead")
+                git.push(force=False)
+
+            logger.info(f"CI fix applied and pushed for {ticket_key}")
         else:
             logger.warning("No files modified by CI fix")
 

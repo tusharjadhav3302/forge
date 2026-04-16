@@ -180,7 +180,6 @@ class OrchestratorWorker:
                 needs_fresh_invoke = updated_values.get("current_node") in (
                     "ci_evaluator",
                     "attempt_ci_fix",
-                    "ai_review",
                     "human_review_gate",
                 )
 

@@ -34,6 +34,7 @@ from forge.workflow.nodes.human_review import (
     route_human_review,
 )
 from forge.workflow.nodes.implementation import implement_task
+from forge.workflow.nodes.local_reviewer import local_review_changes
 from forge.workflow.nodes.pr_creation import (
     create_pull_request,
     teardown_and_route,
@@ -101,6 +102,8 @@ __all__ = [
     "escalate_to_blocked",
     "evaluate_ci_status",
     "wait_for_ci_gate",
+    # Local code review
+    "local_review_changes",
     # AI review
     "check_constitution_compliance",
     "check_spec_alignment",

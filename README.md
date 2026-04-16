@@ -154,9 +154,9 @@ Create Bug → Analyze (RCA) → [Approval + Q&A] → Implement Fix → PR → C
 | **Epic Decomposition** | AI breaks feature into logical Epics with plans | Review, ask questions (?), approve or request changes |
 | **Task Generation** | AI creates implementation Tasks per repository | Review, ask questions (?), approve or request changes |
 | **Implementation** | Code executed in ephemeral containers | (Automatic) |
+| **Local Code Review** | AI reviews local diff for breaking issues and fixes them in-place (up to 2 passes) before PR creation | (Automatic) |
 | **PR Creation** | Pull request created with AI-generated description | (Automatic) |
 | **CI Validation** | Monitors CI, attempts autonomous fixes (up to 5 retries) | (Automatic) |
-| **AI Review** | AI reviews code for quality and spec compliance | (Automatic) |
 | **Human Review** | PR ready for human review | Merge or request changes |
 
 ### Bug Workflow Stages

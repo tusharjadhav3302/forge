@@ -34,6 +34,7 @@ from forge.workflow.nodes import (
     generate_tasks,
     human_review_gate,
     implement_task,
+    local_review_changes,
     regenerate_all_epics,
     regenerate_prd_with_feedback,
     regenerate_spec_with_feedback,
@@ -45,7 +46,6 @@ from forge.workflow.nodes import (
     update_single_epic,
     wait_for_ci_gate,
 )
-from forge.workflow.nodes.ai_reviewer import review_code
 from forge.workflow.nodes.qa_handler import answer_question
 from forge.workflow.nodes.task_generation import regenerate_all_tasks, update_single_task
 
@@ -93,14 +93,15 @@ def route_by_ticket_type(state: FeatureState) -> str:
             return "generate_tasks"
         elif current_node == "task_approval_gate":
             return "task_approval_gate"
+        # Local review runs before PR creation
+        elif current_node == "local_review":
+            return "local_review"
         # CI gate pauses here waiting for GitHub webhook
         elif current_node == "wait_for_ci_gate":
             return "wait_for_ci_gate"
         # CI/review stages that wait for external events - resume directly
         elif current_node in ("ci_evaluator", "attempt_ci_fix"):
             return "ci_evaluator"
-        elif current_node == "ai_review":
-            return "ai_review"
         elif current_node == "human_review_gate":
             return "human_review_gate"
         # Execution stages (implementation, PR) - re-route through task_router
@@ -215,11 +216,11 @@ def _route_after_workspace_setup(
 
 def _route_implementation(
     state: FeatureState,
-) -> Literal["implement_task", "create_pr", "escalate_blocked"]:
+) -> Literal["implement_task", "local_review", "escalate_blocked"]:
     """Route based on task implementation status.
 
     Checks for:
-    - All tasks completed -> create_pr
+    - All tasks completed -> local_review (pre-PR code review)
     - Retry limit exceeded -> escalate_blocked
     - Tasks remaining -> implement_task
     """
@@ -239,7 +240,7 @@ def _route_implementation(
     # Check if all tasks for this repo are done
     remaining = [t for t in repo_tasks if t not in implemented]
     if not remaining:
-        return "create_pr"
+        return "local_review"
     return "implement_task"
 
 
@@ -281,12 +282,12 @@ def _route_after_teardown(state: FeatureState) -> Literal["setup_workspace", "wa
 
 def _route_ci_evaluation(
     state: FeatureState,
-) -> Literal["ai_review", "attempt_ci_fix", "escalate_blocked", "__end__"]:
+) -> Literal["human_review_gate", "attempt_ci_fix", "escalate_blocked", "__end__"]:
     """Route based on CI evaluation results."""
     ci_status = state.get("ci_status", "")
 
     routes = {
-        "passed": "ai_review",
+        "passed": "human_review_gate",
         "fixing": "attempt_ci_fix",
         "pending": "__end__",  # Pause workflow until CI webhook
     }
@@ -334,13 +335,16 @@ def build_feature_graph() -> StateGraph:
     13. On Task approval: task_approval_gate -> task_router
     14. task_router -> setup_workspace (or parallel fan-out)
     15. setup_workspace -> implement_task
-    16. implement_task -> create_pr
-    17. create_pr -> teardown_workspace
-    18. teardown_workspace -> ci_evaluator (or next repo)
-    19. ci_evaluator -> ai_review
-    20. ai_review -> human_review_gate
-    21. human_review_gate -> complete_tasks
-    22. complete_tasks -> aggregate_epic_status -> aggregate_feature_status -> END
+    16. implement_task (all tasks done) -> local_review
+    17. local_review: reviews git diff vs main, fixes breaking issues in-place (up to 2 passes)
+    18. local_review -> create_pr
+    19. create_pr -> teardown_workspace
+    20. teardown_workspace -> wait_for_ci_gate (pause) or next repo
+    21. wait_for_ci_gate: resumes on GitHub CI webhook
+    22. ci_evaluator: checks CI status, attempts autonomous fixes on failure (up to 5 retries)
+    23. ci_evaluator (passed) -> human_review_gate
+    24. human_review_gate -> complete_tasks
+    25. complete_tasks -> aggregate_epic_status -> aggregate_feature_status -> END
 
     Returns:
         Configured StateGraph ready for compilation.
@@ -383,14 +387,14 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("create_pr", create_pull_request)
     graph.add_node("teardown_workspace", teardown_and_route)
 
+    # Local code review node (pre-PR, fixes breaking issues in-place)
+    graph.add_node("local_review", local_review_changes)
+
     # CI/CD Validation nodes (US7)
     graph.add_node("wait_for_ci_gate", wait_for_ci_gate)
     graph.add_node("ci_evaluator", evaluate_ci_status)
     graph.add_node("attempt_ci_fix", attempt_ci_fix)
     graph.add_node("escalate_blocked", escalate_to_blocked)
-
-    # AI Code Review nodes (US8)
-    graph.add_node("ai_review", review_code)
 
     # Human Review nodes (US9)
     graph.add_node("human_review_gate", human_review_gate)
@@ -421,10 +425,10 @@ def build_feature_graph() -> StateGraph:
             "task_approval_gate": "task_approval_gate",
             # Resume routing for Feature workflow - execution stages
             "task_router": "task_router",
-            # Resume routing for CI/review stages that wait for external events
+            # Resume routing for pre-PR and CI/review stages
+            "local_review": "local_review",
             "wait_for_ci_gate": "wait_for_ci_gate",
             "ci_evaluator": "ci_evaluator",
-            "ai_review": "ai_review",
             "human_review_gate": "human_review_gate",
             # Terminal states route directly to END
             END: END,
@@ -538,9 +542,14 @@ def build_feature_graph() -> StateGraph:
         _route_implementation,
         {
             "implement_task": "implement_task",
-            "create_pr": "create_pr",
+            "local_review": "local_review",
             "escalate_blocked": "escalate_blocked",
         },
+    )
+    graph.add_conditional_edges(
+        "local_review",
+        lambda s: s.get("current_node", "create_pr"),
+        {"local_review": "local_review", "create_pr": "create_pr"},
     )
     graph.add_conditional_edges(
         "create_pr",
@@ -569,7 +578,7 @@ def build_feature_graph() -> StateGraph:
         "ci_evaluator",
         _route_ci_evaluation,
         {
-            "ai_review": "ai_review",
+            "human_review_gate": "human_review_gate",
             "attempt_ci_fix": "attempt_ci_fix",
             "escalate_blocked": "escalate_blocked",
             END: END,  # Pause: CI still running, wait for next webhook
@@ -581,16 +590,6 @@ def build_feature_graph() -> StateGraph:
         {"wait_for_ci_gate": "wait_for_ci_gate", "escalate_blocked": "escalate_blocked"},
     )
     graph.add_edge("escalate_blocked", END)
-
-    # AI Review flow (US8)
-    graph.add_conditional_edges(
-        "ai_review",
-        _route_ai_review,
-        {
-            "human_review_gate": "human_review_gate",
-            "implement_task": "implement_task",
-        },
-    )
 
     # Human Review flow (US9)
     graph.add_conditional_edges(
