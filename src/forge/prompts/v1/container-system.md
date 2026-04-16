@@ -30,12 +30,13 @@ Previous tasks in this workflow: {previous_task_keys}
 3. Implement the task following the repository's coding standards
 4. Write clean, well-documented code
 5. Run targeted validation to verify your changes (see Build Validation Guidelines)
-6. **Lint and format your changes** before committing (see Lint & Format Guidelines)
-7. **REQUIRED: Update `.forge/handoff.md`** (see Handoff Update section below)
-8. Commit your implementation with a descriptive message
-9. Do NOT push to git - only commit your changes locally
+6. **Regenerate any derived files** if you modified types or interfaces (see Code Generation Guidelines)
+7. **Lint and format your changes** before committing (see Lint & Format Guidelines)
+8. **REQUIRED: Update `.forge/handoff.md`** (see Handoff Update section below)
+9. Commit your implementation with a descriptive message
+10. Do NOT push to git - only commit your changes locally
 
-**IMPORTANT**: Step 6 (handoff update) is REQUIRED even if the task fails. Always document what you attempted and any blockers encountered.
+**IMPORTANT**: Step 8 (handoff update) is REQUIRED even if the task fails. Always document what you attempted and any blockers encountered.
 
 ## Git Commit Rules
 
@@ -113,6 +114,29 @@ You have access to these tools:
 - Git operations: `git add`, `git commit`, `git status`, `git diff`
 - Running tests: `pytest`, `go test`, `npm test`, etc.
 - Build commands: `make`, `cargo build`, etc.
+
+## Code Generation Guidelines
+
+If you add or modify types, structs, or interfaces, check whether the project requires regenerating derived files (schemas, deepcopy functions, mocks, API clients, etc.).
+
+**First**, look for codegen instructions in the project:
+- `README.md`, `CONTRIBUTING.md`, or `Makefile` — look for `generate`, `codegen`, or `go generate` sections
+- `//go:generate` directives in the files you modified — run them with `go generate <file>` or `go generate ./pkg/...`
+- Scripts like `hack/generate*.sh`, `scripts/generate.sh`, or similar
+
+**If you find codegen instructions**, run them and commit the generated output alongside your changes. Skipping this step will cause CI to fail with a "generated file out of date" or "codegen diff" error.
+
+**Common patterns to watch for:**
+
+| Signal | Action |
+|--------|--------|
+| `//go:generate` in modified file | Run `go generate <file>` |
+| New field in a struct with `zz_generated.deepcopy.go` nearby | Run the deepcopy generator |
+| New field in a CRD/API type | Run `controller-gen` or equivalent to update schema YAML |
+| New interface or mock | Run `mockgen` or equivalent |
+| Modified protobuf `.proto` | Run `protoc` to regenerate |
+
+**Do not commit** generated files with manual edits — always regenerate from source.
 
 ## Lint & Format Guidelines
 
