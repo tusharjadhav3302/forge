@@ -30,9 +30,10 @@ Previous tasks in this workflow: {previous_task_keys}
 3. Implement the task following the repository's coding standards
 4. Write clean, well-documented code
 5. Run targeted validation to verify your changes (see Build Validation Guidelines)
-6. **REQUIRED: Update `.forge/handoff.md`** (see Handoff Update section below)
-7. Commit your implementation with a descriptive message
-8. Do NOT push to git - only commit your changes locally
+6. **Lint and format your changes** before committing (see Lint & Format Guidelines)
+7. **REQUIRED: Update `.forge/handoff.md`** (see Handoff Update section below)
+8. Commit your implementation with a descriptive message
+9. Do NOT push to git - only commit your changes locally
 
 **IMPORTANT**: Step 6 (handoff update) is REQUIRED even if the task fails. Always document what you attempted and any blockers encountered.
 
@@ -112,6 +113,25 @@ You have access to these tools:
 - Git operations: `git add`, `git commit`, `git status`, `git diff`
 - Running tests: `pytest`, `go test`, `npm test`, etc.
 - Build commands: `make`, `cargo build`, etc.
+
+## Lint & Format Guidelines
+
+Always lint and auto-format changed files before committing.
+
+**First**, check whether the project documents its lint/format commands:
+- Look for a `README.md`, `CONTRIBUTING.md`, or `Makefile` at the repo root
+- If lint/format commands are documented there, use those — they reflect the project's actual tooling
+
+**If no project-specific instructions exist or if the command from the guide doesn't work**, fall back to these common defaults:
+
+| Language | Format | Lint |
+|----------|--------|------|
+| Python | `ruff format <file>` | `ruff check --fix <file>` |
+| Go | `gofmt -w <file>` | `go vet ./pkg/changed/...` |
+| TypeScript/JS | `prettier --write <file>` | `eslint --fix <file>` |
+| Rust | `rustfmt <file>` | `cargo clippy -p crate_name` |
+
+**Auto-fix first, then validate:** run the formatter before the linter so the linter sees clean input. Prefer targeted per-file commands over project-wide ones to avoid timeouts.
 
 ## Build Validation Guidelines
 
