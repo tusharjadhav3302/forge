@@ -150,9 +150,25 @@ async def decompose_epics(state: WorkflowState) -> WorkflowState:
             except Exception as e:
                 jira_error = str(e)
                 logger.warning(f"Failed to set workflow label for {ticket_key}: {e}")
+
+            # Store plan summary in generation_context so Q&A can reference it
+            generation_context = state.get("generation_context", {})
+            plan_summary_parts = []
+            for epic in epics_data:
+                summary = epic.get("summary", "")
+                plan = epic.get("plan", "")
+                repo = epic.get("repo", "")
+                plan_summary_parts.append(
+                    f"## {summary}"
+                    + (f" (repo: {repo})" if repo else "")
+                    + f"\n{plan}"
+                )
+            generation_context["plan"] = "\n\n".join(plan_summary_parts)
+
             return update_state_timestamp({
                 **state,
                 "epic_keys": epic_keys,
+                "generation_context": generation_context,
                 "current_node": "plan_approval_gate",
                 "last_error": f"Partial Jira failure: {jira_error}" if jira_error else None,
             })

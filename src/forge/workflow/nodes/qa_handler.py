@@ -165,4 +165,11 @@ def _get_artifact_content(state: WorkflowState, artifact_type: str) -> str:
         "rca": "rca_content",
     }
     field = mapping.get(artifact_type)
-    return state.get(field, "") if field else ""
+    if field:
+        return state.get(field, "")
+
+    # Plan content is stored in generation_context (built during epic decomposition)
+    if artifact_type == "plan":
+        return state.get("generation_context", {}).get("plan", "")
+
+    return ""
