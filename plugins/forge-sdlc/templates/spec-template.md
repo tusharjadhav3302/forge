@@ -9,81 +9,72 @@
 
 ## 1. Overview
 
-[Brief summary of what this specification covers and its relationship to the PRD]
+[1-2 sentences: what behavior this spec defines. Do not repeat PRD rationale or business context.]
 
 ---
 
 ## 2. User Scenarios
 
 ### Priority Legend
-- **P1**: Critical path - must work for MVP
-- **P2**: Important - required for full release
-- **P3**: Enhancement - can be deferred
+- **P1**: Critical path — must work for MVP
+- **P2**: Important — required for full release
+- **P3**: Enhancement — can be deferred
 
 ### 2.1 P1 Scenarios (Critical)
 
 #### SC-001: [Scenario Name]
-**Actor**: [User persona]
-**Preconditions**: [Required state before scenario]
+**Preconditions**: [Required state before scenario executes]
 **Trigger**: [What initiates this scenario]
-
-**Flow**:
-1. [Step 1]
-2. [Step 2]
-3. [Step 3]
 
 **Acceptance Criteria**:
 ```gherkin
 Given [initial context]
-  And [additional context]
+  And [additional context if needed]
 When [action performed]
 Then [expected outcome]
-  And [additional outcome]
+  And [additional outcome if needed]
 ```
 
 **Edge Cases**:
-- [Edge case 1]: [Expected behavior]
-- [Edge case 2]: [Expected behavior]
-
-### 2.2 P2 Scenarios (Important)
-
-#### SC-002: [Scenario Name]
-[Repeat structure from SC-001]
-
-### 2.3 P3 Scenarios (Enhancement)
-
-#### SC-003: [Scenario Name]
-[Repeat structure from SC-001]
+- [Edge case]: [Expected behavior]
 
 ---
+
+<!-- Add SC-002, SC-003 etc. as needed. Only add P2/P3 sections if there are P2/P3 scenarios grounded in the PRD. -->
 
 ## 3. Functional Requirements
 
 ### 3.1 Core Functions
 
-| ID | Function | Description | Inputs | Outputs | Validation |
-|----|----------|-------------|--------|---------|------------|
-| FN-001 | [name] | [what it does] | [params] | [return] | [rules] |
+| ID | Function | Description | Inputs | Outputs |
+|----|----------|-------------|--------|---------|
+| FN-001 | [name] | [what it does] | [params] | [return value] |
 
 ### 3.2 Business Rules
 
-| ID | Rule | Condition | Action | Exception |
-|----|------|-----------|--------|-----------|
-| BR-001 | [name] | [when this] | [do this] | [unless] |
-
-### 3.3 Data Requirements
-
-| Entity | Attributes | Constraints | Relationships |
-|--------|------------|-------------|---------------|
-| [name] | [field: type] | [validation] | [relations] |
+| ID | Rule | Condition | Action |
+|----|------|-----------|--------|
+| BR-001 | [name] | [when] | [then] |
 
 ---
 
-## 4. Interface Contracts
+## 4. Interface Changes
 
-### 4.1 API Endpoints
+<!-- Use this section for whatever interface this feature touches. Pick the subsection(s) that apply and delete the rest. -->
 
-#### [Endpoint Name]
+### 4.1 Configuration Schema [if adding config fields]
+
+```yaml
+# Show the new/changed fields with types and descriptions
+field_name: "type - required/optional - description"
+```
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| [field] | string | No | [value] | [description] |
+
+### 4.2 API Endpoints [if adding/changing API endpoints]
+
 ```
 [METHOD] /api/v1/[resource]
 ```
@@ -102,16 +93,6 @@ Then [expected outcome]
 }
 ```
 
-**Response (Error)**:
-```json
-{
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Human readable message"
-  }
-}
-```
-
 **Status Codes**:
 | Code | Condition |
 |------|-----------|
@@ -121,58 +102,33 @@ Then [expected outcome]
 
 ---
 
-## 5. State Management
+## 5. State Management [omit if not applicable]
 
-### 5.1 State Diagram
+### 5.1 State Transitions
 
-```
-[Initial] --> [State A] --> [State B] --> [Final]
-                  |              ^
-                  v              |
-             [State C] ----------+
-```
-
-### 5.2 State Transitions
-
-| From | To | Trigger | Guard | Side Effects |
-|------|----|---------|-------|--------------|
-| [state] | [state] | [event] | [condition] | [actions] |
+| From | To | Trigger | Guard |
+|------|----|---------|-------|
+| [state] | [state] | [event] | [condition] |
 
 ---
 
 ## 6. Error Handling
 
-### 6.1 Error Categories
+### 6.1 Error Scenarios
 
-| Category | Code Range | Retry | User Message |
-|----------|------------|-------|--------------|
-| Validation | 4xx | No | Show field errors |
-| Transient | 5xx | Yes | "Please try again" |
-| Fatal | 5xx | No | "Contact support" |
+<!-- Match error style to the stack: field.ErrorList for Go/CLI, HTTP codes for REST APIs. -->
 
-### 6.2 Specific Errors
-
-| Scenario | Code | Cause | Resolution |
-|----------|------|-------|------------|
-| [scenario] | [code] | [why] | [fix] |
+| Scenario | Error | Resolution |
+|----------|-------|------------|
+| [what went wrong] | [exact error text or code] | [how user fixes it] |
 
 ---
 
-## 7. Non-Functional Requirements
+## 7. Non-Functional Requirements [omit if none are feature-specific]
 
-### 7.1 Performance
-
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Response time (P95) | < [X]ms | APM |
-| Throughput | [X] req/sec | Load test |
-
-### 7.2 Security
-
-| Requirement | Implementation | Verification |
-|-------------|----------------|--------------|
-| Authentication | [method] | [test] |
-| Authorization | [method] | [test] |
+| Requirement | Target | Category |
+|-------------|--------|----------|
+| [metric] | [value] | Performance / Compatibility / Security |
 
 ---
 
@@ -182,12 +138,12 @@ Then [expected outcome]
 
 | ID | Scenario | Type | Priority | Automated |
 |----|----------|------|----------|-----------|
-| TS-001 | [scenario] | Unit/Integration/E2E | P1/P2/P3 | Yes/No |
+| TS-001 | [scenario description] | Unit / Integration / E2E | P1/P2/P3 | Yes/No |
 
 ---
 
-## 9. Open Questions
+## 9. Open Questions [omit if none are genuinely unresolved]
 
-| ID | Question | Owner | Due | Resolution |
-|----|----------|-------|-----|------------|
-| Q-001 | [question] | [who] | [when] | [answer] |
+| ID | Question | Owner | Resolution |
+|----|----------|-------|------------|
+| Q-001 | [question not answered in PRD] | [who decides] | Pending |

@@ -121,10 +121,10 @@
 
 ---
 
-## Appendix
+## Appendix [omit if not needed]
 
-### A. Glossary
+### A. Glossary [only for terms non-obvious to the target audience]
 - **[Term]**: [Definition]
 
-### B. References
+### B. References [only if there are actual documents to link]
 - [Link to related documents or research]
