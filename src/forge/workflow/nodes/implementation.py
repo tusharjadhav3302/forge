@@ -19,6 +19,8 @@ from forge.integrations.jira.client import JiraClient
 from forge.sandbox import ContainerRunner
 from forge.workflow.feature.state import FeatureState as WorkflowState
 from forge.workflow.utils import update_state_timestamp
+from forge.workspace.git_ops import GitOperations
+from forge.workspace.manager import Workspace
 
 logger = logging.getLogger(__name__)
 
@@ -66,9 +68,35 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
 
     if not current_task:
         logger.info(f"All tasks implemented for {ticket_key}")
+
+        # Fallback: commit any files the container agent left uncommitted.
+        # The container is responsible for committing, but this catches edge
+        # cases where it exited before the final commit step.
+        if workspace_path:
+            branch_name = state.get("context", {}).get("branch_name", "")
+            current_repo = state.get("current_repo", "")
+            git = GitOperations(
+                Workspace(
+                    path=Path(workspace_path),
+                    repo_name=current_repo,
+                    branch_name=branch_name,
+                    ticket_key=ticket_key,
+                )
+            )
+            if git.has_uncommitted_changes():
+                logger.warning(
+                    f"Uncommitted changes found after all tasks for {ticket_key} — "
+                    "committing as fallback"
+                )
+                # Remove the .forge/ entry setup_workspace injected into .gitignore
+                # so we don't pollute the repo's gitignore with Forge internals.
+                _clean_forge_gitignore(Path(workspace_path))
+                git.stage_all()
+                git.commit(f"[{ticket_key}] chore: commit uncommitted changes after implementation")
+
         return update_state_timestamp({
             **state,
-            "current_node": "create_pr",
+            "current_node": "local_review",
             "last_error": None,
         })
 
@@ -144,6 +172,31 @@ async def implement_task(state: WorkflowState) -> WorkflowState:
         }
     finally:
         await jira.close()
+
+
+def _clean_forge_gitignore(workspace_path: Path) -> None:
+    """Remove the .forge/ entry that setup_workspace injected into .gitignore.
+
+    setup_workspace adds a .forge/ exclusion to prevent accidental commits of
+    workflow state. Before the fallback commit we strip it out so the target
+    repo's .gitignore isn't polluted with Forge-internal entries.
+    """
+    gitignore_path = workspace_path / ".gitignore"
+    if not gitignore_path.exists():
+        return
+
+    content = gitignore_path.read_text()
+    if ".forge" not in content:
+        return
+
+    cleaned = "\n".join(
+        line for line in content.splitlines()
+        if ".forge" not in line and "Forge workflow state" not in line
+    ).rstrip("\n") + "\n"
+
+    if cleaned != content:
+        gitignore_path.write_text(cleaned)
+        logger.debug("Removed .forge/ entry from .gitignore before fallback commit")
 
 
 def _build_task_description(
