@@ -9,6 +9,31 @@ from forge.config import Settings, get_settings
 
 logger = logging.getLogger(__name__)
 
+_STATUS_TO_CONCLUSION: dict[str, str] = {
+    "success": "success",
+    "failure": "failure",
+    "error": "failure",
+    "pending": "",
+}
+
+
+def _normalize_commit_status(status: dict[str, Any]) -> dict[str, Any]:
+    """Convert a commit-status object to the check-run shape.
+
+    Commit statuses (used by Prow) have a ``state`` field instead of
+    ``status``/``conclusion``. This normalizes them so ``evaluate_ci_status``
+    can treat all CI results uniformly.
+    """
+    state = status.get("state", "pending")
+    completed = state != "pending"
+    return {
+        "name": status.get("context", ""),
+        "status": "completed" if completed else "in_progress",
+        "conclusion": _STATUS_TO_CONCLUSION.get(state, ""),
+        "output": {"summary": status.get("description", "")},
+        "html_url": status.get("target_url", ""),
+    }
+
 
 class GitHubClient:
     """Async client for GitHub REST API.
@@ -166,7 +191,14 @@ class GitHubClient:
     async def get_check_runs(
         self, owner: str, repo: str, ref: str
     ) -> list[dict[str, Any]]:
-        """Get check runs for a commit.
+        """Get all CI results for a commit, combining check runs and commit statuses.
+
+        GitHub has two CI APIs:
+        - Check runs: used by GitHub Actions and modern CI apps.
+        - Commit statuses: used by Prow and other legacy systems.
+
+        Both are fetched and normalized to the check-run shape so callers
+        can treat them uniformly.
 
         Args:
             owner: Repository owner.
@@ -174,12 +206,35 @@ class GitHubClient:
             ref: Git reference (commit SHA, branch, or tag).
 
         Returns:
-            List of check run details.
+            List of normalized CI result dicts with ``status`` and
+            ``conclusion`` keys.
         """
         client = await self._get_client()
+        results: list[dict[str, Any]] = []
+
+        # --- GitHub Actions / check-run API ---
         response = await client.get(f"/repos/{owner}/{repo}/commits/{ref}/check-runs")
         response.raise_for_status()
-        return response.json().get("check_runs", [])
+        results.extend(response.json().get("check_runs", []))
+
+        # --- Prow / commit-status API ---
+        # Statuses are de-duplicated by context; latest entry per context wins.
+        statuses_response = await client.get(
+            f"/repos/{owner}/{repo}/commits/{ref}/statuses"
+        )
+        statuses_response.raise_for_status()
+        raw_statuses: list[dict[str, Any]] = statuses_response.json()
+
+        # Keep only the most-recent status per context (API returns newest first).
+        seen_contexts: set[str] = set()
+        for status in raw_statuses:
+            ctx = status.get("context", "")
+            if ctx in seen_contexts:
+                continue
+            seen_contexts.add(ctx)
+            results.append(_normalize_commit_status(status))
+
+        return results
 
     async def get_workflow_run_logs(
         self, owner: str, repo: str, run_id: int

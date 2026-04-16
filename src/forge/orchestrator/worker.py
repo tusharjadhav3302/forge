@@ -1,6 +1,7 @@
 """Orchestrator worker that consumes events from Redis and processes them."""
 
 import asyncio
+import contextlib
 import logging
 import signal
 import sys
@@ -76,27 +77,50 @@ class OrchestratorWorker:
             # Determine ticket type early to select workflow
             ticket_type = self._extract_ticket_type(message)
 
-            # Use router to resolve which workflow to use
-            workflow_instance = self.router.resolve(
-                ticket_type=ticket_type,
-                labels=[],  # TODO: Extract labels from message payload
-                event=message.payload,
-            )
+            workflow_instance = None
+            existing_state = None
+            config = {"configurable": {"thread_id": ticket_key}}
 
-            if workflow_instance is None:
-                logger.error(
-                    f"No workflow found for ticket {ticket_key} "
-                    f"(type={ticket_type}). Skipping."
+            if ticket_type == TicketType.UNKNOWN:
+                # GitHub events (and other non-Jira sources) don't carry ticket type.
+                # Find the workflow by scanning checkpoint state across all registered workflows.
+                workflow_instance, existing_state = await self._find_workflow_by_state(ticket_key)
+                if workflow_instance is None:
+                    logger.warning(
+                        f"No existing workflow state found for {ticket_key} "
+                        f"({message.source.value} event with unknown ticket type). Skipping."
+                    )
+                    return
+                # Recover ticket type from checkpointed state so metrics are accurate.
+                if existing_state and existing_state.values:
+                    stored_type = existing_state.values.get("ticket_type", "Unknown")
+                    with contextlib.suppress(ValueError):
+                        ticket_type = TicketType(stored_type)
+                logger.info(
+                    f"Resolved workflow for {ticket_key} from checkpoint state "
+                    f"(type={ticket_type}, workflow={workflow_instance.name})"
                 )
-                return
+            else:
+                # Use router to resolve which workflow to use
+                workflow_instance = self.router.resolve(
+                    ticket_type=ticket_type,
+                    labels=[],  # TODO: Extract labels from message payload
+                    event=message.payload,
+                )
+
+                if workflow_instance is None:
+                    logger.error(
+                        f"No workflow found for ticket {ticket_key} "
+                        f"(type={ticket_type}). Skipping."
+                    )
+                    return
 
             # Get or compile the workflow graph
             compiled_workflow = self._get_compiled_workflow(workflow_instance)
 
-            config = {"configurable": {"thread_id": ticket_key}}
-
-            # Check if there's an existing workflow state (paused workflow)
-            existing_state = await compiled_workflow.aget_state(config)
+            # Fetch existing state if not already loaded (non-GitHub path)
+            if existing_state is None:
+                existing_state = await compiled_workflow.aget_state(config)
 
             # Debug logging for checkpoint state
             logger.debug(f"Existing state for {ticket_key}: {existing_state}")
@@ -485,6 +509,33 @@ class OrchestratorWorker:
             logger.info(f"Posted terminal error comment to {ticket_key}")
         except Exception as e:
             logger.warning(f"Failed to post terminal error comment to {ticket_key}: {e}")
+
+    async def _find_workflow_by_state(self, ticket_key: str) -> tuple[Any, Any]:
+        """Find a workflow that has existing checkpoint state for the given ticket.
+
+        Used when the ticket type cannot be determined from the event payload
+        (e.g. GitHub webhooks). Checks all registered workflows and returns the
+        first one that has a non-empty checkpoint for this ticket.
+
+        Args:
+            ticket_key: The Jira ticket key.
+
+        Returns:
+            Tuple of (workflow_instance, checkpoint_state), or (None, None) if
+            no existing state is found.
+        """
+        config = {"configurable": {"thread_id": ticket_key}}
+        for workflow_class in self.router._workflows:
+            workflow_instance = workflow_class()
+            compiled = self._get_compiled_workflow(workflow_instance)
+            state = await compiled.aget_state(config)
+            if state and state.values:
+                logger.debug(
+                    f"Found existing state for {ticket_key} "
+                    f"in workflow '{workflow_instance.name}'"
+                )
+                return workflow_instance, state
+        return None, None
 
     def _extract_ticket_type(self, message: QueueMessage) -> TicketType:
         """Extract ticket type from queue message.
