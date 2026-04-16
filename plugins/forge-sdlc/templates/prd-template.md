@@ -55,8 +55,8 @@
 
 | ID | Requirement | Priority | Acceptance Criteria |
 |----|-------------|----------|---------------------|
-| FR-001 | [requirement] | P1/P2/P3 | [how to verify] |
-| FR-002 | [requirement] | P1/P2/P3 | [how to verify] |
+| FR-001 | [requirement] | MVP/non-MVP/nice-to-have | [how to verify] |
+| FR-002 | [requirement] | MVP/non-MVP/nice-to-have | [how to verify] |
 
 ### 5.2 Non-Functional Requirements
 
@@ -67,8 +67,6 @@
 ---
 
 ## 6. User Stories
-
-### Epic: [Epic Name]
 
 **US-001**: As a [persona], I want to [action] so that [benefit].
 - **Acceptance Criteria**:
@@ -83,9 +81,6 @@
 
 ### Out of Scope
 - [feature/capability explicitly NOT included]
-
-### Future Considerations
-- [potential future enhancements]
 
 ---
 
@@ -104,18 +99,25 @@
 
 ## 9. Risks & Mitigations
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| [risk] | High/Med/Low | High/Med/Low | [mitigation strategy] |
+<!-- For each risk: name a specific event or failure mode (not a vague category), describe the context in which it occurs (who is affected, under what conditions), and provide a concrete mitigation action (not just "monitor" or "plan for it"). -->
+
+| Risk | Context | Likelihood | Impact | Mitigation |
+|------|---------|------------|--------|------------|
+| [specific failure mode, e.g. "third-party API rate limit exceeded during peak hours"] | [who is affected and under what conditions] | High/Med/Low | High/Med/Low | [concrete action, e.g. "implement request queuing with exponential backoff; alert on >80% quota usage"] |
 
 ---
 
 ## 10. Timeline & Milestones
 
-| Milestone | Target Date | Dependencies |
-|-----------|-------------|--------------|
-| PRD Approval | [date] | Stakeholder review |
-| Spec Complete | [date] | PRD approval |
+| Phase | Milestone | Target Date | Dependencies |
+|-------|-----------|-------------|--------------|
+| Planning: PRD | PRD approved | [date] | Stakeholder review |
+| Planning: Spec | Technical spec approved | [date] | PRD approval |
+| Planning: Epics | Epic plan approved | [date] | Spec approval |
+| Planning: Tasks | Task breakdown approved | [date] | Epic plan approval |
+| Implementation | PRs merged (all CI, AI review, and human review complete) | [date] | Task approval |
+| Documentation | Docs updated | [date] | Implementation complete |
+| Testing | QA sign-off | [date] | Implementation complete |
 
 ---
 
