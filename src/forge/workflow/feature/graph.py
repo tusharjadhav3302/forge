@@ -426,6 +426,8 @@ def build_feature_graph() -> StateGraph:
             "ci_evaluator": "ci_evaluator",
             "ai_review": "ai_review",
             "human_review_gate": "human_review_gate",
+            # Terminal states route directly to END
+            END: END,
         },
     )
 

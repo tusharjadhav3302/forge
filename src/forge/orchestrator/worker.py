@@ -151,6 +151,20 @@ class OrchestratorWorker:
             if should_resume:
                 # Resume workflow - check for approval/rejection signals
                 updated_values = await self._handle_resume_event(message, existing_state.values)
+
+                # _handle_resume_event returns early (unchanged current_node) when
+                # the workflow is at a terminal state without an explicit retry signal.
+                # In that case just persist the state update (e.g. terminal_error_notified)
+                # and stop — don't try to invoke a finished graph.
+                terminal_nodes = ("complete", "complete_tasks", "aggregate_feature_status")
+                if updated_values.get("current_node") in terminal_nodes:
+                    logger.info(
+                        f"Workflow for {ticket_key} at terminal state "
+                        f"'{updated_values.get('current_node')}', skipping invocation"
+                    )
+                    await compiled_workflow.aupdate_state(config, updated_values)
+                    return
+
                 logger.info(f"Resuming workflow for {ticket_key}")
 
                 # Check if we're retrying from an error state
