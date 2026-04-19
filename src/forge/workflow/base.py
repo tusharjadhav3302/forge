@@ -48,6 +48,10 @@ class PRIntegrationState(TypedDict, total=False):
     repos_completed: list[str]
     implemented_tasks: list[str]
     current_task_key: str | None
+    fork_owner: str | None
+    fork_repo: str | None
+    merge_conflicts: list[str]
+    local_review_attempts: int
 
 
 class CIIntegrationState(TypedDict, total=False):

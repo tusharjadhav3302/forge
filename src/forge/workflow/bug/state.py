@@ -22,6 +22,7 @@ class BugState(
     # Bug-specific
     rca_content: str | None
     bug_fix_implemented: bool
+    tdd_approach: bool
 
     # Q&A mode
     qa_history: list[dict[str, str]]  # List of {question, answer, artifact_type, timestamp}
@@ -48,6 +49,11 @@ def create_initial_bug_state(ticket_key: str, **kwargs: Any) -> BugState:
         "bug_fix_implemented": False,
         "workspace_path": None,
         "pr_urls": [],
+        "fork_owner": None,
+        "fork_repo": None,
+        "merge_conflicts": [],
+        "local_review_attempts": 0,
+        "tdd_approach": False,
         "ci_status": None,
         "current_pr_url": None,
         "current_pr_number": None,
