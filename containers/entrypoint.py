@@ -53,6 +53,12 @@ CONTEXT7_MCP_CONFIG = {
         "transport": "stdio",
         "command": "npx",
         "args": ["-y", "@upstash/context7-mcp"],
+        "env": {
+            # Suppress npm update notices — they print to stdout and corrupt the
+            # MCP stdio JSON protocol before the server has a chance to start.
+            "NO_UPDATE_NOTIFIER": "1",
+            "NPM_CONFIG_UPDATE_NOTIFIER": "false",
+        },
     }
 }
 
