@@ -254,9 +254,16 @@ class OrchestratorWorker:
         is_rejected = False
         is_retry = False
         is_question = False
+        is_ci_webhook = False
         feedback = None
 
         current_node = current_state.get("current_node", "")
+
+        # GitHub check_run/check_suite events are the explicit signal for wait_for_ci_gate.
+        # They don't carry Jira labels or comments, so handle them before the label loop.
+        if current_node == "wait_for_ci_gate" and message.source == EventSource.GITHUB:
+            is_ci_webhook = True
+            logger.info(f"Detected GitHub CI webhook signal for {current_node}")
 
         for change in label_changes:
             to_labels = change.get("toString", "")
@@ -450,6 +457,9 @@ class OrchestratorWorker:
 
             updated_state["retry_count"] = 0
             # Keep current_node — workflow resumes from the node that failed
+        elif is_ci_webhook:
+            # GitHub CI event — unpause the gate and let ci_evaluator check the results
+            updated_state["is_paused"] = False
         elif is_approved:
             updated_state["is_paused"] = False
             updated_state["revision_requested"] = False
