@@ -15,7 +15,7 @@ class TestQAModeIntegration:
         assert classify_comment("?Why REST?") == CommentType.QUESTION
         assert classify_comment("@forge ask explain") == CommentType.QUESTION
         assert classify_comment("Add more detail") == CommentType.FEEDBACK
-        assert classify_comment("LGTM") == CommentType.APPROVAL
+        assert classify_comment("LGTM") == CommentType.FEEDBACK
 
     def test_state_has_qa_fields(self):
         """Verify initial state includes Q&A fields."""

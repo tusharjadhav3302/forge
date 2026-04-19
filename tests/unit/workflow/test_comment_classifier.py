@@ -29,39 +29,18 @@ class TestClassifyComment:
         """@forge ask with minimal content."""
         assert classify_comment("@forge ask") == CommentType.QUESTION
 
-    # Approval detection tests
-    def test_approval_with_approved_keyword(self) -> None:
-        """Comments containing 'approved' should be approvals."""
-        assert classify_comment("Approved") == CommentType.APPROVAL
-        assert classify_comment("approved") == CommentType.APPROVAL
-        assert classify_comment("APPROVED") == CommentType.APPROVAL
-
-    def test_approval_with_lgtm(self) -> None:
-        """Comments containing 'lgtm' should be approvals."""
-        assert classify_comment("LGTM") == CommentType.APPROVAL
-        assert classify_comment("lgtm") == CommentType.APPROVAL
-        assert classify_comment("Lgtm") == CommentType.APPROVAL
-
-    def test_approval_with_looks_good_to_me(self) -> None:
-        """Comments containing 'looks good to me' should be approvals."""
-        assert classify_comment("looks good to me") == CommentType.APPROVAL
-        assert classify_comment("Looks good to me!") == CommentType.APPROVAL
-
-    def test_approval_with_looks_good(self) -> None:
-        """Comments containing 'looks good' should be approvals."""
-        assert classify_comment("looks good") == CommentType.APPROVAL
-        assert classify_comment("Looks Good") == CommentType.APPROVAL
-
-    def test_approval_in_sentence(self) -> None:
-        """Approval keywords in the middle of a comment should still be approvals."""
-        assert classify_comment("This is approved") == CommentType.APPROVAL
-        assert classify_comment("I think this looks good") == CommentType.APPROVAL
-
     # Feedback tests (default)
     def test_feedback_as_default(self) -> None:
-        """Comments without question or approval markers should be feedback."""
+        """Comments without question markers should be feedback."""
         assert classify_comment("Please add more detail") == CommentType.FEEDBACK
         assert classify_comment("Can you expand on this section") == CommentType.FEEDBACK
+
+    def test_approval_words_are_feedback(self) -> None:
+        """Approval keywords are treated as feedback — approvals use label changes only."""
+        assert classify_comment("Approved") == CommentType.FEEDBACK
+        assert classify_comment("LGTM") == CommentType.FEEDBACK
+        assert classify_comment("looks good to me") == CommentType.FEEDBACK
+        assert classify_comment("looks good") == CommentType.FEEDBACK
 
     def test_feedback_with_question_mark_in_middle(self) -> None:
         """Question mark not at the start should NOT be a question."""
@@ -90,8 +69,3 @@ class TestClassifyComment:
     def test_forge_ask_with_leading_whitespace(self) -> None:
         """@forge ask with leading whitespace should be a question."""
         assert classify_comment("  @forge ask explain") == CommentType.QUESTION
-
-    def test_question_takes_precedence_over_approval(self) -> None:
-        """If both question marker and approval word exist, question wins."""
-        assert classify_comment("?approved") == CommentType.QUESTION
-        assert classify_comment("@forge ask is this approved") == CommentType.QUESTION

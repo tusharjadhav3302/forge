@@ -154,7 +154,7 @@ class OrchestratorWorker:
 
                 # _handle_resume_event returns early (unchanged current_node) when
                 # the workflow is at a terminal state without an explicit retry signal.
-                # In that case just persist the state update (e.g. terminal_error_notified)
+                # In that case just persist the state update and stop.
                 # and stop — don't try to invoke a finished graph.
                 terminal_nodes = ("complete", "complete_tasks", "aggregate_feature_status")
                 if updated_values.get("current_node") in terminal_nodes:
@@ -329,10 +329,6 @@ class OrchestratorWorker:
                     is_question = True
                     feedback = comment_body
                     logger.info(f"Detected question comment: {feedback[:100]}...")
-                elif comment_type == CommentType.APPROVAL:
-                    # Approval via comment (not label) - set approved flag
-                    is_approved = True
-                    logger.info(f"Detected approval comment: {comment_body[:100]}...")
                 else:
                     # Treat as feedback for rejection
                     is_rejected = True
@@ -345,6 +341,21 @@ class OrchestratorWorker:
                     epic_keys = current_state.get("epic_keys", [])
                     task_keys = current_state.get("task_keys", [])
 
+                    # source_ticket_key is set by the Jira webhook handler when a
+                    # child ticket (Epic/Task) event is re-routed to the parent Feature.
+                    # message.ticket_key will equal workflow_ticket_key in that case,
+                    # so we use source_ticket_key to detect the true origin.
+                    source_ticket_key = payload.get("source_ticket_key")
+                    child_ticket_key = (
+                        source_ticket_key
+                        if source_ticket_key and source_ticket_key != workflow_ticket_key
+                        else (
+                            message.ticket_key
+                            if message.ticket_key != workflow_ticket_key
+                            else None
+                        )
+                    )
+
                     # Determine which phase we're in based on current_node
                     plan_phase_nodes = (
                         "plan_approval_gate", "decompose_epics",
@@ -355,12 +366,12 @@ class OrchestratorWorker:
                         "regenerate_all_tasks", "update_single_task",
                     )
 
-                    if message.ticket_key != workflow_ticket_key:
-                        # Comment is on a child ticket - determine type by phase
+                    if child_ticket_key:
+                        # Comment originated from a child ticket - determine type by phase
                         if current_node in plan_phase_nodes:
                             # In plan phase - check if it's an Epic
-                            if message.ticket_key in epic_keys:
-                                comment_ticket_key = message.ticket_key
+                            if child_ticket_key in epic_keys:
+                                comment_ticket_key = child_ticket_key
                                 comment_ticket_type = "epic"
                                 logger.info(
                                     f"Detected Epic-level comment on {comment_ticket_key}: "
@@ -368,13 +379,13 @@ class OrchestratorWorker:
                                 )
                             else:
                                 logger.info(
-                                    f"Detected comment on child ticket {message.ticket_key} "
+                                    f"Detected comment on child ticket {child_ticket_key} "
                                     f"(not in epic_keys): {feedback[:100]}..."
                                 )
                         elif current_node in task_phase_nodes:
                             # In task phase - check if it's a Task
-                            if message.ticket_key in task_keys:
-                                comment_ticket_key = message.ticket_key
+                            if child_ticket_key in task_keys:
+                                comment_ticket_key = child_ticket_key
                                 comment_ticket_type = "task"
                                 logger.info(
                                     f"Detected Task-level comment on {comment_ticket_key}: "
@@ -382,13 +393,13 @@ class OrchestratorWorker:
                                 )
                             else:
                                 logger.info(
-                                    f"Detected comment on child ticket {message.ticket_key} "
+                                    f"Detected comment on child ticket {child_ticket_key} "
                                     f"(not in task_keys): {feedback[:100]}..."
                                 )
                         else:
                             # Not in a phase that handles child comments
                             logger.info(
-                                f"Detected comment on child ticket {message.ticket_key} "
+                                f"Detected comment on child ticket {child_ticket_key} "
                                 f"at unexpected node {current_node}: {feedback[:100]}..."
                             )
                     else:
@@ -396,10 +407,12 @@ class OrchestratorWorker:
                             f"Detected Feature-level comment: {feedback[:100]}..."
                         )
 
-        # Build updated state
+        # Build updated state — do NOT set is_paused=False here.
+        # Each branch below sets it explicitly when a valid signal is detected.
+        # Unrecognized events (wrong-stage approval, unrelated label changes, etc.)
+        # must not unpause the workflow — they return current_state unchanged.
         updated_state = {
             **current_state,
-            "is_paused": False,
             "context": {
                 **current_state.get("context", {}),
                 "resume_event": message.event_type,
@@ -430,31 +443,28 @@ class OrchestratorWorker:
                 f"Retry requested for {message.ticket_key} at {current_node} "
                 f"(clearing error: {prev_error[:100] if prev_error else 'none'})"
             )
+            updated_state["is_paused"] = False
             updated_state["last_error"] = None
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
-            updated_state["terminal_error_notified"] = False  # Reset for next potential error
-            updated_state["retry_count"] = 0  # Reset retry counter for fresh start
-            # For terminal states, route back to task_router to retry implementation
-            if is_terminal:
-                logger.info(
-                    f"Terminal state retry: resetting {current_node} -> task_router"
-                )
-                updated_state["current_node"] = "task_router"
-            # Otherwise keep current_node so we retry the same stage
+
+            updated_state["retry_count"] = 0
+            # Keep current_node — workflow resumes from the node that failed
         elif is_approved:
+            updated_state["is_paused"] = False
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
             updated_state["last_error"] = None
         elif is_question:
+            # Unpause so answer_question node runs, it will re-pause after answering
+            updated_state["is_paused"] = False
             updated_state["is_question"] = True
             updated_state["feedback_comment"] = feedback
             updated_state["revision_requested"] = False
-            # Keep is_paused=False so workflow can process the question
         elif is_rejected and feedback:
+            updated_state["is_paused"] = False
             updated_state["revision_requested"] = True
             updated_state["feedback_comment"] = feedback
-            # Set current_epic_key or current_task_key based on comment type
             if comment_ticket_key and comment_ticket_type == "epic":
                 updated_state["current_epic_key"] = comment_ticket_key
                 updated_state["current_task_key"] = None
@@ -462,35 +472,45 @@ class OrchestratorWorker:
                 updated_state["current_task_key"] = comment_ticket_key
                 updated_state["current_epic_key"] = None
             else:
-                # Feature-level comment - clear both
                 updated_state["current_task_key"] = None
                 updated_state["current_epic_key"] = None
         elif was_errored:
-            # Workflow had an error - check if we should retry
-            if is_terminal and not is_retry:
-                # Terminal state without explicit retry - don't restart
+            # Workflow has an error — auto-resume up to MAX_AUTO_RETRIES times,
+            # then require an explicit forge:retry label.
+            # Terminal states always require explicit retry regardless of count.
+            MAX_AUTO_RETRIES = 3
+            retry_count = current_state.get("retry_count", 0)
+            cap_reached = retry_count >= MAX_AUTO_RETRIES
+
+            if is_terminal or cap_reached:
                 last_error = current_state.get("last_error", "Unknown error")
-                logger.info(
-                    f"Workflow for {message.ticket_key} is at terminal state '{current_node}' "
-                    f"with error, ignoring event (use forge:retry label to restart)"
+                reason = "terminal state" if is_terminal else f"retry cap ({MAX_AUTO_RETRIES}) reached"
+                logger.warning(
+                    f"Workflow for {message.ticket_key} at '{current_node}' requires "
+                    f"forge:retry ({reason})"
                 )
-                # Post a comment to Jira explaining how to retry (only once)
-                if not current_state.get("terminal_error_notified"):
-                    await self._post_terminal_error_comment(
-                        message.ticket_key, last_error
-                    )
-                    # Mark as notified so we don't post again
-                    return {**current_state, "terminal_error_notified": True}
-                # Return current state as-is (no changes)
+                await self._post_terminal_error_comment(
+                    message.ticket_key, last_error
+                )
                 return current_state
             else:
-                # Non-terminal state, or explicit retry requested - clear error
+                # Transient failure — auto-resume and let the node retry
                 prev_error = current_state.get("last_error", "")
                 logger.info(
-                    f"Clearing last_error for {message.ticket_key} to allow retry "
-                    f"(was: {prev_error[:100] if prev_error else 'unknown'})"
+                    f"Auto-resuming {message.ticket_key} after error at '{current_node}' "
+                    f"(attempt {retry_count + 1}/{MAX_AUTO_RETRIES}): "
+                    f"{prev_error[:100] if prev_error else 'unknown'}"
                 )
+                updated_state["is_paused"] = False
                 updated_state["last_error"] = None
+        else:
+            # No recognized signal — do not unpause or modify the workflow.
+            # This covers wrong-stage approvals, unrelated label changes, etc.
+            logger.info(
+                f"No valid signal detected for {message.ticket_key} "
+                f"at {current_node} — ignoring event, workflow state unchanged"
+            )
+            return current_state
 
         return updated_state
 
@@ -574,6 +594,14 @@ class OrchestratorWorker:
             fields = issue_data.get("fields", {})
             issue_type = fields.get("issuetype", {})
             ticket_type_str = issue_type.get("name", "Unknown")
+
+            # Child ticket events (Epic, Task) are re-routed to the parent Feature
+            # by the Jira webhook handler. The payload still carries the child's
+            # issue type, which won't match any workflow. Fall through to UNKNOWN
+            # so _find_workflow_by_state resolves it from checkpoint.
+            child_types = {"Epic", "Task", "Sub-task"}
+            if ticket_type_str in child_types:
+                return TicketType.UNKNOWN
 
             # Map string to TicketType enum
             try:
