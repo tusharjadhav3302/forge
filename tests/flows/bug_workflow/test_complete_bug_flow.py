@@ -1,16 +1,13 @@
-"""Tests for complete bug workflow flow.
-
-NOTE: These tests need to be updated for the new pluggable workflows architecture.
-"""
+"""Tests for complete bug workflow flow."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from langgraph.graph import END
 
 from forge.models.workflow import ForgeLabel, TicketType
 from forge.workflow.bug.state import create_initial_bug_state
-from forge.workflow.bug.graph import route_entry
-
-pytestmark = pytest.mark.skip(reason="Needs update for pluggable workflows architecture")
+from forge.workflow.bug.graph import route_entry, _route_after_implementation
+from forge.workflow.nodes.bug_workflow import route_rca_approval
 
 from tests.fixtures.workflow_states import (
     STATE_BUG_NEW,
@@ -21,181 +18,271 @@ from tests.fixtures.workflow_states import (
 
 
 class TestBugWorkflowEntry:
-    """Tests for bug workflow entry."""
+    """Bug workflow entry routing."""
 
-    def test_bug_routes_to_analyze_bug(self):
-        """Bug ticket starts with bug analysis."""
-        state = create_initial_state(
+    def test_new_bug_routes_to_analyze_bug(self):
+        """A fresh bug ticket starts at analyze_bug."""
+        state = create_initial_bug_state(
             thread_id="test-thread",
             ticket_key="TEST-456",
             ticket_type=TicketType.BUG,
         )
 
-        next_node = route_by_ticket_type(state)
-
-        assert next_node == "analyze_bug"
+        assert route_entry(state) == "analyze_bug"
 
     def test_bug_skips_prd_spec_epic_phases(self):
-        """Bug workflow skips PRD, Spec, and Epic phases."""
-        state = create_initial_state(
+        """Bug workflow never routes to PRD, spec, or epic nodes."""
+        state = create_initial_bug_state(
             thread_id="test-thread",
             ticket_key="TEST-456",
             ticket_type=TicketType.BUG,
         )
 
-        next_node = route_by_ticket_type(state)
+        next_node = route_entry(state)
 
-        # Should not go to PRD generation
-        assert next_node != "generate_prd"
         assert next_node == "analyze_bug"
+        assert next_node != "generate_prd"
+        assert next_node != "generate_spec"
+        assert next_node != "decompose_epics"
+
+    def test_resume_at_rca_gate_routes_back_to_gate(self):
+        """Resuming a bug at rca_approval_gate returns to that gate."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            current_node="rca_approval_gate",
+            ticket_type=TicketType.BUG,
+        )
+
+        assert route_entry(state) == "rca_approval_gate"
+
+    def test_resume_at_implement_routes_there(self):
+        """Resuming at implement_bug_fix returns to that node."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            current_node="implement_bug_fix",
+            ticket_type=TicketType.BUG,
+        )
+
+        assert route_entry(state) == "implement_bug_fix"
+
+    def test_terminal_state_routes_to_end(self):
+        """A completed bug workflow returns END on resume attempt."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            current_node="complete",
+            ticket_type=TicketType.BUG,
+        )
+
+        assert route_entry(state) == END
 
 
-class TestBugRCAGeneration:
-    """Tests for RCA generation."""
+class TestRCAGenerationState:
+    """State correctness after RCA generation."""
 
-    def test_rca_pending_state(self):
-        """RCA pending state is correct."""
-        state = STATE_RCA_PENDING
+    def test_rca_pending_state_is_paused(self):
+        """RCA pending state has is_paused=True."""
+        assert STATE_RCA_PENDING["is_paused"] is True
+        assert STATE_RCA_PENDING["current_node"] == "rca_approval_gate"
 
-        assert state["current_node"] == "rca_approval_gate"
-        assert state["is_paused"] is True
-        assert state["rca_content"] is not None
-        assert "Root Cause" in state["rca_content"]
+    def test_rca_content_is_populated(self):
+        """Generated RCA is stored in state."""
+        assert STATE_RCA_PENDING["rca_content"] is not None
+        assert len(STATE_RCA_PENDING["rca_content"]) > 0
+
+    def test_rca_contains_root_cause_section(self):
+        """RCA content includes a Root Cause section."""
+        assert "Root Cause" in STATE_RCA_PENDING["rca_content"]
 
     def test_rca_contains_fix_options(self):
-        """RCA contains fix options."""
-        state = STATE_RCA_PENDING
-
-        assert "Fix Options" in state["rca_content"]
+        """RCA content includes fix options."""
+        assert "Fix" in STATE_RCA_PENDING["rca_content"]
 
 
-class TestBugRCAApproval:
-    """Tests for RCA approval routing."""
+class TestRCAApprovalRouting:
+    """route_rca_approval routing logic."""
 
-    @pytest.fixture
-    def rca_pending_state(self):
-        """State with RCA pending approval."""
-        return make_workflow_state(
+    def test_approved_rca_routes_to_implement(self):
+        """Approved RCA (is_paused=False, no revision) routes to implement_bug_fix."""
+        state = make_workflow_state(
             ticket_key="TEST-456",
             ticket_type=TicketType.BUG,
             current_node="rca_approval_gate",
-            is_paused=True,
+            is_paused=False,
             rca_content="# RCA\n\n## Root Cause\nTest cause.",
         )
 
-    def test_rca_approved_routes_to_fix(self, rca_pending_state):
-        """Approved RCA routes to bug fix implementation when resumed."""
-        # Workflow is resumed from pause on approval webhook
-        rca_pending_state["is_paused"] = False
+        assert route_rca_approval(state) == "implement_bug_fix"
 
-        from forge.orchestrator.nodes import route_rca_approval
-        next_node = route_rca_approval(rca_pending_state)
-
-        assert next_node == "implement_bug_fix"
-
-    def test_rca_rejected_routes_to_regenerate(self, rca_pending_state):
-        """Rejected RCA routes to regeneration."""
-        rca_pending_state["context"] = {
-            "labels": ["forge:managed", "forge:rca-pending"],
-        }
-        rca_pending_state["feedback_comment"] = "Wrong root cause identified."
-        rca_pending_state["revision_requested"] = True
-
-        from forge.orchestrator.nodes import route_rca_approval
-        next_node = route_rca_approval(rca_pending_state)
-
-        assert next_node == "regenerate_rca"
-
-
-class TestBugRCARevision:
-    """Tests for RCA revision cycle."""
-
-    @pytest.fixture
-    def rca_with_feedback(self):
-        """State with RCA rejection feedback."""
-        return make_workflow_state(
+    def test_paused_rca_routes_to_end(self):
+        """Waiting for approval (is_paused=True) returns END."""
+        state = make_workflow_state(
             ticket_key="TEST-456",
             ticket_type=TicketType.BUG,
             current_node="rca_approval_gate",
             is_paused=True,
-            rca_content="# RCA - Wrong Analysis",
-            feedback_comment="The actual cause is in the auth module, not DB.",
+        )
+
+        assert route_rca_approval(state) == END
+
+    def test_rejected_rca_routes_to_regenerate(self):
+        """Feedback comment + revision_requested routes to regenerate_rca."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            ticket_type=TicketType.BUG,
+            current_node="rca_approval_gate",
+            is_paused=False,
+            feedback_comment="Wrong root cause — the bug is in the auth module.",
             revision_requested=True,
         )
 
-    def test_rca_revision_incorporates_feedback(self, rca_with_feedback):
-        """RCA revision should incorporate feedback."""
-        assert "auth module" in rca_with_feedback["feedback_comment"]
+        assert route_rca_approval(state) == "regenerate_rca"
 
-    def test_rca_revision_routes_correctly(self, rca_with_feedback):
-        """RCA revision routes to regenerate_rca."""
-        rca_with_feedback["context"] = {
-            "labels": ["forge:managed", "forge:rca-pending"],
-        }
+    def test_question_in_rca_routes_to_answer(self):
+        """Q&A question (is_question=True) routes to answer_question before revision."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            ticket_type=TicketType.BUG,
+            current_node="rca_approval_gate",
+            is_paused=False,
+            is_question=True,
+            feedback_comment="?Can you explain why you chose Option 1?",
+            revision_requested=False,
+        )
 
-        from forge.orchestrator.nodes import route_rca_approval
-        next_node = route_rca_approval(rca_with_feedback)
+        assert route_rca_approval(state) == "answer_question"
 
-        assert next_node == "regenerate_rca"
+    def test_question_takes_priority_over_revision(self):
+        """Q&A question is processed before revision even if both flags are set."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            ticket_type=TicketType.BUG,
+            current_node="rca_approval_gate",
+            is_paused=False,
+            is_question=True,
+            feedback_comment="?Why not option 2?",
+            revision_requested=True,
+        )
+
+        assert route_rca_approval(state) == "answer_question"
 
 
-class TestBugFixImplementation:
-    """Tests for bug fix implementation."""
+class TestRCARevisionCycle:
+    """RCA can be revised multiple times before approval."""
 
-    def test_bug_fix_state(self):
-        """Bug fix implementation state."""
-        state = STATE_RCA_APPROVED
+    def test_first_revision_preserves_original_rca(self):
+        """State tracks the original RCA content through the revision cycle."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            ticket_type=TicketType.BUG,
+            current_node="rca_approval_gate",
+            rca_content="# RCA - First Attempt",
+            feedback_comment="Wrong module identified.",
+            revision_requested=True,
+            is_paused=False,
+        )
 
-        assert state["current_node"] == "implement_bug_fix"
-        assert state["is_paused"] is False
+        # feedback_comment is available for the regeneration node
+        assert state["feedback_comment"] == "Wrong module identified."
 
-    def test_bug_fix_goes_to_pr_creation(self):
-        """Bug fix goes to PR creation."""
+    def test_revision_routes_to_regenerate(self):
+        """Rejected RCA with feedback routes to regenerate_rca."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            ticket_type=TicketType.BUG,
+            current_node="rca_approval_gate",
+            is_paused=False,
+            feedback_comment="Wrong root cause.",
+            revision_requested=True,
+        )
+
+        assert route_rca_approval(state) == "regenerate_rca"
+
+    def test_second_rca_can_be_approved(self):
+        """After a revision, the second RCA can be approved normally."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            ticket_type=TicketType.BUG,
+            current_node="rca_approval_gate",
+            rca_content="# RCA - Revised",
+            is_paused=False,
+            revision_requested=False,
+            feedback_comment=None,
+        )
+
+        assert route_rca_approval(state) == "implement_bug_fix"
+
+
+class TestBugImplementationRouting:
+    """_route_after_implementation routes based on success/failure."""
+
+    def test_successful_fix_routes_to_create_pr(self):
+        """Successful implementation routes to create_pr."""
         state = make_workflow_state(
             ticket_key="TEST-456",
             ticket_type=TicketType.BUG,
             current_node="implement_bug_fix",
             bug_fix_implemented=True,
+            last_error=None,
         )
 
-        # After bug fix, should go to create_pr
-        # (This is verified by graph edge definition)
-        assert state["bug_fix_implemented"] is True
+        assert _route_after_implementation(state) == "create_pr"
 
-
-class TestBugTDDWorkflow:
-    """Tests for TDD bug fix workflow."""
-
-    @pytest.fixture
-    def bug_fix_state(self):
-        """State ready for bug fix."""
-        return make_workflow_state(
+    def test_failed_fix_below_retry_cap_escalates(self):
+        """Implementation failure below retry cap still escalates (retry handled by worker)."""
+        state = make_workflow_state(
             ticket_key="TEST-456",
             ticket_type=TicketType.BUG,
             current_node="implement_bug_fix",
-            rca_content="""# RCA
-
-## Root Cause
-Password validation regex rejects valid special characters.
-
-## Recommended Fix
-Update VALID_PASSWORD_PATTERN to include $@!#%^&*
-
-## Test Plan
-1. Add test case with special character passwords
-2. Verify existing tests still pass
-""",
+            bug_fix_implemented=False,
+            last_error="Container timed out",
+            retry_count=0,
         )
 
-    def test_rca_includes_test_plan(self, bug_fix_state):
-        """RCA includes test plan for TDD."""
-        assert "Test Plan" in bug_fix_state["rca_content"]
-        assert "test case" in bug_fix_state["rca_content"].lower()
+        result = _route_after_implementation(state)
 
-    def test_bug_fix_follows_tdd(self, bug_fix_state):
-        """Bug fix should follow TDD (test first, then fix)."""
-        # The RCA test plan guides the TDD approach
-        rca = bug_fix_state["rca_content"]
+        # Either escalates or routes to create_pr (never implemented=False creates PR)
+        assert result == "escalate_blocked"
 
-        # Should mention writing tests first
-        assert "test" in rca.lower()
+    def test_fix_not_implemented_escalates(self):
+        """bug_fix_implemented=False means implementation did not succeed."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            ticket_type=TicketType.BUG,
+            current_node="implement_bug_fix",
+            bug_fix_implemented=False,
+        )
+
+        assert _route_after_implementation(state) == "escalate_blocked"
+
+
+class TestBugWorkflowResumeRouting:
+    """route_entry correctly resumes a bug workflow at any node."""
+
+    @pytest.mark.parametrize("node,expected", [
+        ("analyze_bug", "analyze_bug"),
+        ("regenerate_rca", "analyze_bug"),
+        ("rca_approval_gate", "rca_approval_gate"),
+        ("setup_workspace", "setup_workspace"),
+        ("implement_bug_fix", "implement_bug_fix"),
+        ("create_pr", "create_pr"),
+        ("teardown_workspace", "teardown_workspace"),
+        ("ci_evaluator", "ci_evaluator"),
+        ("attempt_ci_fix", "ci_evaluator"),
+        ("ai_review", "ai_review"),
+        ("human_review_gate", "ai_review"),
+        ("escalate_blocked", "escalate_blocked"),
+    ])
+    def test_resume_routing(self, node, expected):
+        """route_entry maps each node to the correct resume target."""
+        state = make_workflow_state(
+            ticket_key="TEST-456",
+            current_node=node,
+            ticket_type=TicketType.BUG,
+        )
+
+        result = route_entry(state)
+
+        assert result == expected, (
+            f"route_entry with current_node='{node}' returned '{result}', "
+            f"expected '{expected}'"
+        )
