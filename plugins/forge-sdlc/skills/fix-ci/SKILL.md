@@ -1,80 +1,35 @@
 ---
 name: fix-ci
-description: Analyze CI failures and generate fixes. Use when CI/CD pipeline fails and needs automated repair.
+description: Apply CI fixes from a pre-analyzed fix plan. Use after analyze-ci has produced a structured plan.
 ---
 
 # CI Fix Skill
 
-Diagnose CI failures and generate minimal fixes.
+You are running inside a container with the full repository workspace. You have been given a pre-analyzed fix plan. Follow it exactly — do not re-diagnose or second-guess it.
 
-## Instructions
+## Workflow
 
-1. Analyze the CI error logs
-2. Identify the root cause of failure
-3. Generate a minimal fix
-4. Explain the issue and solution
+For each **Fixable Failure** in the fix plan:
 
-## Common CI Failure Types
+1. Read the affected files listed in the plan
+2. Apply the fix as described:
+   - Run codegen commands with `execute`
+   - Apply code edits with `edit_file`
+   - Run formatters with `execute`
+3. Run the verification command from the plan to confirm the fix works
+4. Move to the next failure
 
-### Test Failures
-- Assertion errors
-- Missing test dependencies
-- Flaky tests
-- Environment differences
+Skip anything listed under **Skipped Failures** — do not attempt to fix them.
 
-### Build Failures
-- Compilation errors
-- Missing dependencies
-- Version conflicts
-- Configuration issues
+## After All Fixes
 
-### Lint/Format Failures
-- Code style violations
-- Type errors
-- Import ordering
-- Documentation gaps
+1. Stage only the files you changed (never `git add .` or `-A`)
+2. Commit with a clear message referencing what was fixed
+3. Do NOT push — the orchestrator handles that
 
-### Security Scan Failures
-- Vulnerability alerts
-- Dependency issues
-- Secret detection
+## Guidelines
 
-## Output Format
-
-```markdown
-## Failure Analysis
-
-### Error Type
-[test/build/lint/security]
-
-### Root Cause
-[Brief explanation of what went wrong]
-
-### Affected Files
-- path/to/file1.py
-- path/to/file2.py
-
-## Fix
-
-### Changes Required
-[Description of the fix]
-
-### Code Changes
-
-```path/to/file.py
-<complete file contents>
-```
-
-### Commit Message
-[Suggested commit message for the fix]
-
-## Verification
-[How to verify the fix works]
-```
-
-## Fix Guidelines
-
-1. **Minimal**: Fix only what's broken
-2. **Safe**: Don't introduce new issues
-3. **Tested**: Ensure the fix resolves the CI failure
-4. **Documented**: Explain why the fix works
+- Follow the plan — do not invent additional fixes
+- Be surgical: only change files listed in the plan
+- If a step in the plan fails or doesn't apply, skip it and note it in your output
+- Do not reformat files not mentioned in the plan

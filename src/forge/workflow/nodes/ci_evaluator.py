@@ -4,7 +4,6 @@ import logging
 from typing import Any
 
 from forge.config import get_settings
-from forge.integrations.agents import ForgeAgent
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
@@ -92,6 +91,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                         "name": check.get("name"),
                         "conclusion": conclusion,
                         "output": check.get("output", {}),
+                        "log_url": check.get("html_url", ""),
                     })
 
         if all_passed:
@@ -172,47 +172,98 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     logger.info(f"Attempting CI fix for {ticket_key}")
 
     settings = get_settings()
-    github = GitHubClient()
-    agent = ForgeAgent(settings)
     fork_owner = state.get("fork_owner", "")
     fork_repo = state.get("fork_repo", "")
+    attempt = state.get("ci_fix_attempts", 1)
 
     try:
-        # Collect error information
-        error_info = _collect_error_info(failed_checks)
-
-        # If we don't have a workspace, escalate — workspace may have been lost
-        # (e.g. machine restart). Use forge:retry on the ticket to re-run.
-        if not workspace_path:
-            logger.warning(f"No workspace available for CI fix on {ticket_key}")
-            return update_state_timestamp({
-                **state,
-                "last_error": (
-                    "Workspace not available for CI fix — it may have been deleted "
-                    "(e.g. after a restart). Add the forge:retry label to re-run."
-                ),
-                "current_node": "escalate_blocked",
-            })
-
-        # Generate fix using Deep Agents
-        fix_prompt = _build_fix_prompt(error_info)
-
-        result = await agent.run_task(
-            task="fix-ci",
-            prompt=fix_prompt,
-            context={
-                "ticket_key": ticket_key,
-                "errors": len(failed_checks),
-                "workspace_path": workspace_path,
-            },
-        )
-
-        # Apply fix and commit
         from pathlib import Path
 
-        from forge.workflow.nodes.implementation import _apply_code_changes
+        from forge.integrations.agents import ForgeAgent
+        from forge.sandbox import ContainerRunner
         from forge.workspace.git_ops import GitOperations
-        from forge.workspace.manager import Workspace
+        from forge.workspace.manager import Workspace, WorkspaceManager
+
+        # If workspace was lost (e.g. restart), recreate it by cloning upstream,
+        # adding the fork as a remote, and checking out the PR branch.
+        if not workspace_path:
+            logger.info(
+                f"No workspace for {ticket_key} — recreating from fork branch"
+            )
+            branch_name = state.get("context", {}).get("branch_name", "")
+            current_repo = state.get("current_repo", "")
+
+            if not branch_name or not current_repo or not fork_owner or not fork_repo:
+                logger.error(
+                    f"Cannot recreate workspace for {ticket_key}: missing "
+                    f"branch_name={branch_name!r}, current_repo={current_repo!r}, "
+                    f"fork_owner={fork_owner!r}"
+                )
+                return update_state_timestamp({
+                    **state,
+                    "last_error": "Cannot recreate workspace: missing branch/repo info",
+                    "current_node": "escalate_blocked",
+                })
+
+            manager = WorkspaceManager()
+            workspace_obj = manager.create_workspace(
+                repo_name=current_repo, ticket_key=ticket_key
+            )
+            git_tmp = GitOperations(workspace_obj)
+            git_tmp.clone()
+            git_tmp.add_fork_remote(fork_owner, fork_repo)
+            git_tmp.checkout_branch(branch_name, remote="fork")
+
+            workspace_path = str(workspace_obj.path)
+            logger.info(f"Workspace recreated at {workspace_path}")
+
+            # Persist workspace_path so teardown can clean it up later
+            state = {**state, "workspace_path": workspace_path}
+
+    except Exception as _setup_err:
+        logger.error(f"Workspace recreation failed for {ticket_key}: {_setup_err}")
+        from forge.workflow.nodes.error_handler import notify_error
+        await notify_error(state, str(_setup_err), "attempt_ci_fix")
+        return {
+            **state,
+            "last_error": str(_setup_err),
+            "current_node": "escalate_blocked",
+        }
+
+    try:
+        # ── Phase 1: Analysis ────────────────────────────────────────────────
+        # ForgeAgent with MCP access fetches the Prow logs and produces a
+        # structured fix plan. No workspace access needed here.
+        logger.info(f"Phase 1: Analyzing CI failures for {ticket_key} (attempt {attempt})")
+        error_info = _collect_error_info(failed_checks)
+        analysis_prompt = load_prompt("analyze-ci", error_info=error_info)
+
+        agent = ForgeAgent(settings)
+        try:
+            fix_plan = await agent.run_task(
+                task="analyze-ci",
+                prompt=analysis_prompt,
+                context={"ticket_key": ticket_key, "attempt": attempt},
+            )
+        finally:
+            await agent.close()
+
+        logger.info(f"Phase 1 complete: fix plan generated ({len(fix_plan)} chars)")
+
+        # ── Phase 2: Fix ─────────────────────────────────────────────────────
+        # Container with full workspace access applies the fix plan mechanically.
+        logger.info(f"Phase 2: Applying fixes for {ticket_key}")
+        fix_prompt = load_prompt("fix-ci", fix_plan=fix_plan)
+
+        runner = ContainerRunner(settings)
+        await runner.run(
+            workspace_path=Path(workspace_path),
+            task_summary=f"Apply CI fix plan (attempt {attempt})",
+            task_description=fix_prompt,
+            ticket_key=ticket_key,
+            task_key=f"{ticket_key}-ci-fix",
+            repo_name=state.get("current_repo", ""),
+        )
 
         workspace = Workspace(
             path=Path(workspace_path),
@@ -222,26 +273,21 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         )
         git = GitOperations(workspace)
 
-        files_modified = _apply_code_changes(result, Path(workspace_path))
-
-        if files_modified > 0:
+        if git.has_uncommitted_changes():
             git.stage_all()
-            git.commit(f"[{ticket_key}] Fix CI failures (attempt)")
+            git.commit(f"[{ticket_key}] fix: address CI failures (attempt {attempt})")
 
-            # Push to fork (same remote as the original PR), not to origin
             if fork_owner and fork_repo:
                 git.add_fork_remote(fork_owner, fork_repo)
                 git.push_to_fork(force=False)
             else:
-                # Fallback if fork info is missing (shouldn't happen in normal flow)
                 logger.warning("Fork info not in state — pushing to origin instead")
                 git.push(force=False)
 
             logger.info(f"CI fix applied and pushed for {ticket_key}")
         else:
-            logger.warning("No files modified by CI fix")
+            logger.warning(f"Container made no changes for {ticket_key} (attempt {attempt})")
 
-        # Fix pushed — pause and wait for GitHub to re-run CI
         return update_state_timestamp({
             **state,
             "current_node": "wait_for_ci_gate",
@@ -257,8 +303,6 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             "last_error": str(e),
             "current_node": "escalate_blocked",
         }
-    finally:
-        await github.close()
 
 
 async def wait_for_ci_gate(state: WorkflowState) -> WorkflowState:
@@ -379,6 +423,10 @@ def _collect_error_info(failed_checks: list[dict[str, Any]]) -> str:
     for check in failed_checks:
         parts.append(f"## {check.get('name', 'Unknown Check')}")
         parts.append(f"Result: {check.get('conclusion', 'failed')}")
+
+        log_url = check.get("log_url", "")
+        if log_url:
+            parts.append(f"Log URL: {log_url}")
 
         output = check.get("output", {})
         if output:

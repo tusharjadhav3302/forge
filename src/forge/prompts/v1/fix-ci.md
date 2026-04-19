@@ -1,6 +1,7 @@
-The following CI checks have failed. Please analyze the errors and generate a fix.
+Apply the following CI fix plan to the repository. The plan was produced by analyzing the actual CI failure logs.
 
-{error_info}
+## Fix Plan
 
-Generate the minimal code changes needed to fix these failures.
-Provide complete file contents for any files that need to be modified.
+{fix_plan}
+
+Follow the fix-ci skill instructions. Apply each fixable failure in order, skip the ones marked as skipped, and commit the changes when done.
