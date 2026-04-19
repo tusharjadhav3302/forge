@@ -164,8 +164,14 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         # Push branch to fork (not origin)
         git.push_to_fork()
 
-        # Build PR title
-        pr_title = f"[{ticket_key}] {_get_pr_title(state)}"
+        # Build PR title — fetch live summary from Jira as source of truth
+        ticket_summary = ""
+        try:
+            ticket_issue = await jira.get_issue(ticket_key)
+            ticket_summary = ticket_issue.summary or ""
+        except Exception as e:
+            logger.warning(f"Could not fetch ticket summary for PR title: {e}")
+        pr_title = f"[{ticket_key}] {_get_pr_title(state, ticket_summary)}"
 
         # Generate PR body with agent, fall back to template if it fails
         pr_body = await _generate_pr_body_with_agent(
@@ -227,22 +233,16 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         await jira.close()
 
 
-def _get_pr_title(state: WorkflowState) -> str:
-    """Generate PR title from state.
-
-    Args:
-        state: Current workflow state.
-
-    Returns:
-        PR title string.
-    """
-    # Try to get Feature summary from context
+def _get_pr_title(state: WorkflowState, ticket_summary: str = "") -> str:
+    """Generate PR title from Jira summary, falling back to state context."""
+    if ticket_summary:
+        return ticket_summary
     context = state.get("context", {})
-    if "feature_summary" in context:
-        return context["feature_summary"]
-
-    # Fall back to ticket key
-    return f"Implementation for {state.get('ticket_key', 'Unknown')}"
+    return (
+        context.get("feature_summary")
+        or context.get("summary")
+        or f"Implementation for {state.get('ticket_key', 'Unknown')}"
+    )
 
 
 def _build_pr_body(
