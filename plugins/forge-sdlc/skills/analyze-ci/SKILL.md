@@ -64,6 +64,26 @@ Before marking any e2e failure as skipped, apply these checks:
 
 If any of these checks points to a code defect, classify as **e2e-code-bug** and investigate the implementation, not the test harness. Read the relevant source code to confirm the root cause before writing the fix plan.
 
+### Timing and scheduling failures — special handling
+
+When a test measures time-based behavior (resyncs, requeues, reconcile periods, backoff timers), apply these additional checks **before** concluding it is environment load:
+
+**Stuck vs slow:** A slow operation makes progress but takes longer than the timeout. A stuck operation never makes progress at all. Check the logs:
+- If the measured value (e.g. `lastSyncTime`, `status.id`) changes at least once during the timeout window → the system is slow, a timeout increase may be appropriate.
+- If the measured value is **completely static** for the entire timeout window — unchanged for 60–120s when it should update every 10s — the operation is **stuck**. A stuck state is a code bug, not a timing issue. A longer timeout will not fix it.
+
+To confirm stuck vs slow: search the logs for the field name and check whether its value ever changes between test start and assertion failure. If it does not change at all, the controller never scheduled a follow-up reconcile.
+
+**Probabilistic code bugs:** Not all code bugs fail 100% of the time. A bug that triggers with ~50% probability per resource will fail:
+- ~50% of runs when 1 resource is involved (looks like a flake)
+- ~87.5% of runs when 3 resources are involved (looks like a bug)
+
+When related tests that exercise the same code path show inconsistent failure rates, compute the per-resource failure probability. If it is consistent across tests (e.g. all explained by ~50% per resource), that is a single probabilistic code bug, not independent flakes. Treat it as an **e2e-code-bug** and read the source code.
+
+**Read the source code for timing failures:** For any failure involving timing, scheduling, or state machine transitions, read the relevant controller/handler code before drawing conclusions. Look for: early-return paths that skip scheduling a follow-up requeue, race conditions between jitter and period checks, or conditions that prevent the next reconcile from being registered. A timeout increase is only valid if you have read the code and confirmed the operation can complete correctly. If any code path prevents the operation from ever completing, that is a code bug.
+
+**Never propose a timeout increase as the sole fix** without first verifying via source code that the operation is capable of completing. Timeout increases mask stuck states and leave the underlying bug unresolved.
+
 ## Output Format
 
 Write the fix plan to `.forge/fix-plan.md` in this exact structure so the fix agent can follow it mechanically:
