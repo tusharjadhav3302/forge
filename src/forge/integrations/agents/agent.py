@@ -143,7 +143,8 @@ class ForgeAgent:
                     f"Gemini model '{model}' requires Vertex AI. "
                     "Set ANTHROPIC_VERTEX_PROJECT_ID or use a Claude model."
                 )
-            logger.info(f"Creating ChatAnthropic model: {model}, max_tokens={self.settings.llm_max_tokens}")
+            logger.info(
+                f"Creating ChatAnthropic model: {model}, max_tokens={self.settings.llm_max_tokens}")
             return ChatAnthropic(
                 model=model,
                 api_key=self.settings.anthropic_api_key.get_secret_value(),
@@ -241,7 +242,8 @@ class ForgeAgent:
             Wrapped tool with error handling.
         """
         original_func = tool.func if hasattr(tool, "func") else None
-        original_coroutine = tool.coroutine if hasattr(tool, "coroutine") else None
+        original_coroutine = tool.coroutine if hasattr(
+            tool, "coroutine") else None
         tool_name = tool.name if hasattr(tool, "name") else str(tool)
 
         if original_coroutine:
@@ -259,7 +261,8 @@ class ForgeAgent:
             return StructuredTool(
                 name=tool.name,
                 description=tool.description,
-                args_schema=tool.args_schema if hasattr(tool, "args_schema") else None,
+                args_schema=tool.args_schema if hasattr(
+                    tool, "args_schema") else None,
                 coroutine=wrapped_async,
                 return_direct=getattr(tool, "return_direct", False),
             )
@@ -278,13 +281,15 @@ class ForgeAgent:
             return StructuredTool(
                 name=tool.name,
                 description=tool.description,
-                args_schema=tool.args_schema if hasattr(tool, "args_schema") else None,
+                args_schema=tool.args_schema if hasattr(
+                    tool, "args_schema") else None,
                 func=wrapped_sync,
                 return_direct=getattr(tool, "return_direct", False),
             )
         else:
             # Can't wrap, return original
-            logger.warning(f"Could not wrap tool {tool_name} - no func or coroutine found")
+            logger.warning(
+                f"Could not wrap tool {tool_name} - no func or coroutine found")
             return tool
 
     async def _load_mcp_tools(self) -> list[Any]:
@@ -294,7 +299,8 @@ class ForgeAgent:
             List of tools from MCP servers (filtered if read-only mode).
         """
         if not HAS_MCP:
-            logger.warning("langchain-mcp-adapters not installed, MCP tools unavailable")
+            logger.warning(
+                "langchain-mcp-adapters not installed, MCP tools unavailable")
             return []
 
         mcp_config = self._load_mcp_config()
@@ -303,7 +309,8 @@ class ForgeAgent:
             logger.debug("No MCP servers configured")
             return []
 
-        logger.info(f"Loading MCP tools from servers: {list(mcp_config.keys())}")
+        logger.info(
+            f"Loading MCP tools from servers: {list(mcp_config.keys())}")
 
         try:
             client = MultiServerMCPClient(mcp_config)
@@ -398,6 +405,23 @@ class ForgeAgent:
         else:
             logger.info("Agent tools: none (no MCP tools loaded)")
 
+        # Add summarization middleware to compact context before hitting token limits
+        middleware = []
+        try:
+            from deepagents.middleware.summarization import SummarizationMiddleware
+            middleware = [
+                SummarizationMiddleware(
+                    model=model,
+                    backend=backend,
+                    trigger=("fraction", 0.85),
+                    keep=("fraction", 0.10),
+                )
+            ]
+            logger.debug(
+                "Summarization middleware enabled (trigger: 85%, keep: 10%)")
+        except Exception as e:
+            logger.warning(f"Could not enable summarization middleware: {e}")
+
         # Create the agent with MCP tools
         agent = create_deep_agent(
             model=model,
@@ -406,6 +430,7 @@ class ForgeAgent:
             system_prompt=system_prompt,
             checkpointer=self._checkpointer,
             tools=mcp_tools if mcp_tools else None,
+            middleware=middleware if middleware else None,
         )
 
         return agent
@@ -431,7 +456,8 @@ class ForgeAgent:
 
         # Log configuration for visibility
         logger.info(f"Agent config: root_dir={root_dir}, skills={skill_paths}")
-        logger.info(f"Agent MCP servers: {list(mcp_config.keys())} (sync - no tools loaded)")
+        logger.info(
+            f"Agent MCP servers: {list(mcp_config.keys())} (sync - no tools loaded)")
 
         # Create filesystem backend
         backend = FilesystemBackend(root_dir=str(root_dir))
@@ -643,7 +669,8 @@ class ForgeAgent:
         # Extract response text from messages
         # Deep Agents returns LangChain message objects, not dicts
         response_text = []
-        messages = result.get("messages", []) if isinstance(result, dict) else []
+        messages = result.get("messages", []) if isinstance(
+            result, dict) else []
 
         for message in messages:
             # Check if it's an AI/Assistant message (LangChain message object)
@@ -743,16 +770,19 @@ class ForgeAgent:
 
         if enabled_setting == "*":
             # All servers enabled
-            logger.info(f"MCP enabled with all servers: {list(all_servers.keys())}")
+            logger.info(
+                f"MCP enabled with all servers: {list(all_servers.keys())}")
             return all_servers
 
         # Filter to only enabled servers
-        enabled_list = [s.strip() for s in enabled_setting.split(",") if s.strip()]
+        enabled_list = [s.strip()
+                        for s in enabled_setting.split(",") if s.strip()]
         filtered_servers = {
             name: config for name, config in all_servers.items() if name in enabled_list
         }
 
-        logger.info(f"MCP enabled with servers: {list(filtered_servers.keys())}")
+        logger.info(
+            f"MCP enabled with servers: {list(filtered_servers.keys())}")
         return filtered_servers
 
     def _parse_mcp_config(self, config_path: Path) -> dict[str, Any]:
@@ -941,7 +971,8 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
             feature_summary=context.get("feature_summary", "Not provided")
             if context
             else "Not provided",
-            project_key=context.get("project_key", "Not provided") if context else "Not provided",
+            project_key=context.get(
+                "project_key", "Not provided") if context else "Not provided",
             repo_instruction=repo_instruction,
         )
 
@@ -991,7 +1022,8 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
             feedback=feedback,
         )
 
-        logger.info(f"Regenerating {content_type} with feedback using Deep Agents")
+        logger.info(
+            f"Regenerating {content_type} with feedback using Deep Agents")
         result = await self.run_task(
             task=skill_name,
             prompt=prompt,
@@ -1068,7 +1100,8 @@ NOTE: No repositories configured. Use REPO: unknown for now."""
         """
         artifact_type = context.get("artifact_type", "document")
         generation_context = context.get("generation_context", {})
-        raw_requirements = generation_context.get("raw_requirements", "Not available")
+        raw_requirements = generation_context.get(
+            "raw_requirements", "Not available")
 
         prompt = load_prompt(
             "answer-question",

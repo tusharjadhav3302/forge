@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Enable LangChain debug/verbose mode if requested
 if os.environ.get("LANGCHAIN_VERBOSE", "").lower() in ("true", "1", "yes"):
     try:
-        from langchain_core.globals import set_verbose, set_debug
+        from langchain_core.globals import set_debug, set_verbose
         set_verbose(True)
         set_debug(True)
         logger.info("LangChain verbose/debug mode enabled")
@@ -412,6 +412,22 @@ async def run_agent_task(
         if skill_paths:
             logger.info(f"Agent skills: {skill_paths}")
 
+        # Add summarization middleware so the agent can compact its context
+        # when it grows large, preventing token limit errors on long tasks.
+        try:
+            from deepagents.middleware.summarization import SummarizationMiddleware
+            summarization_middleware = SummarizationMiddleware(
+                model=model,
+                backend=backend,
+                trigger=("fraction", 0.85),
+                keep=("fraction", 0.10),
+            )
+            middleware = [summarization_middleware]
+            logger.info("Summarization middleware enabled (trigger: 85%, keep: 10%)")
+        except Exception as e:
+            logger.warning(f"Could not enable summarization middleware: {e}")
+            middleware = []
+
         # Create and run the agent
         agent = create_deep_agent(
             model=model,
@@ -419,6 +435,7 @@ async def run_agent_task(
             system_prompt=system_prompt,
             tools=mcp_tools if mcp_tools else None,
             skills=skill_paths if skill_paths else None,
+            middleware=middleware if middleware else None,
         )
 
         # Set up Langfuse tracing if credentials are available
