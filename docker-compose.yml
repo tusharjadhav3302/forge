@@ -36,26 +36,6 @@ services:
       timeout: 10s
       retries: 3
 
-  # Forge orchestrator worker (LangGraph)
-  forge-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    command: ["python", "-m", "forge.orchestrator.worker"]
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - LOG_LEVEL=INFO
-    env_file:
-      - .env
-    depends_on:
-      redis:
-        condition: service_healthy
-    deploy:
-      replicas: 2
-      restart_policy:
-        condition: on-failure
-        max_attempts: 3
-
   # Prometheus for metrics collection
   prometheus:
     image: prom/prometheus:v2.51.0

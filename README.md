@@ -71,16 +71,19 @@ podman build -t forge-dev:latest -f containers/Containerfile containers/
 
 ### 3. Start Services
 
+Use Docker Compose to start Redis and the API gateway:
+
 ```bash
-# Terminal 1: Start Redis
-podman run -d --name redis-stack -p 6380:6379 redis/redis-stack-server:latest
+docker compose up redis forge-api -d
+```
 
-# Terminal 2: Start API server (receives webhooks)
-uv run uvicorn forge.main:app --reload --port 8000
+Then run the worker on the host:
 
-# Terminal 3: Start worker (processes workflows)
+```bash
 uv run forge worker
 ```
+
+> **Why run the worker on the host?** The worker spawns ephemeral Podman containers for task execution. Running it inside a Docker container would require container-in-container access (socket mounting, privileged mode) which is not supported in this setup. Redis and the API gateway have no such requirement and run fine in Docker.
 
 ### 4. Configure Webhooks
 
