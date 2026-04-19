@@ -186,7 +186,8 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
 
         # If workspace was lost (e.g. restart), recreate it by cloning upstream,
         # adding the fork as a remote, and checking out the PR branch.
-        if not workspace_path:
+        # Check both: path missing from state AND path no longer exists on disk.
+        if not workspace_path or not Path(workspace_path).exists():
             logger.info(
                 f"No workspace for {ticket_key} — recreating from fork branch"
             )
