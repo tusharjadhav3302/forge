@@ -587,7 +587,7 @@ def build_feature_graph() -> StateGraph:
     graph.add_conditional_edges(
         "attempt_ci_fix",
         lambda s: s.get("current_node", "wait_for_ci_gate"),
-        {"wait_for_ci_gate": "wait_for_ci_gate", "escalate_blocked": "escalate_blocked"},
+        {"wait_for_ci_gate": "wait_for_ci_gate", "escalate_blocked": "escalate_blocked", "ci_evaluator": "ci_evaluator"},
     )
     graph.add_edge("escalate_blocked", END)
 
