@@ -249,6 +249,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             await agent.close()
 
         logger.info(f"Phase 1 complete: fix plan generated ({len(fix_plan)} chars)")
+        logger.debug(f'fix plan generated:\n{fix_plan}')
 
         # ── Phase 2: Fix ─────────────────────────────────────────────────────
         # Container with full workspace access applies the fix plan mechanically.
@@ -273,18 +274,33 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         )
         git = GitOperations(workspace)
 
+        branch_name = state.get("context", {}).get("branch_name", "")
+
+        # Commit any files the container left uncommitted (safety net)
         if git.has_uncommitted_changes():
             git.stage_all()
             git.commit(f"[{ticket_key}] fix: address CI failures (attempt {attempt})")
 
+        # Push if there are local commits not yet on the fork remote.
+        # The container agent may have committed already — checking only for
+        # uncommitted changes misses that case.
+        if fork_owner and fork_repo:
+            git.add_fork_remote(fork_owner, fork_repo)
+            remote_ref = f"fork/{branch_name}"
+        else:
+            remote_ref = f"origin/{branch_name}"
+
+        unpushed = git._run_git(
+            "log", f"{remote_ref}..HEAD", "--oneline", check=False
+        ).stdout.strip()
+
+        if unpushed:
             if fork_owner and fork_repo:
-                git.add_fork_remote(fork_owner, fork_repo)
                 git.push_to_fork(force=False)
             else:
                 logger.warning("Fork info not in state — pushing to origin instead")
                 git.push(force=False)
-
-            logger.info(f"CI fix applied and pushed for {ticket_key}")
+            logger.info(f"CI fix pushed for {ticket_key} (attempt {attempt})")
         else:
             logger.warning(f"Container made no changes for {ticket_key} (attempt {attempt})")
 
