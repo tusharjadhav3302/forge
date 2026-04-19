@@ -413,8 +413,8 @@ class ForgeAgent:
                 SummarizationMiddleware(
                     model=model,
                     backend=backend,
-                    trigger=("fraction", 0.85),
-                    keep=("fraction", 0.10),
+                    trigger=("tokens", 170_000),  # ~85% of Claude's 200k context
+                    keep=("tokens", 20_000),     # ~10% of 200k
                 )
             ]
             logger.debug(
