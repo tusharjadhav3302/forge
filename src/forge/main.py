@@ -5,6 +5,7 @@ import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -15,7 +16,9 @@ from forge.config import get_settings
 from forge.observability.config import configure_tracing, shutdown_tracing
 from forge.orchestrator.checkpointer import close_redis_pool
 
-# Configure logging — read level from env so LOG_LEVEL=DEBUG works
+# Load .env before configuring logging so LOG_LEVEL is available at startup
+load_dotenv()
+
 logging.basicConfig(
     level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",

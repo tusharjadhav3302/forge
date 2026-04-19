@@ -790,6 +790,8 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
 
 def main() -> None:
     """Main entry point for the worker."""
+    from dotenv import load_dotenv
+    load_dotenv()  # must happen before basicConfig reads LOG_LEVEL
     logging.basicConfig(
         level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
