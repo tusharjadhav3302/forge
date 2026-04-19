@@ -405,24 +405,9 @@ class ForgeAgent:
         else:
             logger.info("Agent tools: none (no MCP tools loaded)")
 
-        # Add summarization middleware to compact context before hitting token limits
-        middleware = []
-        try:
-            from deepagents.middleware.summarization import SummarizationMiddleware
-            middleware = [
-                SummarizationMiddleware(
-                    model=model,
-                    backend=backend,
-                    trigger=("tokens", 170_000),  # ~85% of Claude's 200k context
-                    keep=("tokens", 20_000),     # ~10% of 200k
-                )
-            ]
-            logger.debug(
-                "Summarization middleware enabled (trigger: 85%, keep: 10%)")
-        except Exception as e:
-            logger.warning(f"Could not enable summarization middleware: {e}")
-
-        # Create the agent with MCP tools
+        # Create the agent with MCP tools.
+        # Note: create_deep_agent already adds SummarizationMiddleware internally —
+        # do not pass it again or deepagents raises a duplicate middleware error.
         agent = create_deep_agent(
             model=model,
             backend=backend,
@@ -430,7 +415,6 @@ class ForgeAgent:
             system_prompt=system_prompt,
             checkpointer=self._checkpointer,
             tools=mcp_tools if mcp_tools else None,
-            middleware=middleware if middleware else None,
         )
 
         return agent

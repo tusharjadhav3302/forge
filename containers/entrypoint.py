@@ -412,30 +412,15 @@ async def run_agent_task(
         if skill_paths:
             logger.info(f"Agent skills: {skill_paths}")
 
-        # Add summarization middleware so the agent can compact its context
-        # when it grows large, preventing token limit errors on long tasks.
-        try:
-            from deepagents.middleware.summarization import SummarizationMiddleware
-            summarization_middleware = SummarizationMiddleware(
-                model=model,
-                backend=backend,
-                trigger=("tokens", 170_000),  # ~85% of Claude's 200k context
-                keep=("tokens", 20_000),     # ~10% of 200k
-            )
-            middleware = [summarization_middleware]
-            logger.info("Summarization middleware enabled (trigger: 85%, keep: 10%)")
-        except Exception as e:
-            logger.warning(f"Could not enable summarization middleware: {e}")
-            middleware = []
-
-        # Create and run the agent
+        # Create and run the agent.
+        # Note: create_deep_agent already adds SummarizationMiddleware internally —
+        # do not pass it again or deepagents raises a duplicate middleware error.
         agent = create_deep_agent(
             model=model,
             backend=backend,
             system_prompt=system_prompt,
             tools=mcp_tools if mcp_tools else None,
             skills=skill_paths if skill_paths else None,
-            middleware=middleware if middleware else None,
         )
 
         # Set up Langfuse tracing if credentials are available
