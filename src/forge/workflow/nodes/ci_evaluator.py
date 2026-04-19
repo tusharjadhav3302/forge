@@ -235,8 +235,17 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         # ForgeAgent with MCP access fetches the Prow logs and produces a
         # structured fix plan. No workspace access needed here.
         logger.info(f"Phase 1: Analyzing CI failures for {ticket_key} (attempt {attempt})")
-        error_info = _collect_error_info(failed_checks)
-        analysis_prompt = load_prompt("analyze-ci", error_info=error_info)
+
+        # Write failures to .forge/ci-failures.md so the agent reads it via file
+        # tools instead of having all the content inline in the prompt (avoids
+        # token limit issues with large log summaries).
+        failures_file = Path(workspace_path) / ".forge" / "ci-failures.md"
+        failures_file.parent.mkdir(exist_ok=True)
+        failures_file.write_text(_collect_error_info(failed_checks))
+
+        analysis_prompt = load_prompt(
+            "analyze-ci", failures_file_path=str(failures_file)
+        )
 
         agent = ForgeAgent(settings)
         try:

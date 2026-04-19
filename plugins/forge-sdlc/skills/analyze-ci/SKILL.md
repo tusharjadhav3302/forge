@@ -9,10 +9,13 @@ You are given a list of failed CI checks with their log URLs. Fetch the actual l
 
 ## Workflow
 
-1. For each failed check, fetch its log URL to get the full error output
-2. Categorize the failure (see categories below)
-3. For fixable failures, determine exactly what needs to change
-4. Produce a structured fix plan (see output format)
+1. Read the failures file at the path provided in the prompt using `read_file`
+2. For each failed check that has a log URL, fetch the log — but retrieve **only the last 200 lines**. CI failures almost always appear at the end.
+3. Categorize each failure (see categories below)
+4. For fixable failures, determine exactly what needs to change
+5. Produce a structured fix plan (see output format)
+
+**Important**: Do not include full log content in your response. Summarise findings in the fix plan only.
 
 ## Failure Categories
 

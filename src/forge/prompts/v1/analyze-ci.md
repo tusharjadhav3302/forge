@@ -1,7 +1,7 @@
-The following CI checks have failed on a pull request. Analyze the failures and produce a structured fix plan.
+Analyze the CI failures described in the file below and produce a structured fix plan.
 
-## Failed Checks
+## Failures File
 
-{error_info}
+{failures_file_path}
 
-Fetch the log URLs listed above, identify the root cause of each failure, and produce a fix plan following the analyze-ci skill instructions. The fix plan will be passed directly to a container agent that will apply the changes — be specific and actionable.
+Read that file, fetch the log URLs it contains (last 200 lines only), then follow the analyze-ci skill instructions to categorize each failure and produce the fix plan.
