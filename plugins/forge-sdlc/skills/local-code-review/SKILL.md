@@ -1,32 +1,40 @@
 ---
 name: local-code-review
-description: Review local code changes for breaking issues and fix them in-place. Use before PR creation to catch critical problems early.
+description: Run codegen, lint, then review local code changes for breaking issues and fix them in-place. Use before PR creation to catch critical problems early.
 ---
 
 # Local Code Review Skill
 
-Review the provided diff for **breaking issues only** and fix them directly in the workspace files.
+Before creating a PR, ensure the code is clean and correct. This skill runs in three phases: codegen, lint/format, then a review for breaking issues.
 
-## Scope — What to Review
+## Phase 1 — Codegen
 
-Only flag and fix issues that would cause:
-- **Build or compile failures** — code that won't compile or import correctly
-- **Runtime crashes** — null pointer dereferences, unhandled exceptions on the happy path, type errors
-- **Security holes** — hardcoded secrets, SQL injection, shell injection, arbitrary code execution
-- **Broken tests** — test failures introduced by the changes
-- **Spec violations** — core acceptance criteria from the spec that are clearly unimplemented or inverted
+Run any required code generation so that generated files are in sync with source changes.
 
-## Scope — What to Ignore
+1. Check for codegen instructions in `README.md`, `CONTRIBUTING.md`, or `Makefile`
+2. Check for `//go:generate` directives in files that were changed (`git diff origin/main...HEAD --name-only`)
+3. Run the appropriate codegen command (e.g. `go generate ./...`, `make generate`, `controller-gen`)
+4. If codegen produces changes, they will be included in the commit
 
-Do NOT flag or attempt to fix:
-- Code style, formatting, or naming conventions
-- Minor improvements or refactoring opportunities
-- Performance optimisations unless catastrophic
-- Missing documentation or comments
-- "Could be done better" feedback
-- Anything already handled by the project's linter
+## Phase 2 — Lint & Format
 
-## Workflow
+Run the project's linter and formatter on the changed files.
+
+1. Check for lint/format commands in `README.md`, `CONTRIBUTING.md`, or `Makefile`
+2. If documented, use those commands. If not, fall back to language defaults:
+
+| Language | Format | Lint |
+|----------|--------|------|
+| Go | `gofmt -w <file>` | `go vet ./pkg/changed/...` |
+| Python | `ruff format <file>` | `ruff check --fix <file>` |
+| TypeScript/JS | `prettier --write <file>` | `eslint --fix <file>` |
+| Rust | `rustfmt <file>` | `cargo clippy -p crate_name` |
+
+Run the formatter first, then the linter, targeting only the changed files.
+
+## Phase 3 — Review
+
+Get the diff and review for breaking issues only.
 
 1. Run `git diff origin/main...HEAD --no-color` to get all changes on this branch
 2. If the diff is empty, output `NO_BREAKING_ISSUES` and stop
@@ -37,6 +45,17 @@ Do NOT flag or attempt to fix:
    d. Verify the fix compiles / passes a targeted test if possible
 4. If no breaking issues are found, output `NO_BREAKING_ISSUES` and stop
 5. After fixing, output a summary of what was fixed
+
+## Scope — What to Review (Phase 3)
+
+Only flag and fix issues that would cause:
+- **Build or compile failures** — code that won't compile or import correctly
+- **Runtime crashes** — null pointer dereferences, unhandled exceptions on the happy path, type errors
+- **Security holes** — hardcoded secrets, SQL injection, shell injection, arbitrary code execution
+- **Broken tests** — test failures introduced by the changes
+- **Spec violations** — core acceptance criteria from the spec that are clearly unimplemented or inverted
+
+Do NOT flag: style, formatting, naming, minor improvements, performance, missing docs, or anything already handled in Phase 2.
 
 ## Output Format
 
