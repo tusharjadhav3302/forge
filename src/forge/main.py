@@ -1,6 +1,7 @@
 """FastAPI application entry point for Forge webhook gateway."""
 
 import logging
+import os
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -14,9 +15,9 @@ from forge.config import get_settings
 from forge.observability.config import configure_tracing, shutdown_tracing
 from forge.orchestrator.checkpointer import close_redis_pool
 
-# Configure logging
+# Configure logging — read level from env so LOG_LEVEL=DEBUG works
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)

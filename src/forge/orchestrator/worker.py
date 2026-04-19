@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import logging
+import os
 import signal
 import sys
 import uuid
@@ -790,7 +791,7 @@ async def run_single_ticket(ticket_key: str) -> dict[str, Any]:
 def main() -> None:
     """Main entry point for the worker."""
     logging.basicConfig(
-        level=logging.INFO,
+        level=getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
