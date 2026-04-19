@@ -179,7 +179,6 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     try:
         from pathlib import Path
 
-        from forge.integrations.agents import ForgeAgent
         from forge.sandbox import ContainerRunner
         from forge.workspace.git_ops import GitOperations
         from forge.workspace.manager import Workspace, WorkspaceManager
@@ -234,35 +233,44 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
     try:
         # ── Phase 1: Analysis ────────────────────────────────────────────────
         # ForgeAgent with MCP access fetches the Prow logs and produces a
-        # structured fix plan. No workspace access needed here.
+        # ── Phase 1: Analysis (container) ────────────────────────────────────
+        # Runs in a container so the agent has gh CLI and shell access to fetch
+        # real GitHub Actions / Prow logs. Writes the fix plan to a file so
+        # Phase 2 can read it without hitting token limits.
         logger.info(f"Phase 1: Analyzing CI failures for {ticket_key} (attempt {attempt})")
 
-        # Write failures to .forge/ci-failures.md so the agent reads it via file
-        # tools instead of having all the content inline in the prompt (avoids
-        # token limit issues with large log summaries).
         failures_file = Path(workspace_path) / ".forge" / "ci-failures.md"
-        failures_file.parent.mkdir(exist_ok=True)
+        fix_plan_file = Path(workspace_path) / ".forge" / "fix-plan.md"
+        failures_file.parent.mkdir(parents=True, exist_ok=True)
         failures_file.write_text(_collect_error_info(failed_checks))
 
         analysis_prompt = load_prompt(
             "analyze-ci", failures_file_path=str(failures_file)
         )
 
-        agent = ForgeAgent(settings)
-        try:
-            fix_plan = await agent.run_task(
-                task="analyze-ci",
-                prompt=analysis_prompt,
-                context={"ticket_key": ticket_key, "attempt": attempt},
-            )
-        finally:
-            await agent.close()
+        runner = ContainerRunner(settings)
+        await runner.run(
+            workspace_path=Path(workspace_path),
+            task_summary=f"Analyze CI failures (attempt {attempt})",
+            task_description=analysis_prompt,
+            ticket_key=ticket_key,
+            task_key=f"{ticket_key}-ci-analyze",
+            repo_name=state.get("current_repo", ""),
+        )
 
+        if not fix_plan_file.exists():
+            logger.warning(f"No fix plan written for {ticket_key} — skipping fix phase")
+            return update_state_timestamp({
+                **state,
+                "current_node": "wait_for_ci_gate",
+                "last_error": None,
+            })
+
+        fix_plan = fix_plan_file.read_text()
         logger.info(f"Phase 1 complete: fix plan generated ({len(fix_plan)} chars)")
-        logger.debug(f'fix plan generated:\n{fix_plan}')
 
         # ── Phase 2: Fix ─────────────────────────────────────────────────────
-        # Container with full workspace access applies the fix plan mechanically.
+        # Container applies the fix plan written by Phase 1.
         logger.info(f"Phase 2: Applying fixes for {ticket_key}")
         fix_prompt = load_prompt("fix-ci", fix_plan=fix_plan)
 

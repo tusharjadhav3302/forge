@@ -10,12 +10,30 @@ You are given a list of failed CI checks with their log URLs. Fetch the actual l
 ## Workflow
 
 1. Read the failures file at the path provided in the prompt using `read_file`
-2. For each failed check that has a log URL, fetch the log — but retrieve **only the last 200 lines**. CI failures almost always appear at the end.
-3. Categorize each failure (see categories below)
-4. For fixable failures, determine exactly what needs to change
-5. Produce a structured fix plan (see output format)
+2. Create `.forge/logs/` in the workspace if it doesn't exist: `mkdir -p .forge/logs`
+3. For each failed check that has a log URL, **download to `.forge/logs/`** first — one download, then analyze locally:
 
-**Important**: Do not include full log content in your response. Summarise findings in the fix plan only.
+   **Single log file** (GitHub Actions, plain Prow log URL):
+   - GitHub Actions: `gh api repos/{owner}/{repo}/actions/jobs/{job-id}/logs > .forge/logs/{check-name}.txt`
+   - Plain URL: `curl -sL "{url}" -o .forge/logs/{check-name}.txt`
+
+   **Log bundle / archive** (Prow often uploads a `.tar.gz` bundle of all logs):
+   - Download: `curl -sL "{url}" -o .forge/logs/{check-name}.tar.gz`
+   - Extract: `tar -xzf .forge/logs/{check-name}.tar.gz -C .forge/logs/{check-name}/`
+   - The bundle typically contains `build-log.txt`, controller logs, and test output
+
+   **GitHub Actions artifacts** (uploaded on failure):
+   - `gh run download {run-id} -n {artifact-name} -D .forge/logs/{check-name}/`
+
+4. Analyze the downloaded files using local tools — use your judgment:
+   - `grep -i "error\|fail\|panic\|FAIL" .forge/logs/{check-name}.txt | tail -50`
+   - `tail -100 .forge/logs/{check-name}/build-log.txt`
+   - Search through extracted bundle files for the root cause
+4. Categorize each failure (see categories below)
+5. For fixable failures, determine exactly what needs to change
+6. Write the fix plan to `.forge/fix-plan.md` in the workspace (see output format)
+
+**Important**: Do not print large log content to the conversation. Analyse locally and write only the structured fix plan to the output file.
 
 ## Failure Categories
 
@@ -33,7 +51,7 @@ You are given a list of failed CI checks with their log URLs. Fetch the actual l
 
 ## Output Format
 
-Produce a fix plan in this exact structure so the fix agent can follow it mechanically:
+Write the fix plan to `.forge/fix-plan.md` in this exact structure so the fix agent can follow it mechanically:
 
 ```
 # CI Fix Plan
