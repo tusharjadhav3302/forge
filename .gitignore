@@ -3,6 +3,8 @@ jira-export
 workflows-plan
 LLD*
 .ruff_cache
+specs/
+
 # Python
 __pycache__/
 *.py[cod]

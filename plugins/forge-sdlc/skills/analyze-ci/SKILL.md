@@ -43,11 +43,26 @@ You are given a list of failed CI checks with their log URLs. Fetch the actual l
 - **lint**: Lint rule violations with clear error messages. Fix: address the specific violations.
 - **compile**: Compilation errors. Fix: correct the specific syntax/type errors.
 - **unit-test**: Test assertion failures caused by a code bug. Fix: correct the implementation or update the test.
+- **e2e-code-bug**: An e2e/integration test fails with a consistent, reproducible assertion error pointing to a code logic defect — not an infrastructure problem. The failure message is the same across runs and environments. Fix: correct the implementation. Examples: wrong condition status, missing requeue, incorrect state machine transition.
 
 ### Not fixable by code change — skip
-- **e2e**: End-to-end tests requiring a real cluster or cloud environment
-- **infra**: Timeouts, network errors, missing cluster resources, quota issues
-- **flaky**: Non-deterministic failures with no clear code cause
+- **e2e-infra**: End-to-end tests that fail due to infrastructure problems: DevStack/cluster startup failures, OpenStack API timeouts, networking errors, resource quota issues, or missing environment resources. The failure is in the test harness or cloud environment, not the code under test.
+- **infra**: Timeouts, network errors, missing cluster resources, quota issues outside of e2e test context.
+- **flaky**: Genuinely non-deterministic failures — fails with *different* errors across runs, or fails <30% of the time with no consistent root cause.
+
+### Distinguishing e2e-code-bug from e2e-infra and flaky
+
+Before marking any e2e failure as skipped, apply these checks:
+
+1. **Failure rate**: Does the same test fail in ≥70% of runs across multiple environments? High, consistent failure rates indicate a code bug, not a flaky environment. A test that fails 3 out of 4 runs with the same error is almost certainly a code bug.
+
+2. **Error consistency**: Is the *same assertion* failing with the *same error message* across runs and environments? Consistent errors point to code; varied errors (different steps, timeouts vs. assertion mismatches) point to infrastructure or true flakiness.
+
+3. **Error type**: Does the failure message mention assertion mismatches on computed values (condition status, timestamps, counts) vs. infrastructure errors (connection refused, resource not found in OpenStack, DevStack not ready)?
+
+4. **Failure isolation**: Does the failure happen at a specific, named test step that exercises business logic, rather than during setup/teardown or cluster bootstrapping?
+
+If any of these checks points to a code defect, classify as **e2e-code-bug** and investigate the implementation, not the test harness. Read the relevant source code to confirm the root cause before writing the fix plan.
 
 ## Output Format
 
@@ -75,7 +90,7 @@ Write the fix plan to `.forge/fix-plan.md` in this exact structure so the fix ag
 ## Skipped Failures
 
 ### [check-name]
-**Reason**: [e2e | infra | flaky] — [brief explanation]
+**Reason**: [e2e-infra | infra | flaky] — [brief explanation]
 
 ### [next check-name]
 ...
