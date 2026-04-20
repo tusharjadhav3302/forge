@@ -11,33 +11,33 @@ Forge automates the software development lifecycle from Feature ideation through
 Forge listens for Jira and github webhooks and orchestrates a multi-stage workflow:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           FEATURE WORKFLOW                                   │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐              │
-│  │  Create  │───>│ Generate │───>│ Generate │───>│ Decompose│              │
-│  │  Feature │    │   PRD    │    │   Spec   │    │  Epics   │              │
-│  └──────────┘    └────┬─────┘    └────┬─────┘    └────┬─────┘              │
-│                       │               │               │                     │
-│                  [Approval]      [Approval]      [Approval]                 │
-│                    ↕ Q&A           ↕ Q&A           ↕ Q&A                    │
-│                       │               │               │                     │
-│                       v               v               v                     │
-│                                                                              │
-│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐              │
-│  │ Generate │───>│Implement │───>│  Create  │───>│  CI/CD   │              │
-│  │  Tasks   │    │   Code   │    │    PR    │    │  + Fix   │              │
-│  └────┬─────┘    └──────────┘    └──────────┘    └────┬─────┘              │
-│       │                                               │                     │
-│  [Approval]                                      [AI Review]                │
-│    ↕ Q&A                                              │                     │
-│       │                                               v                     │
-│       v                                          ┌──────────┐              │
-│                                                  │  Human   │───> Done     │
-│                                                  │  Review  │              │
-│                                                  └──────────┘              │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                            FEATURE WORKFLOW                                   │
+├──────────────────────────────────────────────────────────────────────────────┤
+│                                                                               │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐                 │
+│  │  Create  │──>│ Generate │──>│ Generate │──>│ Decompose│                 │
+│  │  Feature │   │   PRD    │   │   Spec   │   │  Epics   │                 │
+│  └──────────┘   └────┬─────┘   └────┬─────┘   └────┬─────┘                 │
+│                      │              │              │                         │
+│                 [Approval]     [Approval]     [Approval]                    │
+│                   ↕ Q&A          ↕ Q&A          ↕ Q&A                       │
+│                      │              │              │                         │
+│                      v              v              v                         │
+│                                                                               │
+│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐ │
+│  │ Generate │──>│Implement │──>│  Local   │──>│  Create  │──>│  CI/CD   │ │
+│  │  Tasks   │   │   Code   │   │  Review  │   │    PR    │   │  + Fix   │ │
+│  └────┬─────┘   └──────────┘   └──────────┘   └──────────┘   └────┬─────┘ │
+│       │                                                             │        │
+│  [Approval]                                                   [AI Review]   │
+│    ↕ Q&A                                                           │        │
+│       │                                                             v        │
+│       v                                                       ┌──────────┐  │
+│                                                               │  Human   │──>│
+│                                                               │  Review  │   │
+│                                                               └──────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
 
 Q&A: At any approval gate, ask questions with "?" or "@forge ask" prefix
 ```
@@ -136,7 +136,9 @@ Forge will answer based on the artifact content and generation context, then kee
 When a workflow fails:
 1. Forge sets the `forge:blocked` label
 2. Forge posts a comment tagging the reporter and assignee
-3. To retry: Add the `forge:retry` label
+3. To retry: Add the `forge:retry` label — Forge resumes from the exact node that failed, not from the beginning
+
+> **CI-specific:** If CI fix attempts are exhausted, adding `forge:retry` resets the attempt counter so Forge gets a fresh budget of retries.
 
 ### Bug Workflow
 
@@ -156,10 +158,11 @@ Create Bug → Analyze (RCA) → [Approval + Q&A] → Implement Fix → PR → C
 | **Spec Generation** | AI creates behavioral spec with Given/When/Then criteria | Review, ask questions (?), approve or request changes |
 | **Epic Decomposition** | AI breaks feature into logical Epics with plans | Review, ask questions (?), approve or request changes |
 | **Task Generation** | AI creates implementation Tasks per repository | Review, ask questions (?), approve or request changes |
-| **Implementation** | Code executed in ephemeral containers | (Automatic) |
-| **Local Code Review** | AI reviews local diff for breaking issues and fixes them in-place (up to 2 passes) before PR creation | (Automatic) |
-| **PR Creation** | Pull request created with AI-generated description | (Automatic) |
-| **CI Validation** | Monitors CI, attempts autonomous fixes (up to 5 retries) | (Automatic) |
+| **Implementation** | Code executed in ephemeral Podman containers | (Automatic) |
+| **Local Code Review** | Reviews the diff against main, fixes breaking issues in-place (up to 2 passes) before PR creation | (Automatic) |
+| **PR Creation** | Fork-based pull request created with AI-generated description; PR body synced against commits | (Automatic) |
+| **CI Validation** | Pauses until GitHub CI webhook; on failure: runs two-stage analyze-then-fix pipeline (up to 5 retries). Each fix pass is reviewed in-place before push; PR description synced after each push. | (Automatic) |
+| **AI Review** | Reviews the PR against the spec after CI passes | (Automatic) |
 | **Human Review** | PR ready for human review | Merge or request changes |
 
 ### Bug Workflow Stages

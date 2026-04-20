@@ -25,8 +25,10 @@ graph TD;
 	task_router(task_router)
 	setup_workspace(setup_workspace)
 	implement_task(implement_task)
+	local_review(local_review)
 	create_pr(create_pr)
 	teardown_workspace(teardown_workspace)
+	wait_for_ci_gate(wait_for_ci_gate)
 	ci_evaluator(ci_evaluator)
 	attempt_ci_fix(attempt_ci_fix)
 	escalate_blocked(escalate_blocked)
@@ -66,8 +68,10 @@ graph TD;
 	human_review_gate -.-> complete_tasks;
 	human_review_gate -.-> implement_task;
 	implement_bug_fix --> create_pr;
-	implement_task -.-> create_pr;
+	implement_task -.-> local_review;
 	implement_task -.-> escalate_blocked;
+	local_review -.-> local_review;
+	local_review -.-> create_pr;
 	plan_approval_gate -.-> __end__;
 	plan_approval_gate -.-> generate_tasks;
 	plan_approval_gate -.-> regenerate_all_epics;
@@ -110,8 +114,10 @@ graph TD;
 	task_approval_gate -.-> task_router;
 	task_approval_gate -.-> update_single_task;
 	task_approval_gate -.-> answer_question;
-	teardown_workspace -.-> ci_evaluator;
+	teardown_workspace -.-> wait_for_ci_gate;
 	teardown_workspace -.-> setup_workspace;
+	wait_for_ci_gate -.-> ci_evaluator;
+	wait_for_ci_gate -.-> __end__;
 	update_single_epic --> plan_approval_gate;
 	update_single_task --> task_approval_gate;
 	answer_question -.-> prd_approval_gate;
