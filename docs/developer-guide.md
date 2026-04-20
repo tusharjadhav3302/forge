@@ -120,17 +120,25 @@ CI_IGNORED_CHECKS=tide          # comma-separated substrings of checks to ignore
 
 ## 4. Running Services
 
-### Start infrastructure (Redis + API gateway)
+### Start Redis
+
+Redis is the only service that runs in Docker for local development.
 
 ```bash
-docker compose up redis forge-api -d
+docker compose up redis -d
 ```
 
-This starts:
-- **Redis Stack** on `localhost:6380` — state, queue, checkpoints
-- **Forge API** on `localhost:8000` — webhook receiver
+This starts **Redis Stack** on `localhost:6380` — state, queue, and checkpoints.
 
-### Start the worker (runs on the host, not in Docker)
+### Start the API server
+
+```bash
+uv run uvicorn forge.main:app --reload --port 8000
+```
+
+The `--reload` flag restarts the server automatically when source files change — useful during development.
+
+### Start the worker
 
 The worker spawns Podman containers for task execution; it must run on the host.
 
@@ -147,13 +155,16 @@ docker compose up prometheus -d
 # Dashboard at http://localhost:9092
 ```
 
-### Full local stack (all at once)
+### Full local stack
 
 ```bash
-# Terminal 1
-docker compose up redis forge-api prometheus -d
+# Terminal 1 — Redis (and optionally Prometheus)
+docker compose up redis prometheus -d
 
-# Terminal 2
+# Terminal 2 — API server
+uv run uvicorn forge.main:app --reload --port 8000
+
+# Terminal 3 — Worker
 uv run forge worker
 ```
 
