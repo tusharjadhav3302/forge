@@ -9,6 +9,28 @@ You are given a list of failed CI checks with their log URLs. Fetch the actual l
 
 ## Workflow
 
+### Step 0 — Check for prior attempts (ALWAYS do this first)
+
+Before downloading any logs, check whether a previous fix attempt already ran:
+
+1. If `.forge/fix-plan.md` exists, read it in full. Identify:
+   - Which tests were in **Fixable Failures** and what fix was applied
+   - Which tests were in **Skipped Failures** and why
+
+2. Run `git log --oneline -10` to see what changes were committed by previous fix attempts. This tells you what code was already modified.
+
+3. For each test that is **still failing** in the current run:
+   - Was it in the previous **Fixable Failures** list? If yes, the previous fix **did not work**. Do not repeat it.
+   - Was it in the previous **Skipped Failures** list? Re-evaluate — a test that was skipped but continues to fail across multiple CI runs may have been incorrectly classified.
+
+4. For each test that is **no longer failing**: it was fixed. Do not include it in this plan.
+
+**If this is a retry (attempt > 1) and a test is still failing despite a prior fix:**
+- The prior approach was wrong. You MUST propose a different fix category or direction.
+- If the prior fix was a **timeout increase** and the test still fails: the timeout is not the root cause. The operation is stuck, not slow. Read the source code — look for early-return paths that skip scheduling a follow-up requeue or reconcile.
+- If the prior fix was a **code change** and the test still fails: re-read the code change in `git diff HEAD~3..HEAD` and reconsider whether it actually addresses the failure mode.
+- Never write a plan that repeats an approach already tried on a test that is still failing.
+
 1. Read the failures file at the path provided in the prompt using `read_file`
 2. Create `.forge/logs/` in the workspace if it doesn't exist: `mkdir -p .forge/logs`
 3. For each failed check that has a log URL, **download to `.forge/logs/`** first — one download, then analyze locally:

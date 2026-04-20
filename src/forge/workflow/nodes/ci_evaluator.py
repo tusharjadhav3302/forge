@@ -245,7 +245,9 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         failures_file.write_text(_collect_error_info(failed_checks))
 
         analysis_prompt = load_prompt(
-            "analyze-ci", failures_file_path=str(failures_file)
+            "analyze-ci",
+            failures_file_path=str(failures_file),
+            attempt=attempt,
         )
 
         runner = ContainerRunner(settings)
