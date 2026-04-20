@@ -302,18 +302,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             git.stage_all()
             git.commit(f"[{ticket_key}] fix: address CI failures (attempt {attempt})")
 
-        # Review the CI fix in-place and commit any corrections before pushing
-        await run_post_change_review(
-            workspace_path=str(workspace_path),
-            ticket_key=ticket_key,
-            current_repo=state.get("current_repo", ""),
-            branch_name=branch_name,
-            spec_content=state.get("spec_content", ""),
-            guardrails=state.get("context", {}).get("guardrails", ""),
-            label=f"ci-fix-{attempt}",
-        )
-
-        # Push all commits (CI fix + any review corrections) to the fork
+        # Check for changes before doing anything expensive
         if fork_owner and fork_repo:
             git.add_fork_remote(fork_owner, fork_repo)
             remote_ref = f"fork/{branch_name}"
@@ -324,7 +313,21 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             "log", f"{remote_ref}..HEAD", "--oneline", check=False
         ).stdout.strip()
 
-        if unpushed:
+        if not unpushed:
+            logger.warning(f"Container made no changes for {ticket_key} (attempt {attempt})")
+        else:
+            # Only run the expensive review pass when the fix actually changed code
+            await run_post_change_review(
+                workspace_path=str(workspace_path),
+                ticket_key=ticket_key,
+                current_repo=state.get("current_repo", ""),
+                branch_name=branch_name,
+                spec_content=state.get("spec_content", ""),
+                guardrails=state.get("context", {}).get("guardrails", ""),
+                label=f"ci-fix-{attempt}",
+            )
+
+            # Push all commits (CI fix + any review corrections)
             if fork_owner and fork_repo:
                 git.push_to_fork(force=False)
             else:
@@ -341,8 +344,6 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 pr_number=state.get("current_pr_number"),
                 attempt=attempt,
             )
-        else:
-            logger.warning(f"Container made no changes for {ticket_key} (attempt {attempt})")
 
         return update_state_timestamp({
             **state,
