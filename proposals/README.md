@@ -26,3 +26,4 @@ This directory contains proposals for new Forge features and enhancements.
 | 002 | [Workflow Status Updates in Jira](002-workflow-status-updates-in-jira.md) | Draft | eshulman2 |
 | 003 | [Retryable Blocked State via forge:retry](003-retryable-blocked-state.md) | Draft | eshulman2 |
 | 004 | [Dynamic Skill Loading by Jira Project](004-dynamic-skill-loading.md) | Draft | eshulman2 |
+| 005 | [CI Gate Skip via Comment Command](005-ci-gate-skip-command.md) | Draft | eshulman2 |
