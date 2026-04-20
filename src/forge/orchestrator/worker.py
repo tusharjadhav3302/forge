@@ -15,6 +15,8 @@ from forge.api.routes.metrics import (
     record_workflow_started,
 )
 from forge.config import get_settings
+from forge.integrations.github.client import GitHubClient
+from forge.integrations.jira.client import JiraClient
 from forge.models.events import EventSource
 from forge.models.workflow import TicketType
 from forge.orchestrator.checkpointer import get_checkpointer
@@ -273,6 +275,70 @@ class OrchestratorWorker:
         if current_node == "wait_for_ci_gate" and message.source == EventSource.GITHUB:
             is_ci_webhook = True
             logger.info(f"Detected GitHub CI webhook signal for {current_node}")
+
+        # GitHub issue_comment events: detect /forge skip-gate and /forge unskip-gate
+        # commands posted as PR comments.
+        _CI_STAGES = ("wait_for_ci_gate", "ci_evaluator", "attempt_ci_fix")
+        if message.source == EventSource.GITHUB and "issue_comment" in message.event_type:
+            gh_comment_body = payload.get("comment", {}).get("body", "").strip()
+            repo_full = payload.get("repository", {}).get("full_name", "")
+            pr_number = payload.get("issue", {}).get("number")
+            sender = payload.get("sender", {}).get("login", "")
+            _owner, _, _repo = repo_full.partition("/")
+
+            skip_prefix = "/forge skip-gate"
+            unskip_prefix = "/forge unskip-gate"
+
+            if gh_comment_body.lower().startswith(skip_prefix.lower()):
+                check_name = gh_comment_body[len(skip_prefix):].strip()
+                if current_node in _CI_STAGES and check_name:
+                    skipped = list(current_state.get("ci_skipped_checks", []))
+                    if check_name not in skipped:
+                        skipped.append(check_name)
+                    logger.info(
+                        f"CI gate skip added for {message.ticket_key}: '{check_name}'"
+                    )
+                    await self._post_skip_gate_feedback(
+                        ticket_key=message.ticket_key,
+                        owner=_owner, repo=_repo,
+                        pr_number=pr_number,
+                        check_name=check_name,
+                        sender=sender,
+                        action="skip",
+                    )
+                    return {
+                        **current_state,
+                        "ci_skipped_checks": skipped,
+                        "is_paused": False,
+                        "current_node": "ci_evaluator",
+                    }
+                return current_state
+
+            elif gh_comment_body.lower().startswith(unskip_prefix.lower()):
+                check_name = gh_comment_body[len(unskip_prefix):].strip()
+                if current_node in _CI_STAGES and check_name:
+                    skipped = [
+                        s for s in current_state.get("ci_skipped_checks", [])
+                        if s != check_name
+                    ]
+                    logger.info(
+                        f"CI gate skip removed for {message.ticket_key}: '{check_name}'"
+                    )
+                    await self._post_skip_gate_feedback(
+                        ticket_key=message.ticket_key,
+                        owner=_owner, repo=_repo,
+                        pr_number=pr_number,
+                        check_name=check_name,
+                        sender=sender,
+                        action="unskip",
+                    )
+                    return {
+                        **current_state,
+                        "ci_skipped_checks": skipped,
+                        "is_paused": False,
+                        "current_node": "ci_evaluator",
+                    }
+                return current_state
 
         for change in label_changes:
             to_labels = change.get("toString", "")
@@ -552,6 +618,65 @@ class OrchestratorWorker:
                     if child.get("type") == "text":
                         texts.append(child.get("text", ""))
         return " ".join(texts)
+
+    async def _post_skip_gate_feedback(
+        self,
+        ticket_key: str,
+        owner: str,
+        repo: str,
+        pr_number: int | None,
+        check_name: str,
+        sender: str,
+        action: str,
+    ) -> None:
+        """Post a GitHub PR reply and Jira audit comment for a skip-gate command.
+
+        Args:
+            ticket_key: Jira ticket key for the audit comment.
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+            check_name: The check name that was skipped or unskipped.
+            sender: GitHub login of the user who issued the command.
+            action: "skip" or "unskip".
+        """
+        try:
+            github = GitHubClient()
+            jira = JiraClient()
+            try:
+                if action == "skip":
+                    gh_comment = (
+                        f"✅ CI gate skipped by @{sender}\n\n"
+                        f"The following check will be treated as passing for this PR:\n"
+                        f"- `{check_name}`\n\n"
+                        f"All other CI checks still apply. "
+                        f"Re-evaluating CI status now."
+                    )
+                    jira_comment = (
+                        f"CI gate skipped on GitHub PR by {sender}:\n"
+                        f"- `{check_name}`\n\n"
+                        f"Skipped via `/forge skip-gate` on PR #{pr_number}. "
+                        f"Review accordingly."
+                    )
+                else:
+                    gh_comment = (
+                        f"CI gate skip removed by @{sender}\n\n"
+                        f"`{check_name}` will be re-evaluated on the next CI run."
+                    )
+                    jira_comment = (
+                        f"CI gate skip removed on GitHub PR by {sender}:\n"
+                        f"- `{check_name}`\n\n"
+                        f"Check will be re-evaluated on the next CI run."
+                    )
+
+                if pr_number:
+                    await github.create_issue_comment(owner, repo, pr_number, gh_comment)
+                await jira.add_comment(ticket_key, jira_comment)
+            finally:
+                await github.close()
+                await jira.close()
+        except Exception as e:
+            logger.warning(f"Failed to post skip-gate feedback: {e}")
 
     async def _post_terminal_error_comment(
         self, ticket_key: str, error: str

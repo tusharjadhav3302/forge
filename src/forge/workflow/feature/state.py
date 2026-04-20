@@ -85,6 +85,7 @@ def create_initial_feature_state(ticket_key: str, **kwargs: Any) -> FeatureState
         "parallel_total_branches": None,
         "ci_failed_checks": [],
         "ci_fix_attempts": 0,
+        "ci_skipped_checks": [],
         "ai_review_status": None,
         "ai_review_results": [],
         "human_review_status": None,
