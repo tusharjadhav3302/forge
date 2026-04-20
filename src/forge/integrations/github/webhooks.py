@@ -263,5 +263,5 @@ def is_pr_review_changes_requested(data: GitHubWebhookData) -> bool:
     return (
         data.event_type == "pull_request_review"
         and data.action == "submitted"
-        and data.raw_payload.get("review", {}).get("state") == "changes_requested"
+        and data.raw_payload.get("review", {}).get("state") in ("changes_requested", "commented")
     )
