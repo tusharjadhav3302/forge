@@ -61,6 +61,7 @@ class CIIntegrationState(TypedDict, total=False):
     ci_status: str | None
     ci_failed_checks: list[dict[str, Any]]
     ci_fix_attempts: int
+    ci_skipped_checks: list[str]
 
 
 class ReviewIntegrationState(TypedDict, total=False):

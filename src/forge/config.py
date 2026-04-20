@@ -234,6 +234,22 @@ class Settings(BaseSettings):
     ci_fix_max_retries: int = Field(
         default=5, description="Maximum retry attempts for autonomous CI fixes"
     )
+    ci_ignored_checks: str = Field(
+        default="tide",
+        description=(
+            "Comma-separated substrings of CI check names to ignore when evaluating "
+            "pass/fail. Checks whose names contain any of these substrings and have "
+            "not completed are silently skipped (e.g. Prow merge-queue checks that "
+            "stay pending until merge labels are added). Default: 'tide'."
+        ),
+    )
+
+    @property
+    def ignored_ci_checks(self) -> list[str]:
+        """Parsed list of CI check name substrings to ignore."""
+        if not self.ci_ignored_checks:
+            return []
+        return [s.strip() for s in self.ci_ignored_checks.split(",") if s.strip()]
     webhook_ack_timeout: float = Field(
         default=0.5, description="Webhook acknowledgment timeout in seconds"
     )

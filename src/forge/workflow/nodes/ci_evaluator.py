@@ -47,8 +47,24 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
     github = GitHubClient()
 
     try:
-        # Check each PR's CI status
+        # Checks whose name contains any of these substrings are treated as passing
+        ci_skipped_checks = state.get("ci_skipped_checks", [])
+
+        def _is_skipped(check: dict) -> bool:
+            name = check.get("name", "")
+            return any(skip.lower() in name.lower() for skip in ci_skipped_checks)
+
+        # Check each PR's CI status.
+        # Only *completed* non-skipped checks count toward pass/fail.
+        # Pending checks (e.g. tide, which waits for merge labels) are ignored
+        # once at least one real check has completed — they would block forever.
+        # Merge-queue meta-checks that are permanently pending until labels are
+        # added — not real CI, should not block CI evaluation.
+        # Configurable via CI_IGNORED_CHECKS setting (default: "tide").
+        _permanent_pending = settings.ignored_ci_checks
+
         all_passed = True
+        any_skipped = False
         failed_checks = []
 
         for pr_url in pr_urls:
@@ -77,19 +93,35 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                 })
 
             for check in check_runs:
+                if _is_skipped(check):
+                    logger.info(
+                        f"CI check skipped by human override: {check.get('name')}"
+                    )
+                    any_skipped = True
+                    continue
+
+                check_name = check.get("name", "")
                 status = check.get("status")
                 conclusion = check.get("conclusion")
 
+                # Ignore permanently-pending meta-checks (e.g. tide) — they
+                # wait for merge labels, not for CI to pass, and would block
+                # evaluation indefinitely.
+                if status != "completed" and any(
+                    p in check_name.lower() for p in _permanent_pending
+                ):
+                    logger.info(f"Ignoring permanently-pending check: {check_name}")
+                    continue
+
                 if status != "completed":
-                    # Still running
+                    # Real CI check still running — wait for it
                     all_passed = False
                     logger.info(f"CI still running for {pr_url}")
                 elif conclusion not in ("success", "skipped", "neutral"):
-                    # Failed
                     all_passed = False
                     failed_checks.append({
                         "pr_url": pr_url,
-                        "name": check.get("name"),
+                        "name": check_name,
                         "conclusion": conclusion,
                         "output": check.get("output", {}),
                         "log_url": check.get("html_url", ""),
