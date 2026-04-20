@@ -294,15 +294,6 @@ def _route_ci_evaluation(
     return routes.get(ci_status, "escalate_blocked")
 
 
-def _route_ai_review(state: FeatureState) -> Literal["human_review_gate", "implement_task"]:
-    """Route based on AI review results."""
-    ai_status = state.get("ai_review_status", "")
-
-    if ai_status == "changes_requested":
-        return "implement_task"
-    return "human_review_gate"
-
-
 def _route_after_answer(state: FeatureState) -> str:
     """Route back to the original gate after answering a question.
 

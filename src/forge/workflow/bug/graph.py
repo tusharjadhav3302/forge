@@ -24,7 +24,7 @@ from forge.workflow.nodes import (
     setup_workspace,
     teardown_and_route,
 )
-from forge.workflow.nodes.ai_reviewer import review_code
+from forge.workflow.nodes.local_reviewer import local_review_changes
 from forge.workflow.nodes.qa_handler import answer_question
 
 logger = logging.getLogger(__name__)
@@ -66,9 +66,11 @@ def route_entry(state: BugState) -> str:
         # CI stage
         elif current_node in ("ci_evaluator", "attempt_ci_fix"):
             return "ci_evaluator"
-        # Review stage
+        # Review stage — ai_review was removed; old checkpoints resume at human_review_gate
+        elif current_node == "local_review":
+            return "local_review"
         elif current_node in ("ai_review", "human_review_gate"):
-            return "ai_review"
+            return "human_review_gate"
         # Blocked state
         elif current_node == "escalate_blocked":
             return "escalate_blocked"
@@ -99,16 +101,15 @@ def _route_after_workspace_setup(
 
 def _route_after_implementation(
     state: BugState,
-) -> Literal["create_pr", "escalate_blocked"]:
+) -> Literal["local_review", "escalate_blocked"]:
     """Route based on bug fix implementation status.
 
     Checks for:
-    - Implementation succeeded -> create_pr
+    - Implementation succeeded -> local_review (pre-PR code review)
     - Retry limit exceeded -> escalate_blocked
     """
-    # Check retry limit to prevent infinite loops
     retry_count = state.get("retry_count", 0)
-    max_retries = 3  # Max retries per implementation
+    max_retries = 3
     last_error = state.get("last_error")
 
     if last_error and retry_count >= max_retries:
@@ -117,7 +118,7 @@ def _route_after_implementation(
 
     bug_fix_implemented = state.get("bug_fix_implemented", False)
     if bug_fix_implemented:
-        return "create_pr"
+        return "local_review"
 
     return "escalate_blocked"
 
@@ -157,25 +158,16 @@ def _route_after_teardown(_state: BugState) -> Literal["ci_evaluator"]:
 
 def _route_ci_evaluation(
     state: BugState,
-) -> Literal["ai_review", "attempt_ci_fix", "escalate_blocked", "__end__"]:
+) -> Literal["human_review_gate", "attempt_ci_fix", "escalate_blocked", "__end__"]:
     """Route based on CI evaluation results."""
     ci_status = state.get("ci_status", "")
 
     routes = {
-        "passed": "ai_review",
+        "passed": "human_review_gate",
         "fixing": "attempt_ci_fix",
         "pending": "__end__",  # Pause workflow until CI webhook
     }
     return routes.get(ci_status, "escalate_blocked")
-
-
-def _route_ai_review(state: BugState) -> Literal["human_review_gate", "implement_bug_fix"]:
-    """Route based on AI review results."""
-    ai_status = state.get("ai_review_status", "")
-
-    if ai_status == "changes_requested":
-        return "implement_bug_fix"
-    return "human_review_gate"
 
 
 def _route_after_answer(state: BugState) -> str:
@@ -195,11 +187,11 @@ def build_bug_graph() -> StateGraph:
     3. On RCA approval: rca_approval_gate -> setup_workspace
     4. On RCA rejection: rca_approval_gate -> regenerate_rca -> rca_approval_gate
     5. setup_workspace -> implement_bug_fix
-    6. implement_bug_fix -> create_pr
-    7. create_pr -> teardown_workspace
-    8. teardown_workspace -> ci_evaluator
-    9. ci_evaluator -> ai_review (or attempt_ci_fix)
-    10. ai_review -> human_review_gate
+    6. implement_bug_fix -> local_review (reviews diff, fixes in-place)
+    7. local_review -> create_pr
+    8. create_pr -> teardown_workspace
+    9. teardown_workspace -> ci_evaluator
+    10. ci_evaluator -> human_review_gate (or attempt_ci_fix)
     11. human_review_gate -> END (or back to implement_bug_fix for changes)
 
     Returns:
@@ -219,6 +211,7 @@ def build_bug_graph() -> StateGraph:
     # Implementation nodes
     graph.add_node("setup_workspace", setup_workspace)
     graph.add_node("implement_bug_fix", implement_bug_fix)
+    graph.add_node("local_review", local_review_changes)
     graph.add_node("create_pr", create_pull_request)
     graph.add_node("teardown_workspace", teardown_and_route)
 
@@ -228,7 +221,6 @@ def build_bug_graph() -> StateGraph:
     graph.add_node("escalate_blocked", escalate_to_blocked)
 
     # Review nodes
-    graph.add_node("ai_review", review_code)
     graph.add_node("human_review_gate", human_review_gate)
 
     # Q&A node
@@ -246,10 +238,11 @@ def build_bug_graph() -> StateGraph:
             "rca_approval_gate": "rca_approval_gate",
             "setup_workspace": "setup_workspace",
             "implement_bug_fix": "implement_bug_fix",
+            "local_review": "local_review",
             "create_pr": "create_pr",
             "teardown_workspace": "teardown_workspace",
             "ci_evaluator": "ci_evaluator",
-            "ai_review": "ai_review",
+            "human_review_gate": "human_review_gate",
             "escalate_blocked": "escalate_blocked",
             END: END,
         },
@@ -282,9 +275,14 @@ def build_bug_graph() -> StateGraph:
         "implement_bug_fix",
         _route_after_implementation,
         {
-            "create_pr": "create_pr",
+            "local_review": "local_review",
             "escalate_blocked": "escalate_blocked",
         },
+    )
+    graph.add_conditional_edges(
+        "local_review",
+        lambda s: s.get("current_node", "create_pr"),
+        {"local_review": "local_review", "create_pr": "create_pr"},
     )
     graph.add_conditional_edges(
         "create_pr",
@@ -307,7 +305,7 @@ def build_bug_graph() -> StateGraph:
         "ci_evaluator",
         _route_ci_evaluation,
         {
-            "ai_review": "ai_review",
+            "human_review_gate": "human_review_gate",
             "attempt_ci_fix": "attempt_ci_fix",
             "escalate_blocked": "escalate_blocked",
             END: END,  # Pause workflow until CI webhook
@@ -317,14 +315,6 @@ def build_bug_graph() -> StateGraph:
     graph.add_edge("escalate_blocked", END)
 
     # Review flow
-    graph.add_conditional_edges(
-        "ai_review",
-        _route_ai_review,
-        {
-            "human_review_gate": "human_review_gate",
-            "implement_bug_fix": "implement_bug_fix",
-        },
-    )
     graph.add_conditional_edges(
         "human_review_gate",
         route_human_review,
