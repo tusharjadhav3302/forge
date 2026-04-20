@@ -151,5 +151,5 @@ No changes required. The preserved `current_node` (e.g. `ci_evaluator`, `setup_w
 
 ## Open Questions
 
-- [ ] Should `ci_fix_attempts` always be reset on `forge:retry`, or only when `current_node == "ci_evaluator"`? Resetting it unconditionally is simpler but slightly surprising when retrying a non-CI failure.
-- [ ] Should `forge:retry` on a happy-path terminal state post a Jira comment explaining it was ignored, to avoid user confusion?
+- [X] Should `ci_fix_attempts` always be reset on `forge:retry`, or only when `current_node == "ci_evaluator"`? Resetting it unconditionally is simpler but slightly surprising when retrying a non-CI failure. answer: reset it unconditionally
+- [X] Should `forge:retry` on a happy-path terminal state post a Jira comment explaining it was ignored, to avoid user confusion? answer: yes

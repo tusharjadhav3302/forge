@@ -427,10 +427,11 @@ async def escalate_to_blocked(state: WorkflowState) -> WorkflowState:
 
         return update_state_timestamp({
             **state,
+            "is_blocked": True,
             "ci_status": "blocked",
-            "current_node": "complete",
-            "generation_context": {},  # Clear - no longer needed
-            "qa_history": [],  # Clear - workflow ending
+            # current_node preserved — forge:retry resumes from the node that failed
+            "generation_context": {},
+            "qa_history": [],
         })
 
     except Exception as e:

@@ -20,6 +20,7 @@ class BaseState(TypedDict, total=False):
     # Execution control
     current_node: str
     is_paused: bool
+    is_blocked: bool
     retry_count: int
     last_error: str | None
 
@@ -101,6 +102,7 @@ class BaseWorkflow(ABC):
             "ticket_key": ticket_key,
             "current_node": "start",
             "is_paused": False,
+            "is_blocked": False,
             "retry_count": 0,
             "last_error": None,
             "created_at": now,

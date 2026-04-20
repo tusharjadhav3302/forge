@@ -158,9 +158,17 @@ class OrchestratorWorker:
                 # In that case just persist the state update and stop.
                 # and stop — don't try to invoke a finished graph.
                 terminal_nodes = ("complete", "complete_tasks", "aggregate_feature_status")
-                if updated_values.get("current_node") in terminal_nodes:
+                is_terminal_or_blocked = (
+                    updated_values.get("current_node") in terminal_nodes
+                    or updated_values.get("is_blocked", False)
+                )
+                if is_terminal_or_blocked:
+                    state_desc = (
+                        "terminal" if updated_values.get("current_node") in terminal_nodes
+                        else "blocked"
+                    )
                     logger.info(
-                        f"Workflow for {ticket_key} at terminal state "
+                        f"Workflow for {ticket_key} at {state_desc} state "
                         f"'{updated_values.get('current_node')}', skipping invocation"
                     )
                     await compiled_workflow.aupdate_state(config, updated_values)
@@ -439,11 +447,16 @@ class OrchestratorWorker:
         is_terminal = current_node in terminal_states
 
         if is_retry:
-            # Explicit retry signal - but only if there's an error to retry from
+            # Explicit retry signal - but only if there's an error/blocked state to retry from
             prev_error = current_state.get("last_error")
-            if not prev_error and not was_errored:
+            is_blocked = current_state.get("is_blocked", False)
+            if not prev_error and not was_errored and not is_blocked:
                 logger.info(
-                    f"Ignoring forge:retry for {message.ticket_key} - no error to retry from"
+                    f"Ignoring forge:retry for {message.ticket_key} - workflow already complete"
+                )
+                await self._post_terminal_error_comment(
+                    message.ticket_key,
+                    "Workflow is already complete — nothing to retry.",
                 )
                 return current_state
 
@@ -452,11 +465,12 @@ class OrchestratorWorker:
                 f"(clearing error: {prev_error[:100] if prev_error else 'none'})"
             )
             updated_state["is_paused"] = False
+            updated_state["is_blocked"] = False
             updated_state["last_error"] = None
             updated_state["revision_requested"] = False
             updated_state["feedback_comment"] = None
-
             updated_state["retry_count"] = 0
+            updated_state["ci_fix_attempts"] = 0
             # Keep current_node — workflow resumes from the node that failed
         elif is_ci_webhook:
             # GitHub CI event — unpause the gate and let ci_evaluator check the results
