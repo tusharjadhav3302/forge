@@ -144,3 +144,20 @@ Write the fix plan to `.forge/fix-plan.md` in this exact structure so the fix ag
 - Be specific: include exact file paths, line numbers, and error messages
 - For codegen failures, identify the exact `go:generate` directive or script to run
 - If a failure log is unavailable, mark it as skipped with reason "log unavailable"
+
+## Documentation ripple — include stale references in the fix plan
+
+For every fixable failure that changes a constant, threshold, algorithm, or behavior, search the repository for stale documentation before writing the fix plan:
+
+```bash
+grep -r "<old value>" . --include="*.go" --include="*.md" -l
+```
+
+Include any files with stale references in **Affected Files** alongside the implementation files. The fix agent will update them as part of the same commit.
+
+Examples of what to search for:
+- Old numerical values or percentages mentioned in comments or docs
+- Old behavior descriptions in enhancement documents or user guides
+- Old flag names, condition names, or error message strings in any documentation
+
+Do not skip this step just because the stale references are in documentation rather than code — documentation that contradicts the implementation is a bug.
