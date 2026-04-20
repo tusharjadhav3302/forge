@@ -29,7 +29,27 @@ Skip anything listed under **Skipped Failures** — do not attempt to fix them.
 
 ## Guidelines
 
-- Follow the plan — do not invent additional fixes
-- Be surgical: only change files listed in the plan
+- Follow the plan — do not invent additional fixes to the logic
+- Be surgical: only change files listed in the plan for the core fix
 - If a step in the plan fails or doesn't apply, skip it and note it in your output
 - Do not reformat files not mentioned in the plan
+
+## Ripple updates — required after every fix
+
+After applying each fixable failure, search for stale references to the changed value or behavior and update them. These are not "additional fixes" — they are required completeness for any fix that changes a constant, threshold, algorithm, or behavior.
+
+For each fix applied:
+1. Identify the key values or behaviors that changed (e.g., jitter changed from ±10% to [0%, +20%], a flag was renamed, a condition was added).
+2. Search the repository for any other files that reference the old value:
+   - Inline code comments (`// ±10% jitter`)
+   - Documentation files (`docs/`, `website/docs/`, `enhancements/`, `*.md`)
+   - User guides and enhancement documents
+   - Test comments or test helper descriptions
+   Use: `grep -r "±10%" .` or equivalent for the specific value changed.
+3. Update every stale reference to match the new behavior. Keep the change minimal — only correct the factual inaccuracy, do not rewrite surrounding context.
+4. Include the updated documentation files in the same commit as the fix.
+
+**Example:** If the fix changes jitter from ±10% to [0%, +20%], you must also:
+- Update any inline comment in any `.go` file that says "±10%"
+- Update any `enhancements/`, `docs/`, or `website/` file that describes the jitter as "±10%"
+- Do NOT update files that were already correct or files unrelated to jitter
