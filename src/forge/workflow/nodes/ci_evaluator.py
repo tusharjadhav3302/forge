@@ -9,6 +9,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.nodes.code_review import run_post_change_review, sync_pr_description
 from forge.workflow.utils import update_state_timestamp
 
 logger = logging.getLogger(__name__)
@@ -301,9 +302,18 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
             git.stage_all()
             git.commit(f"[{ticket_key}] fix: address CI failures (attempt {attempt})")
 
-        # Push if there are local commits not yet on the fork remote.
-        # The container agent may have committed already — checking only for
-        # uncommitted changes misses that case.
+        # Review the CI fix in-place and commit any corrections before pushing
+        await run_post_change_review(
+            workspace_path=str(workspace_path),
+            ticket_key=ticket_key,
+            current_repo=state.get("current_repo", ""),
+            branch_name=branch_name,
+            spec_content=state.get("spec_content", ""),
+            guardrails=state.get("context", {}).get("guardrails", ""),
+            label=f"ci-fix-{attempt}",
+        )
+
+        # Push all commits (CI fix + any review corrections) to the fork
         if fork_owner and fork_repo:
             git.add_fork_remote(fork_owner, fork_repo)
             remote_ref = f"fork/{branch_name}"
@@ -321,6 +331,16 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 logger.warning("Fork info not in state — pushing to origin instead")
                 git.push(force=False)
             logger.info(f"CI fix pushed for {ticket_key} (attempt {attempt})")
+
+            # Sync PR description to reflect what actually changed
+            _repo = state.get("current_repo", "/")
+            _owner, _repo_name = (_repo.split("/") + [""])[:2]
+            await sync_pr_description(
+                state, git,
+                owner=_owner, repo=_repo_name,
+                pr_number=state.get("current_pr_number"),
+                attempt=attempt,
+            )
         else:
             logger.warning(f"Container made no changes for {ticket_key} (attempt {attempt})")
 
@@ -493,3 +513,5 @@ def _build_fix_prompt(error_info: str) -> str:
         Prompt for Claude.
     """
     return load_prompt("fix-ci", error_info=error_info)
+
+

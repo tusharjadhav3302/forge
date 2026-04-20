@@ -10,6 +10,7 @@ from forge.integrations.jira.client import JiraClient
 from forge.models.workflow import ForgeLabel
 from forge.prompts import load_prompt
 from forge.workflow.feature.state import FeatureState as WorkflowState
+from forge.workflow.nodes.code_review import sync_pr_description
 from forge.workflow.utils import update_state_timestamp
 from forge.workspace.git_ops import GitOperations
 from forge.workspace.manager import Workspace
@@ -206,6 +207,13 @@ async def create_pull_request(state: WorkflowState) -> WorkflowState:
         )
 
         logger.info(f"Created PR #{pr_number}: {pr_url}")
+
+        # Sync description to catch any inaccuracies from local_review commits
+        await sync_pr_description(
+            state, git,
+            owner=owner, repo=repo,
+            pr_number=pr_number, attempt=0,
+        )
 
         return update_state_timestamp({
             **state,
