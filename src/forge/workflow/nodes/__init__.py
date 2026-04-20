@@ -1,10 +1,5 @@
 """LangGraph node implementations for workflow phases."""
 
-from forge.workflow.nodes.ai_reviewer import (
-    check_constitution_compliance,
-    check_spec_alignment,
-    review_code,
-)
 from forge.workflow.nodes.bug_workflow import (
     analyze_bug,
     implement_bug_fix,
@@ -104,10 +99,6 @@ __all__ = [
     "wait_for_ci_gate",
     # Local code review
     "local_review_changes",
-    # AI review
-    "check_constitution_compliance",
-    "check_spec_alignment",
-    "review_code",
     # Human review
     "aggregate_epic_status",
     "aggregate_feature_status",

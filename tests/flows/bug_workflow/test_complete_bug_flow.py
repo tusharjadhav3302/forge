@@ -215,8 +215,8 @@ class TestRCARevisionCycle:
 class TestBugImplementationRouting:
     """_route_after_implementation routes based on success/failure."""
 
-    def test_successful_fix_routes_to_create_pr(self):
-        """Successful implementation routes to create_pr."""
+    def test_successful_fix_routes_to_local_review(self):
+        """Successful implementation routes to local_review (pre-PR code review)."""
         state = make_workflow_state(
             ticket_key="TEST-456",
             ticket_type=TicketType.BUG,
@@ -225,7 +225,7 @@ class TestBugImplementationRouting:
             last_error=None,
         )
 
-        assert _route_after_implementation(state) == "create_pr"
+        assert _route_after_implementation(state) == "local_review"
 
     def test_failed_fix_below_retry_cap_escalates(self):
         """Implementation failure below retry cap still escalates (retry handled by worker)."""
@@ -268,8 +268,9 @@ class TestBugWorkflowResumeRouting:
         ("teardown_workspace", "teardown_workspace"),
         ("ci_evaluator", "ci_evaluator"),
         ("attempt_ci_fix", "ci_evaluator"),
-        ("ai_review", "ai_review"),
-        ("human_review_gate", "ai_review"),
+        ("local_review", "local_review"),
+        ("ai_review", "human_review_gate"),
+        ("human_review_gate", "human_review_gate"),
         ("escalate_blocked", "escalate_blocked"),
     ])
     def test_resume_routing(self, node, expected):
