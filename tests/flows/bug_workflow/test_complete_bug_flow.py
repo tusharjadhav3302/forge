@@ -268,6 +268,7 @@ class TestBugWorkflowResumeRouting:
         ("teardown_workspace", "teardown_workspace"),
         ("ci_evaluator", "ci_evaluator"),
         ("attempt_ci_fix", "ci_evaluator"),
+        ("wait_for_ci_gate", "ci_evaluator"),  # attempt_ci_fix sets this; must not restart
         ("local_review", "local_review"),
         ("ai_review", "human_review_gate"),
         ("human_review_gate", "human_review_gate"),

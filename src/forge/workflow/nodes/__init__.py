@@ -24,7 +24,6 @@ from forge.workflow.nodes.human_review import (
     aggregate_epic_status,
     aggregate_feature_status,
     complete_tasks,
-    handle_review_feedback,
     human_review_gate,
     route_human_review,
 )
@@ -103,7 +102,6 @@ __all__ = [
     "aggregate_epic_status",
     "aggregate_feature_status",
     "complete_tasks",
-    "handle_review_feedback",
     "human_review_gate",
     "route_human_review",
     # Bug workflow

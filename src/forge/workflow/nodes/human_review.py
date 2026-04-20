@@ -59,44 +59,6 @@ def route_human_review(state: WorkflowState) -> str:
     return "complete_tasks"
 
 
-async def handle_review_feedback(state: WorkflowState) -> WorkflowState:
-    """Handle review feedback by extracting comments.
-
-    Args:
-        state: Current workflow state with review event.
-
-    Returns:
-        Updated state with feedback processed.
-    """
-    ticket_key = state["ticket_key"]
-    review_body = state.get("review_body", "")
-    review_state = state.get("review_state", "")
-
-    logger.info(f"Processing review feedback for {ticket_key}: {review_state}")
-
-    if review_state == "approved":
-        return update_state_timestamp({
-            **state,
-            "human_review_status": "approved",
-            "revision_requested": False,
-            "is_paused": False,
-            "current_node": "complete_tasks",
-        })
-
-    elif review_state == "changes_requested":
-        return update_state_timestamp({
-            **state,
-            "human_review_status": "changes_requested",
-            "revision_requested": True,
-            "feedback_comment": review_body,
-            "is_paused": False,
-            "current_node": "implement_task",
-        })
-
-    # Comment-only review
-    return state
-
-
 async def complete_tasks(state: WorkflowState) -> WorkflowState:
     """Complete Tasks after successful PR merge.
 

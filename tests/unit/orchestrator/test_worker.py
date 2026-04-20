@@ -111,18 +111,35 @@ class TestQuestionDetection:
         assert result["is_paused"] is False
 
     @pytest.mark.asyncio
-    async def test_approval_comment_sets_approved_flag(
+    async def test_prd_label_change_to_approved_sets_approved_flag(
         self, worker: OrchestratorWorker, base_message: QueueMessage, base_state: dict
     ):
-        """Comments with approval keywords set approved state."""
-        message = self._make_message_with_comment(base_message, "LGTM, approved!")
+        """Approval is detected via label change from pending to approved, not comment text."""
+        payload = {
+            **base_message.payload,
+            "changelog": {
+                "items": [
+                    {
+                        "field": "labels",
+                        "fromString": "forge:managed forge:prd-pending",
+                        "toString": "forge:managed forge:prd-approved",
+                    }
+                ]
+            },
+        }
+        message = QueueMessage(
+            message_id=base_message.message_id,
+            event_id=base_message.event_id,
+            source=base_message.source,
+            event_type="jira:issue_updated",
+            ticket_key=base_message.ticket_key,
+            payload=payload,
+        )
 
         result = await worker._handle_resume_event(message, base_state)
 
-        # Should not be a question or rejection
         assert result.get("is_question") is not True
         assert result["revision_requested"] is False
-        assert result["feedback_comment"] is None
         assert result["is_paused"] is False
 
     @pytest.mark.asyncio

@@ -78,7 +78,7 @@ class TestJiraClientGetIssue:
 
         with patch.object(mock_client, "_get_client") as mock_get_client:
             mock_http = AsyncMock()
-            mock_http.get = AsyncMock(return_value=mock_response)
+            mock_http.request = AsyncMock(return_value=mock_response)
             mock_get_client.return_value = mock_http
 
             issue = await mock_client.get_issue("TEST-123")

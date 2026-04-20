@@ -76,7 +76,7 @@ class TestFeatureWorkflowPhases:
             is_paused=False,  # Resumed from pause on approval webhook
         )
 
-        from forge.orchestrator.gates import route_prd_approval
+        from forge.workflow.gates import route_prd_approval
         next_node = route_prd_approval(state)
 
         assert next_node == "generate_spec"
@@ -91,7 +91,7 @@ class TestFeatureWorkflowPhases:
             is_paused=False,  # Resumed from pause on approval webhook
         )
 
-        from forge.orchestrator.gates import route_spec_approval
+        from forge.workflow.gates import route_spec_approval
         next_node = route_spec_approval(state)
 
         assert next_node == "decompose_epics"
@@ -105,7 +105,7 @@ class TestFeatureWorkflowPhases:
             is_paused=False,  # Resumed from pause on approval webhook
         )
 
-        from forge.orchestrator.gates import route_plan_approval
+        from forge.workflow.gates import route_plan_approval
         next_node = route_plan_approval(state)
 
         assert next_node == "generate_tasks"
@@ -158,7 +158,7 @@ class TestMultiEpicFeature:
         # Workflow is paused waiting for approval
         multi_epic_state["is_paused"] = True
 
-        from forge.orchestrator.gates import route_plan_approval
+        from forge.workflow.gates import route_plan_approval
         from langgraph.graph import END
 
         result = route_plan_approval(multi_epic_state)

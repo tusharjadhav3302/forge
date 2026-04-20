@@ -368,8 +368,6 @@ def build_feature_graph() -> StateGraph:
     graph.add_node("regenerate_all_tasks", regenerate_all_tasks)
     graph.add_node("update_single_task", update_single_task)
 
-    # Parallel Execution aggregation node (US10)
-    graph.add_node("aggregate_pr_results", aggregate_parallel_results)
 
     # Execution nodes (US6)
     graph.add_node("task_router", route_tasks_by_repo)

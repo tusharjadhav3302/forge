@@ -64,7 +64,7 @@ def route_entry(state: BugState) -> str:
         elif current_node == "teardown_workspace":
             return "teardown_workspace"
         # CI stage
-        elif current_node in ("ci_evaluator", "attempt_ci_fix"):
+        elif current_node in ("ci_evaluator", "attempt_ci_fix", "wait_for_ci_gate"):
             return "ci_evaluator"
         # Review stage — ai_review was removed; old checkpoints resume at human_review_gate
         elif current_node == "local_review":
@@ -320,7 +320,8 @@ def build_bug_graph() -> StateGraph:
         route_human_review,
         {
             "implement_bug_fix": "implement_bug_fix",
-            END: END,  # Complete or paused for review
+            "complete_tasks": END,  # Bugs have no task aggregation — PR merged means done
+            END: END,  # Paused for review
         },
     )
 

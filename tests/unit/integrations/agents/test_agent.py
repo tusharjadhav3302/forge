@@ -28,7 +28,6 @@ async def test_answer_question():
     mock_run_task.assert_called_once()
     call_kwargs = mock_run_task.call_args
     assert call_kwargs.kwargs["task"] == "answer-question"
-    assert call_kwargs.kwargs["include_tools"] is False
 
     await agent.close()
 

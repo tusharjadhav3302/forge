@@ -100,7 +100,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             return update_state_timestamp({
                 **state,
                 "ci_status": "passed",
-                "current_node": "ai_review",
+                "current_node": "human_review_gate",
                 "last_error": None,
             })
 
@@ -503,16 +503,5 @@ def _collect_error_info(failed_checks: list[dict[str, Any]]) -> str:
 
     return "\n".join(parts)
 
-
-def _build_fix_prompt(error_info: str) -> str:
-    """Build the prompt for generating a CI fix.
-
-    Args:
-        error_info: Formatted error information.
-
-    Returns:
-        Prompt for Claude.
-    """
-    return load_prompt("fix-ci", error_info=error_info)
 
 
