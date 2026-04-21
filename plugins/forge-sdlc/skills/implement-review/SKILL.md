@@ -1,6 +1,6 @@
 ---
 name: implement-review
-description: Analyze PR review comments against the current codebase, then produce a structured plan of actionable items and a list of any contested comments.
+description: Analyze PR review comments against the current codebase, classify every comment, and produce a structured plan. No comment may be silently dropped.
 ---
 
 # PR Review Analysis Skill
@@ -15,28 +15,50 @@ You are analyzing code review feedback on a pull request. Your workspace contain
    - Run `git diff origin/main..HEAD --stat` to see what changed
    - Read the specific files mentioned in the review comments
    - Use `grep` to find the relevant code sections
-3. For each review comment, decide:
-   - **ACTIONABLE**: you agree the change is correct and will include it in the implementation plan
-   - **CONTESTED**: you have a strong technical objection (change contradicts the spec, introduces a bug, or is factually wrong)
-4. Write your analysis to two files:
+3. For each review comment, assign exactly one category:
+   - **ACTIONABLE**: you agree the change is correct and will implement it
+   - **CONTESTED**: you have a strong technical objection (contradicts the spec, introduces a bug, or is factually wrong)
+   - **ACKNOWLEDGED**: you have seen and understood the comment but will not implement it — because it reflects an intentional design decision, is genuinely ambiguous, is out of scope for this PR, or requires a separate discussion
+
+   **Every comment must appear in one of the three output sections. No comment may be silently dropped.**
+
+4. Write your analysis to `.forge/review-plan.md` (always) and optionally `.forge/review-objections.md`.
 
 ### `.forge/review-plan.md` (always write this file)
 
-List only the ACTIONABLE items. Format each as:
+Structure with three sections. Omit a section entirely if it has no items.
 
 ```
-## Item N: <short title>
+# Review Plan
+
+## Actionable Items
+
+### Item N: <short title>
 
 **File:** path/to/file.go
 **Location:** function name or line range
 **Change:** what to do and why
+
+---
+
+## Acknowledged (not addressed)
+
+### <short title>
+
+**Reviewer said:** brief summary of the comment
+**Reason not addressed:** concise explanation — e.g. "intentional design per spec section X",
+"ambiguous — the reviewer's own note says this is debatable", "out of scope for this fix"
+
+---
+
+## Contested (objections filed in review-objections.md)
+
+### <short title>
+
+One-line note that a full objection is filed separately.
 ```
 
-If all comments are contested, write: `# No actionable items` and nothing else.
-
 ### `.forge/review-objections.md` (only if there are CONTESTED items)
-
-For each contested comment:
 
 ```
 ## Contested: <short title>
@@ -46,11 +68,10 @@ For each contested comment:
 **Counter-proposal:** what I suggest instead (if anything)
 ```
 
-If there are no objections, do NOT create this file.
-
 ## Important
 
 - Read the actual source files — do not guess at the code structure
-- Base objections on technical facts, not preferences
+- **Every comment must be explicitly classified** — acknowledged comments are not ignored, they are consciously deferred with a reason the human reviewer can see
+- Base objections and acknowledgements on technical facts, not preferences
 - Be specific about file paths and line numbers
 - Do NOT make any code changes in this phase — analysis only
