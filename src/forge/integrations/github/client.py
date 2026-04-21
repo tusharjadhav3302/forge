@@ -168,9 +168,12 @@ class GitHubClient:
     async def get_pull_request_review_comments(
         self, owner: str, repo: str, pr_number: int
     ) -> list[dict[str, Any]]:
-        """Get all review comments on a pull request.
+        """Get unresolved inline review comments on a pull request.
 
-        Returns individual inline review comments, not the review summary bodies.
+        Uses the GraphQL API to fetch review threads with their resolution
+        status, returning only comments from threads that are still open.
+        Falls back to the REST API (which returns all comments) if GraphQL
+        fails.
 
         Args:
             owner: Repository owner.
@@ -178,15 +181,80 @@ class GitHubClient:
             pr_number: Pull request number.
 
         Returns:
-            List of review comment objects.
+            List of comment dicts with path, position, and body, from
+            unresolved threads only.
         """
-        client = await self._get_client()
-        response = await client.get(
-            f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
-            params={"per_page": 100},
-        )
-        response.raise_for_status()
-        return response.json()
+        query = """
+        query($owner: String!, $repo: String!, $prNumber: Int!) {
+          repository(owner: $owner, name: $repo) {
+            pullRequest(number: $prNumber) {
+              reviewThreads(first: 100) {
+                nodes {
+                  isResolved
+                  isOutdated
+                  comments(first: 50) {
+                    nodes {
+                      path
+                      line
+                      originalLine
+                      body
+                      author { login }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """
+        try:
+            client = await self._get_client()
+            response = await client.post(
+                "/graphql",
+                json={
+                    "query": query,
+                    "variables": {
+                        "owner": owner,
+                        "repo": repo,
+                        "prNumber": pr_number,
+                    },
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            threads = (
+                data.get("data", {})
+                .get("repository", {})
+                .get("pullRequest", {})
+                .get("reviewThreads", {})
+                .get("nodes", [])
+            )
+
+            comments = []
+            for thread in threads:
+                if thread.get("isResolved") or thread.get("isOutdated"):
+                    continue
+                for comment in thread.get("comments", {}).get("nodes", []):
+                    comments.append({
+                        "path": comment.get("path", ""),
+                        "position": comment.get("line") or comment.get("originalLine"),
+                        "body": comment.get("body", ""),
+                    })
+            return comments
+
+        except Exception as e:
+            logger.warning(
+                f"GraphQL review thread fetch failed, falling back to REST: {e}"
+            )
+            # Fallback: REST API returns all comments (ignores resolved status)
+            client = await self._get_client()
+            response = await client.get(
+                f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
+                params={"per_page": 100},
+            )
+            response.raise_for_status()
+            return response.json()
 
     async def create_issue_comment(
         self, owner: str, repo: str, issue_number: int, body: str
