@@ -133,7 +133,7 @@ This starts **Redis Stack** on `localhost:6380` — state, queue, and checkpoint
 ### Start the API server
 
 ```bash
-uv run uvicorn forge.main:app --reload --port 8000
+uv run uvicorn forge.main:app --reload --port 8000 --host 0.0.0.0
 ```
 
 The `--reload` flag restarts the server automatically when source files change — useful during development.
@@ -162,7 +162,7 @@ docker compose up prometheus -d
 docker compose up redis prometheus -d
 
 # Terminal 2 — API server
-uv run uvicorn forge.main:app --reload --port 8000
+uv run uvicorn forge.main:app --reload --port 8000 --host 0.0.0.0
 
 # Terminal 3 — Worker
 uv run forge worker

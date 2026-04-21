@@ -9,7 +9,7 @@ Local development stack for running Forge services on the host with Prometheus s
 docker compose -f devtools/docker-compose.dev.yml up -d
 
 # In separate terminals, start the local services:
-uv run uvicorn forge.main:app --reload --port 8000
+uv run uvicorn forge.main:app --reload --port 8000 --host 0.0.0.0
 uv run forge worker
 ```
 
