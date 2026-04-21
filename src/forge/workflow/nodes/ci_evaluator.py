@@ -3,6 +3,7 @@
 import logging
 from typing import Any
 
+from forge.api.routes.metrics import record_ci_fix_attempt
 from forge.config import get_settings
 from forge.integrations.github.client import GitHubClient
 from forge.integrations.jira.client import JiraClient
@@ -169,6 +170,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
             logger.warning(
                 f"CI fix retry limit ({max_retries}) reached for {ticket_key}"
             )
+            record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="exhausted")
             return update_state_timestamp({
                 **state,
                 "ci_status": "failed",
@@ -393,6 +395,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 logger.warning("Fork info not in state — pushing to origin instead")
                 git.push(force=False)
             logger.info(f"CI fix pushed for {ticket_key} (attempt {attempt})")
+            record_ci_fix_attempt(repo=state.get("current_repo", "unknown"), result="pushed")
 
             # Sync PR description to reflect what actually changed
             _repo = state.get("current_repo", "/")

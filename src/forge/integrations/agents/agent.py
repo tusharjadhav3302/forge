@@ -710,7 +710,12 @@ class ForgeAgent:
         # Extract ticket key for session tracking
         ticket_key = context.get("ticket_key") if context else None
 
+        import time
+        from forge.api.routes.metrics import observe_agent_duration, record_agent_invocation
+
         logger.info(f"Running task '{task}' using Deep Agents")
+        record_agent_invocation(task_type=task)
+        _start = time.monotonic()
         result = await self._run_agent(
             prompt=prompt,
             system_prompt=system_prompt,
@@ -718,6 +723,7 @@ class ForgeAgent:
             session_id=ticket_key,
             trace_name=f"task:{task}",
         )
+        observe_agent_duration(task_type=task, duration=time.monotonic() - _start)
 
         logger.info(f"Task '{task}' completed ({len(result)} chars)")
         return result
