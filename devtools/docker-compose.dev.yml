@@ -1,0 +1,46 @@
+version: "3.9"
+
+# Developer observability stack — supplements the main docker-compose.yml
+# when running the API server and worker locally on the host.
+#
+# Usage:
+#   docker compose -f devtools/docker-compose.dev.yml up -d
+#
+# Then start services locally:
+#   uv run uvicorn forge.main:app --reload --port 8000
+#   uv run forge worker
+#
+# Prometheus dashboard: http://localhost:9092
+
+services:
+  redis:
+    image: redis/redis-stack-server:latest
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    ports:
+      - "9092:9090"
+    volumes:
+      - ./prometheus.dev.yml:/etc/prometheus/prometheus.yml:ro,z
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    # Allows the container to reach host-local processes via host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  redis-data:
+  prometheus-data:

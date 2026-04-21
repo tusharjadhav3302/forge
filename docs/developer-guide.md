@@ -493,14 +493,14 @@ LANGFUSE_ENABLED=false
 Directly edit Redis state for a ticket — useful when a workflow gets stuck due to a bug or incorrect state:
 
 ```bash
-uv run python scripts/patch_checkpoint.py <ticket-key> <field=value> [field=value ...]
+uv run python devtools/patch_checkpoint.py <ticket-key> <field=value> [field=value ...]
 ```
 
 **Examples:**
 
 ```bash
 # Reset a stuck workflow to ci_evaluator
-uv run python scripts/patch_checkpoint.py AISOS-376 \
+uv run python devtools/patch_checkpoint.py AISOS-376 \
   current_node=ci_evaluator \
   is_paused=false \
   is_blocked=false \
@@ -508,18 +508,18 @@ uv run python scripts/patch_checkpoint.py AISOS-376 \
   ci_fix_attempts=0
 
 # Resume at wait_for_ci_gate after patching from escalated state
-uv run python scripts/patch_checkpoint.py AISOS-376 \
+uv run python devtools/patch_checkpoint.py AISOS-376 \
   current_node=wait_for_ci_gate \
   is_paused=true \
   is_blocked=false \
   last_error=null
 
 # Skip e2e checks for a ticket
-uv run python scripts/patch_checkpoint.py AISOS-376 \
+uv run python devtools/patch_checkpoint.py AISOS-376 \
   'ci_skipped_checks=["e2e-openstack"]'
 
 # Add new state fields introduced by a code change
-uv run python scripts/patch_checkpoint.py AISOS-376 \
+uv run python devtools/patch_checkpoint.py AISOS-376 \
   'ci_skipped_checks=[]' \
   'review_comments=[]'
 ```
@@ -602,7 +602,7 @@ curl -X POST http://localhost:8000/api/v1/webhooks/jira \
 gh pr checks 42 --repo org/repo
 
 # 2. Patch the checkpoint to wait_for_ci_gate if not already there
-uv run python scripts/patch_checkpoint.py TICKET-123 \
+uv run python devtools/patch_checkpoint.py TICKET-123 \
   current_node=wait_for_ci_gate is_paused=true ci_fix_attempts=0
 
 # 3. Send the skip-gate command
