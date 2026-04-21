@@ -489,6 +489,40 @@ class OrchestratorWorker:
                             f"Detected Feature-level comment: {feedback[:100]}..."
                         )
 
+        # GitHub pull_request_review events — handled when at human_review_gate.
+        # A review submission is the primary signal for the human review stage.
+        if (
+            message.source == EventSource.GITHUB
+            and "pull_request_review" in message.event_type
+            and current_node == "human_review_gate"
+        ):
+            review = payload.get("review", {})
+            review_state = review.get("state", "").lower()
+            review_body = review.get("body", "") or ""
+
+            if review_state == "approved":
+                # PR approved — advance to complete_tasks (via route_human_review default)
+                is_approved = True
+                logger.info(f"Detected PR review approval for {message.ticket_key}")
+            elif review_state in ("changes_requested", "commented") and review_body.strip():
+                # Changes requested or review comment — treat as feedback
+                is_rejected = True
+                feedback = review_body
+                logger.info(
+                    f"Detected PR review ({review_state}) for {message.ticket_key}: "
+                    f"{review_body[:100]}..."
+                )
+
+        # GitHub pull_request:closed + merged — PR was actually merged
+        if (
+            message.source == EventSource.GITHUB
+            and "pull_request" in message.event_type
+            and payload.get("pull_request", {}).get("merged") is True
+            and current_node == "human_review_gate"
+        ):
+            is_approved = True
+            logger.info(f"Detected PR merge for {message.ticket_key}")
+
         # Build updated state — do NOT set is_paused=False here.
         # Each branch below sets it explicitly when a valid signal is detected.
         # Unrecognized events (wrong-stage approval, unrelated label changes, etc.)

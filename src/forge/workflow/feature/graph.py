@@ -46,6 +46,11 @@ from forge.workflow.nodes import (
     update_single_epic,
     wait_for_ci_gate,
 )
+from forge.workflow.nodes.implement_review import (
+    implement_review,
+    review_response_gate,
+    route_review_response,
+)
 from forge.workflow.nodes.qa_handler import answer_question
 from forge.workflow.nodes.task_generation import regenerate_all_tasks, update_single_task
 
@@ -104,6 +109,10 @@ def route_by_ticket_type(state: FeatureState) -> str:
             return "ci_evaluator"
         elif current_node == "human_review_gate":
             return "human_review_gate"
+        elif current_node == "implement_review":
+            return "implement_review"
+        elif current_node == "review_response_gate":
+            return "review_response_gate"
         # Execution stages (implementation, PR) - re-route through task_router
         elif current_node in (
             "task_router",
@@ -387,6 +396,8 @@ def build_feature_graph() -> StateGraph:
 
     # Human Review nodes (US9)
     graph.add_node("human_review_gate", human_review_gate)
+    graph.add_node("implement_review", implement_review)
+    graph.add_node("review_response_gate", review_response_gate)
     graph.add_node("complete_tasks", complete_tasks)
     graph.add_node("aggregate_epic_status", aggregate_epic_status)
     graph.add_node("aggregate_feature_status", aggregate_feature_status)
@@ -419,6 +430,8 @@ def build_feature_graph() -> StateGraph:
             "wait_for_ci_gate": "wait_for_ci_gate",
             "ci_evaluator": "ci_evaluator",
             "human_review_gate": "human_review_gate",
+            "implement_review": "implement_review",
+            "review_response_gate": "review_response_gate",
             # Terminal states route directly to END
             END: END,
         },
@@ -585,9 +598,28 @@ def build_feature_graph() -> StateGraph:
         "human_review_gate",
         route_human_review,
         {
-            "implement_task": "implement_task",
+            "implement_review": "implement_review",
             "complete_tasks": "complete_tasks",
             END: END,  # Pause workflow until review webhook
+        },
+    )
+    graph.add_conditional_edges(
+        "implement_review",
+        lambda s: s.get("current_node", "wait_for_ci_gate"),
+        {
+            "wait_for_ci_gate": "wait_for_ci_gate",
+            "review_response_gate": "review_response_gate",
+            "implement_review": "implement_review",
+            "escalate_blocked": "escalate_blocked",
+        },
+    )
+    graph.add_conditional_edges(
+        "review_response_gate",
+        route_review_response,
+        {
+            "implement_review": "implement_review",
+            "human_review_gate": "human_review_gate",
+            END: END,
         },
     )
     graph.add_edge("complete_tasks", "aggregate_epic_status")

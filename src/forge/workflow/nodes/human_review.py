@@ -41,10 +41,10 @@ def route_human_review(state: WorkflowState) -> str:
     Returns:
         Next node name or END.
     """
-    # Check if changes were requested
+    # Check if changes were requested — route to dedicated review implementation node
     if state.get("revision_requested") and state.get("feedback_comment"):
         logger.info(f"Changes requested for {state['ticket_key']}")
-        return "implement_task"
+        return "implement_review"
 
     # Check if merged
     if state.get("pr_merged"):

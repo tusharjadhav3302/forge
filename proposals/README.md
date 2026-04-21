@@ -28,5 +28,5 @@ This directory contains proposals for new Forge features and enhancements.
 | 004 | [Dynamic Skill Loading by Jira Project](004-dynamic-skill-loading.md) | Draft | eshulman2 |
 | 005 | [CI Gate Skip via Comment Command](005-ci-gate-skip-command.md) | Implemented | eshulman2 |
 | 006 | [PR Description Sync After CI Fix Commits](006-ci-fix-pr-description-sync.md) | Implemented | eshulman2 |
-| 007 | [Dedicated implement_review Node for PR Review Feedback](007-implement-review-node.md) | Draft | eshulman2 |
+| 007 | [Dedicated implement_review Node for PR Review Feedback](007-implement-review-node.md) | Implemented | eshulman2 |
 | 008 | [Stable PR-to-Ticket Association via State Lookup](008-stable-pr-to-ticket-association.md) | Draft | eshulman2 |

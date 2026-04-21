@@ -71,6 +71,9 @@ class ReviewIntegrationState(TypedDict, total=False):
     ai_review_results: list[dict[str, Any]]
     human_review_status: str | None
     pr_merged: bool
+    review_comments: list[dict[str, Any]]
+    contested_comments: list[dict[str, Any]]
+    review_response_posted: bool
 
 
 class BaseWorkflow(ABC):
