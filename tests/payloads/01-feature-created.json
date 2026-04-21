@@ -1,17 +1,33 @@
 {
-  "webhookEvent": "jira:issue_created",
+  "webhookEvent": "jira:issue_updated",
+  "timestamp": 1712345678000,
   "issue": {
     "key": "TEST-123",
     "fields": {
-      "issuetype": {"name": "Feature"},
-      "status": {"name": "To Do"},
-      "summary": "Test feature for revision flow",
-      "description": "This is a test feature to validate the revision workflow",
-      "labels": ["forge:managed"]
+      "issuetype": {
+        "name": "Feature"
+      },
+      "status": {
+        "name": "New"
+      },
+      "summary": "Implement drift detection in openstack-resource-controller",
+      "description": "implement drift detection in openstack-resource-controller as specified in: https://github.com/k-orc/openstack-resource-controller/blob/main/enhancements/drift-detection.md ",
+      "labels": [
+        "forge:managed"
+      ]
     }
   },
+  "changelog": {
+    "items": [
+      {
+        "field": "status",
+        "fromString": "Backlog",
+        "toString": "New"
+      }
+    ]
+  },
   "user": {
-    "accountId": "test-user-123",
-    "displayName": "Test User"
+    "accountId": "forge@example.com",
+    "displayName": "forge@example.com"
   }
 }
