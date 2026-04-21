@@ -65,6 +65,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
 
         all_passed = True
         any_skipped = False
+        any_still_running = False
         failed_checks = []
 
         for pr_url in pr_urls:
@@ -116,6 +117,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                 if status != "completed":
                     # Real CI check still running — wait for it
                     all_passed = False
+                    any_still_running = True
                     logger.info(f"CI still running for {pr_url}")
                 elif conclusion not in ("success", "skipped", "neutral"):
                     all_passed = False
@@ -136,6 +138,31 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                 "last_error": None,
             })
 
+        # Some checks still running AND some have failed — wait for all to complete
+        # before starting the fix pipeline. The fix agent needs the full failure list.
+        if any_still_running and failed_checks:
+            logger.info(
+                f"CI partially complete for {ticket_key} "
+                f"({len(failed_checks)} failed, more still running) — waiting"
+            )
+            return update_state_timestamp({
+                **state,
+                "ci_status": "pending",
+                "current_node": "ci_evaluator",
+            })
+
+        # Checks are still running but none have failed yet — wait for the next webhook.
+        # This prevents the fix pipeline from firing while real CI jobs are in-progress.
+        if not failed_checks:
+            logger.info(
+                f"CI checks still running for {ticket_key}, waiting for completion"
+            )
+            return update_state_timestamp({
+                **state,
+                "ci_status": "pending",
+                "current_node": "ci_evaluator",
+            })
+
         # CI failed - check if we can retry
         max_retries = settings.ci_fix_max_retries
         if ci_fix_attempts >= max_retries:
@@ -146,7 +173,7 @@ async def evaluate_ci_status(state: WorkflowState) -> WorkflowState:
                 **state,
                 "ci_status": "failed",
                 "ci_failed_checks": failed_checks,
-                "current_node": "escalate_blocked",
+                "current_node": "ci_evaluator",  # preserved so retry resumes here
                 "last_error": "CI fix retry limit reached",
             })
 
@@ -235,7 +262,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
                 return update_state_timestamp({
                     **state,
                     "last_error": "Cannot recreate workspace: missing branch/repo info",
-                    "current_node": "escalate_blocked",
+                    "current_node": "attempt_ci_fix"  # preserved so retry resumes here,
                 })
 
             manager = WorkspaceManager()
@@ -260,7 +287,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(_setup_err),
-            "current_node": "escalate_blocked",
+            "current_node": "attempt_ci_fix"  # preserved so retry resumes here,
         }
 
     try:
@@ -390,7 +417,7 @@ async def attempt_ci_fix(state: WorkflowState) -> WorkflowState:
         return {
             **state,
             "last_error": str(e),
-            "current_node": "escalate_blocked",
+            "current_node": "attempt_ci_fix"  # preserved so retry resumes here,
         }
 
 

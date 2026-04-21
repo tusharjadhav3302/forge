@@ -24,6 +24,11 @@ from forge.workflow.nodes import (
     setup_workspace,
     teardown_and_route,
 )
+from forge.workflow.nodes.implement_review import (
+    implement_review,
+    review_response_gate,
+    route_review_response,
+)
 from forge.workflow.nodes.local_reviewer import local_review_changes
 from forge.workflow.nodes.qa_handler import answer_question
 
@@ -71,6 +76,10 @@ def route_entry(state: BugState) -> str:
             return "local_review"
         elif current_node in ("ai_review", "human_review_gate"):
             return "human_review_gate"
+        elif current_node == "implement_review":
+            return "implement_review"
+        elif current_node == "review_response_gate":
+            return "review_response_gate"
         # Blocked state
         elif current_node == "escalate_blocked":
             return "escalate_blocked"
@@ -222,6 +231,8 @@ def build_bug_graph() -> StateGraph:
 
     # Review nodes
     graph.add_node("human_review_gate", human_review_gate)
+    graph.add_node("implement_review", implement_review)
+    graph.add_node("review_response_gate", review_response_gate)
 
     # Q&A node
     graph.add_node("answer_question", answer_question)
@@ -243,6 +254,8 @@ def build_bug_graph() -> StateGraph:
             "teardown_workspace": "teardown_workspace",
             "ci_evaluator": "ci_evaluator",
             "human_review_gate": "human_review_gate",
+            "implement_review": "implement_review",
+            "review_response_gate": "review_response_gate",
             "escalate_blocked": "escalate_blocked",
             END: END,
         },
@@ -319,9 +332,28 @@ def build_bug_graph() -> StateGraph:
         "human_review_gate",
         route_human_review,
         {
-            "implement_bug_fix": "implement_bug_fix",
+            "implement_review": "implement_review",
             "complete_tasks": END,  # Bugs have no task aggregation — PR merged means done
             END: END,  # Paused for review
+        },
+    )
+    graph.add_conditional_edges(
+        "implement_review",
+        lambda s: s.get("current_node", "wait_for_ci_gate"),
+        {
+            "wait_for_ci_gate": "ci_evaluator",  # Bug has no wait_for_ci_gate node
+            "review_response_gate": "review_response_gate",
+            "implement_review": "implement_review",
+            "escalate_blocked": "escalate_blocked",
+        },
+    )
+    graph.add_conditional_edges(
+        "review_response_gate",
+        route_review_response,
+        {
+            "implement_review": "implement_review",
+            "human_review_gate": "human_review_gate",
+            END: END,
         },
     )
 

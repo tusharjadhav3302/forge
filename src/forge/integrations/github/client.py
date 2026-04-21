@@ -165,6 +165,29 @@ class GitHubClient:
         logger.info(f"Created review comment on PR #{pr_number}")
         return response.json()
 
+    async def get_pull_request_review_comments(
+        self, owner: str, repo: str, pr_number: int
+    ) -> list[dict[str, Any]]:
+        """Get all review comments on a pull request.
+
+        Returns individual inline review comments, not the review summary bodies.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            List of review comment objects.
+        """
+        client = await self._get_client()
+        response = await client.get(
+            f"/repos/{owner}/{repo}/pulls/{pr_number}/comments",
+            params={"per_page": 100},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def create_issue_comment(
         self, owner: str, repo: str, issue_number: int, body: str
     ) -> dict[str, Any]:
