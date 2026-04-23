@@ -171,6 +171,19 @@ class Settings(BaseSettings):
         default="https://cloud.langfuse.com", description="Langfuse host URL"
     )
 
+    # LangWatch Configuration
+    langwatch_enabled: bool = Field(
+        default=False,
+        description="Enable LangWatch tracing (requires LANGWATCH_API_KEY)",
+    )
+    langwatch_api_key: SecretStr = Field(
+        default=SecretStr(""), description="LangWatch project API key"
+    )
+    langwatch_endpoint: str = Field(
+        default="http://localhost:5560",
+        description="LangWatch endpoint URL",
+    )
+
     # Claude Agent SDK Configuration
     agent_enable_tools: bool = Field(
         default=True,

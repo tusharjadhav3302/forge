@@ -32,6 +32,7 @@ except ImportError:
 
 from forge.config import Settings, get_settings
 from forge.integrations.langfuse import get_langfuse_config, get_langfuse_context
+from forge.integrations.langwatch import get_langwatch_config, setup_langwatch
 from forge.prompts import load_prompt, set_default_version
 
 # Optional Vertex AI support (Claude and Gemini)
@@ -598,18 +599,32 @@ class ForgeAgent:
         # Build config with Langfuse tracing if enabled
         config: dict[str, Any] = {"configurable": {"thread_id": thread_id}}
 
-        # Add Langfuse callbacks for observability
+        # Add observability callbacks (Langfuse and/or LangWatch)
+        all_callbacks: list[Any] = []
+
         langfuse_config = get_langfuse_config(
             trace_name=trace_name or "deep_agent_invocation",
             session_id=session_id,
             metadata={"system_prompt_length": str(len(system_prompt))},
         )
         if langfuse_config:
-            # Extract context params and remove from config
             langfuse_ctx_params = langfuse_config.pop("_langfuse_context", {})
-            config.update(langfuse_config)
+            all_callbacks.extend(langfuse_config.get("callbacks", []))
+            if "metadata" in langfuse_config:
+                config["metadata"] = langfuse_config["metadata"]
         else:
             langfuse_ctx_params = {}
+
+        langwatch_config = get_langwatch_config(
+            trace_name=trace_name or "deep_agent_invocation",
+            session_id=session_id,
+            metadata={"system_prompt_length": str(len(system_prompt))},
+        )
+        if langwatch_config:
+            all_callbacks.extend(langwatch_config.get("callbacks", []))
+
+        if all_callbacks:
+            config["callbacks"] = all_callbacks
 
         # Invoke the agent with retry logic for transient errors
         # Use async Langfuse context for session tracking (v3+ API)

@@ -970,6 +970,12 @@ def main() -> None:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
 
+    # Initialise LangWatch if configured
+    if os.environ.get("LANGWATCH_API_KEY"):
+        from forge.integrations.langwatch import setup_langwatch
+        setup_langwatch()
+        logger.info("LangWatch tracing initialized in worker")
+
     # Check for single-ticket mode via command line
     if len(sys.argv) > 1:
         ticket_key = sys.argv[1]

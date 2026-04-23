@@ -40,6 +40,15 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         )
         logger.info("Distributed tracing initialized")
 
+    # Startup - initialize LangWatch if enabled
+    if settings.langwatch_enabled and settings.langwatch_api_key.get_secret_value():
+        import os
+        os.environ.setdefault("LANGWATCH_API_KEY", settings.langwatch_api_key.get_secret_value())
+        os.environ.setdefault("LANGWATCH_ENDPOINT", settings.langwatch_endpoint)
+        from forge.integrations.langwatch import setup_langwatch
+        setup_langwatch()
+        logger.info("LangWatch tracing initialized")
+
     yield
 
     # Shutdown

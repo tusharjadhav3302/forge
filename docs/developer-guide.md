@@ -486,6 +486,53 @@ LANGFUSE_ENABLED=false
 
 ---
 
+## 9b. LangWatch Tracing (Alternative)
+
+[LangWatch](https://langwatch.ai) is an OpenTelemetry-native LLM observability platform with 30+ built-in evaluators (RAGAS faithfulness, BLEU, ROUGE, PII detection, content safety), agent simulation, and prompt management with Git sync.
+
+Both Langfuse and LangWatch can be enabled simultaneously — their callbacks are merged at runtime.
+
+### Setup
+
+1. Self-host LangWatch:
+
+```bash
+git clone https://github.com/langwatch/langwatch.git
+cd langwatch
+cp langwatch/.env.example langwatch/.env
+docker compose up -d
+# Dashboard at http://localhost:5560
+```
+
+2. Create an account and project in the LangWatch UI
+3. Copy your API key from project settings
+4. Add to `.env`:
+
+```bash
+LANGWATCH_ENABLED=true
+LANGWATCH_API_KEY=your-api-key
+LANGWATCH_ENDPOINT=http://localhost:5560
+```
+
+5. Restart the worker — traces appear in the LangWatch dashboard immediately
+
+### Built-in evaluators
+
+LangWatch includes evaluators that can be configured from the dashboard:
+
+- **RAGAS**: faithfulness, context precision/recall, BLEU, ROUGE, factual correctness
+- **Safety**: Azure content safety, jailbreak detection, prompt injection
+- **Quality**: sentiment, similarity, off-topic detection, format validation
+- **PII**: Presidio-based PII detection
+
+### Disabling LangWatch
+
+```bash
+LANGWATCH_ENABLED=false
+```
+
+---
+
 ## 10. Debugging Tools
 
 ### Patch a workflow checkpoint

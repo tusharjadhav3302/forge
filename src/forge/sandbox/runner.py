@@ -150,6 +150,12 @@ class ContainerRunner:
             env["LANGFUSE_HOST"] = self.settings.langfuse_host
             logger.debug("Container Langfuse tracing enabled")
 
+        # Pass LangWatch tracing credentials if enabled
+        if self.settings.langwatch_enabled and self.settings.langwatch_api_key.get_secret_value():
+            env["LANGWATCH_API_KEY"] = self.settings.langwatch_api_key.get_secret_value()
+            env["LANGWATCH_ENDPOINT"] = self.settings.langwatch_endpoint
+            logger.debug("Container LangWatch tracing enabled")
+
         # Pass system prompt template (unformatted - entrypoint will interpolate)
         # Load raw template without interpolation by passing empty values
         prompt_template = load_prompt("container-system")
